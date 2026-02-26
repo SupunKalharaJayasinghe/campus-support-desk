@@ -1,23 +1,14 @@
-"use client";
+import type { HTMLAttributes } from "react";
 
-import { cn } from "@/lib/utils";
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
 
-type SkeletonVariant = "text" | "circle" | "rectangle";
-
-export function Skeleton({
-  variant = "text",
-  className
-}: {
-  variant?: SkeletonVariant;
-  className?: string;
-}) {
+export default function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        "animate-pulse rounded-md bg-slate-100",
-        variant === "circle" && "rounded-full",
-        className
-      )}
+      className={cn("animate-pulse rounded-xl bg-slate-200/80", className)}
+      {...props}
     />
   );
 }
