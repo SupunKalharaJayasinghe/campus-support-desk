@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { BookOpen, Package, ShieldAlert, Users } from 'lucide-react';
+import { BookOpen, LifeBuoy, Package, ShieldAlert, Users } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Container from '@/components/ui/Container';
 import universityLogo from '@/app/images/university-logo.png';
@@ -184,6 +185,32 @@ export default function LandingPage() {
                 </Card>
               );
             })}
+          </div>
+        </Container>
+      </section>
+
+      <section className="relative w-full overflow-hidden bg-[#034AA6] py-16 lg:py-20">
+        <div className="absolute -right-25 top-1/2 h-100 w-100 -translate-y-1/2 rounded-full bg-white/5 blur-3xl" />
+        <Container size="6xl" className="relative z-10 flex items-center">
+          <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-[#D9D9D9] lg:text-3xl">
+                Need Help?
+              </h2>
+              <p className="mt-2 max-w-md text-base text-[#D9D9D9]/80">
+                Report an issue to the Administrator and get assistance.
+              </p>
+            </div>
+
+            <Link
+              className="mx-auto inline-flex items-center justify-center gap-5 text-5xl font-bold leading-tight tracking-tight text-[#D9D9D9] transition-all duration-300 hover:translate-x-1 hover:opacity-90 lg:mx-0 lg:gap-6 lg:text-6xl"
+              href="/report-problem"
+            >
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/40 text-[#D9D9D9]">
+                <LifeBuoy size={24} />
+              </span>
+              <span>Report a Problem</span>
+            </Link>
           </div>
         </Container>
       </section>
