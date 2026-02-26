@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   HOME_BY_ROLE,
@@ -18,30 +18,29 @@ export default function RoleGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isReady, setIsReady] = useState(false);
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+  const currentRole = isDemoMode ? null : readStoredRole();
+  const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);
+
+  let redirectTarget: string | null = null;
+
+  if (!isDemoMode) {
+    if (!currentRole) {
+      redirectTarget = "/login";
+    } else if (allowedRole && currentRole !== allowedRole) {
+      redirectTarget = HOME_BY_ROLE[currentRole];
+    } else if (expectedRole && currentRole !== expectedRole) {
+      redirectTarget = HOME_BY_ROLE[currentRole];
+    }
+  }
 
   useEffect(() => {
-    const currentRole = readStoredRole();
+    if (!redirectTarget) return;
+    router.replace(redirectTarget);
+  }, [redirectTarget, router]);
 
-    if (!currentRole) {
-      router.replace("/login");
-      return;
-    }
-
-    const expectedRole = getExpectedRoleForPath(pathname);
-
-    if (allowedRole && currentRole !== allowedRole) {
-      router.replace(HOME_BY_ROLE[currentRole]);
-      return;
-    }
-
-    if (expectedRole && currentRole !== expectedRole) {
-      router.replace(HOME_BY_ROLE[currentRole]);
-      return;
-    }
-
-    setIsReady(true);
-  }, [allowedRole, pathname, router]);
+  const isReady = isDemoMode || !redirectTarget;
 
   if (!isReady) {
     return (
