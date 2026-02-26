@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/ToastProvider";
 import { lecturerAvailabilitySeed } from "@/lib/mockData";
 import type { LecturerSlot } from "@/lib/mockData";
@@ -22,15 +23,15 @@ export default function LecturerAvailabilityPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Availability</h1>
-        <p className="text-sm text-slate-500">Create and maintain your consultation windows.</p>
+        <h1 className="text-2xl font-semibold text-text">Availability</h1>
+        <p className="text-sm text-mutedText">Create and maintain your consultation windows.</p>
       </div>
 
       <Card title="Add time slot">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-          <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setDate(e.target.value)} type="date" value={date} />
-          <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setStart(e.target.value)} type="time" value={start} />
-          <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setEnd(e.target.value)} type="time" value={end} />
+          <Input onChange={(e) => setDate(e.target.value)} type="date" value={date} />
+          <Input onChange={(e) => setStart(e.target.value)} type="time" value={start} />
+          <Input onChange={(e) => setEnd(e.target.value)} type="time" value={end} />
           <Button
             onClick={() => {
               setError("");
@@ -53,14 +54,14 @@ export default function LecturerAvailabilityPage() {
             Add Slot
           </Button>
         </div>
-        {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-primary2">{error}</p> : null}
       </Card>
 
       <Card title="My slots">
         <div className="space-y-2">
           {slots.map((slot) => (
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2" key={slot.id}>
-              <p className="text-sm text-slate-700">
+            <div className="flex items-center justify-between rounded-xl bg-surface2 px-3 py-2" key={slot.id}>
+              <p className="text-sm text-mutedText">
                 {slot.date} • {slot.start} - {slot.end}
               </p>
               <Button onClick={() => setSlots((prev) => prev.filter((entry) => entry.id !== slot.id))} variant="ghost">

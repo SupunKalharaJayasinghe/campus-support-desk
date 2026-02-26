@@ -1,6 +1,12 @@
 import type { HTMLAttributes } from "react";
 
-type BadgeVariant = "neutral" | "success" | "warning" | "danger";
+type BadgeVariant =
+  | "neutral"
+  | "success"
+  | "warning"
+  | "danger"
+  | "primary"
+  | "info";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
@@ -11,10 +17,12 @@ function cn(...classes: Array<string | undefined | false>) {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  neutral: "bg-slate-100 text-slate-700",
-  success: "bg-emerald-100 text-emerald-700",
-  warning: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
+  neutral: "bg-surface2 text-mutedText border border-border",
+  success: "border border-primary/20 bg-primary/10 text-primary",
+  warning: "border border-primary/25 bg-primary/20 text-primary2",
+  danger: "border border-border bg-[rgba(38,21,15,0.08)] text-text",
+  primary: "border border-primary bg-primary text-white",
+  info: "border border-border bg-surface2 text-text",
 };
 
 export default function Badge({

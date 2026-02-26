@@ -1,8 +1,11 @@
 import type { HTMLAttributes } from "react";
 
+type CardVariant = "default" | "subtle";
+
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   title?: string;
   description?: string;
+  variant?: CardVariant;
 }
 
 function cn(...classes: Array<string | undefined | false>) {
@@ -12,6 +15,7 @@ function cn(...classes: Array<string | undefined | false>) {
 export default function Card({
   title,
   description,
+  variant = "default",
   className,
   children,
   ...props
@@ -19,13 +23,16 @@ export default function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm",
+        "rounded-2xl border p-5",
+        variant === "default"
+          ? "border-border bg-surface shadow-card"
+          : "border-border bg-surface2",
         className
       )}
       {...props}
     >
-      {title ? <h3 className="text-base font-semibold text-slate-900">{title}</h3> : null}
-      {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+      {title ? <h3 className="text-base font-semibold text-text">{title}</h3> : null}
+      {description ? <p className="mt-1 text-sm text-mutedText">{description}</p> : null}
       {children ? <div className={cn(title || description ? "mt-4" : "")}>{children}</div> : null}
     </div>
   );

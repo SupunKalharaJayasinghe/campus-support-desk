@@ -4,6 +4,7 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import { foundItemsSeed } from "@/lib/mockData";
 import type { FoundItemRecord } from "@/lib/mockData";
 
@@ -19,24 +20,14 @@ export default function FoundItemsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Found Register</h1>
-        <p className="text-sm text-slate-500">Register found items and track return status.</p>
+        <h1 className="text-2xl font-semibold text-text">Found Register</h1>
+        <p className="text-sm text-mutedText">Register found items and track return status.</p>
       </div>
 
       <Card title="Register found item">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            onChange={(event) => setItem(event.target.value)}
-            placeholder="Item name"
-            value={item}
-          />
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            onChange={(event) => setLocation(event.target.value)}
-            placeholder="Found location"
-            value={location}
-          />
+          <Input onChange={(event) => setItem(event.target.value)} placeholder="Item name" value={item} />
+          <Input onChange={(event) => setLocation(event.target.value)} placeholder="Found location" value={location} />
           <Button
             onClick={() => {
               if (!item.trim() || !location.trim()) {
@@ -65,10 +56,10 @@ export default function FoundItemsPage() {
       <Card title="Found items">
         <div className="space-y-3">
           {items.map((entry) => (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4" key={entry.id}>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4" key={entry.id}>
               <div>
-                <p className="text-sm font-semibold text-slate-900">{entry.item}</p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm font-semibold text-text">{entry.item}</p>
+                <p className="text-sm text-mutedText">
                   {entry.location} • {entry.recordedBy}
                 </p>
               </div>

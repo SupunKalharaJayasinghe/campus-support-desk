@@ -7,7 +7,7 @@ function cn(...classes: Array<string | undefined | false>) {
 export default function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-xl bg-slate-200/80", className)}
+      className={cn("animate-pulse rounded-xl bg-surface2", className)}
       {...props}
     />
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
+import Select from "@/components/ui/Select";
 import { adminUsersSeed } from "@/lib/mockData";
 import type { AppRole, DemoUser } from "@/lib/rbac";
 
@@ -25,21 +26,21 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Users</h1>
-        <p className="text-sm text-slate-500">Manage demo users and role assignments.</p>
+        <h1 className="text-2xl font-semibold text-text">Users</h1>
+        <p className="text-sm text-mutedText">Manage demo users and role assignments.</p>
       </div>
       <Card>
         <div className="space-y-3">
           {users.map((user) => (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4" key={user.id}>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4" key={user.id}>
               <div>
-                <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                <p className="text-xs text-slate-500">{user.id}</p>
+                <p className="text-sm font-semibold text-text">{user.name}</p>
+                <p className="text-xs text-mutedText">{user.id}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={roleVariant(user.role)}>{user.role}</Badge>
-                <select
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                <Select
+                  className="w-44"
                   onChange={(event) =>
                     setUsers((prev) =>
                       prev.map((item) =>
@@ -53,7 +54,7 @@ export default function AdminUsersPage() {
                   <option value="LECTURER">LECTURER</option>
                   <option value="LOST_ITEM_STAFF">LOST_ITEM_STAFF</option>
                   <option value="STUDENT">STUDENT</option>
-                </select>
+                </Select>
               </div>
             </div>
           ))}

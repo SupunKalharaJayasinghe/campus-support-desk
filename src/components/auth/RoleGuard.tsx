@@ -46,7 +46,7 @@ export default function RoleGuard({
   if (!isReady) {
     return (
       <div className="p-6">
-        <div className="h-6 w-32 animate-pulse rounded-lg bg-slate-200" />
+        <div className="h-6 w-32 animate-pulse rounded-lg bg-surface2" />
       </div>
     );
   }

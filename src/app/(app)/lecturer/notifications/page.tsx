@@ -22,8 +22,8 @@ export default function LecturerNotificationsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Notifications</h1>
-          <p className="text-sm text-slate-500">Lecturer updates and operational alerts.</p>
+          <h1 className="text-2xl font-semibold text-text">Notifications</h1>
+          <p className="text-sm text-mutedText">Lecturer updates and operational alerts.</p>
         </div>
         <Button
           onClick={() => {
@@ -41,16 +41,16 @@ export default function LecturerNotificationsPage() {
 
       <div className="space-y-3">
         {notifications.map((item) => (
-          <Card className={!item.isRead ? "border-l-4 border-l-sky-500" : ""} key={item.id}>
+          <Card className={!item.isRead ? "border-l-4 border-l-primary" : ""} key={item.id}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
                   {item.type}
                 </Badge>
-                <p className="mt-2 text-base font-semibold text-slate-900">{item.title}</p>
-                <p className="mt-1 text-sm text-slate-600">{item.message}</p>
+                <p className="mt-2 text-base font-semibold text-text">{item.title}</p>
+                <p className="mt-1 text-sm text-mutedText">{item.message}</p>
               </div>
-              <p className="text-xs text-slate-500">{item.time}</p>
+              <p className="text-xs text-mutedText">{item.time}</p>
             </div>
           </Card>
         ))}

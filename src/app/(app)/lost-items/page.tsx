@@ -9,21 +9,21 @@ export default function LostItemsDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Lost & Found Dashboard</h1>
-        <p className="text-sm text-slate-500">Operational overview for queue, found register, and claims.</p>
+        <h1 className="text-2xl font-semibold text-text">Lost & Found Dashboard</h1>
+        <p className="text-sm text-mutedText">Operational overview for queue, found register, and claims.</p>
       </div>
       <section className="grid gap-4 sm:grid-cols-3">
         <Card>
-          <p className="text-sm text-slate-500">Pending review</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{pending}</p>
+          <p className="text-sm text-mutedText">Pending review</p>
+          <p className="mt-2 text-3xl font-semibold text-text">{pending}</p>
         </Card>
         <Card>
-          <p className="text-sm text-slate-500">Verified reports</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{verified}</p>
+          <p className="text-sm text-mutedText">Verified reports</p>
+          <p className="mt-2 text-3xl font-semibold text-text">{verified}</p>
         </Card>
         <Card>
-          <p className="text-sm text-slate-500">Stored found items</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{stored}</p>
+          <p className="text-sm text-mutedText">Stored found items</p>
+          <p className="mt-2 text-3xl font-semibold text-text">{stored}</p>
         </Card>
       </section>
     </div>

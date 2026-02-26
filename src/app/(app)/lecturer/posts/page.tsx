@@ -4,6 +4,7 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import { lecturerPosts } from "@/lib/mockData";
 import type { PostItem } from "@/lib/mockData";
 
@@ -14,8 +15,8 @@ export default function LecturerPostsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Posts</h1>
-        <p className="text-sm text-slate-500">Answer student questions from the discussion feed.</p>
+        <h1 className="text-2xl font-semibold text-text">Posts</h1>
+        <p className="text-sm text-mutedText">Answer student questions from the discussion feed.</p>
       </div>
 
       <div className="space-y-3">
@@ -24,11 +25,10 @@ export default function LecturerPostsPage() {
             <Badge variant={post.category === "Academic Question" ? "warning" : "neutral"}>
               {post.category}
             </Badge>
-            <h2 className="mt-2 text-base font-semibold text-slate-900">{post.title}</h2>
-            <p className="mt-1 text-sm text-slate-600">{post.content}</p>
+            <h2 className="mt-2 text-base font-semibold text-text">{post.title}</h2>
+            <p className="mt-1 text-sm text-mutedText">{post.content}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              <Input
                 onChange={(event) =>
                   setAnswers((prev) => ({ ...prev, [post.id]: event.target.value }))
                 }

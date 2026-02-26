@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
 import { notificationsByRole } from "@/lib/mockData";
@@ -75,8 +76,8 @@ export default function StudentNotificationsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Notifications</h1>
-        <p className="text-sm text-slate-500">Student alerts and important updates.</p>
+        <h1 className="text-2xl font-semibold text-text">Notifications</h1>
+        <p className="text-sm text-mutedText">Student alerts and important updates.</p>
       </div>
 
       <Card>
@@ -86,7 +87,7 @@ export default function StudentNotificationsPage() {
               <button
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm font-medium",
-                  tab === entry ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                  tab === entry ? "bg-primary text-white" : "bg-surface2 text-mutedText"
                 )}
                 key={entry}
                 onClick={() => setTab(entry)}
@@ -97,8 +98,8 @@ export default function StudentNotificationsPage() {
             ))}
           </div>
           <div className="flex gap-2">
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm md:w-72"
+            <Input
+              className="md:w-72"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search notifications"
               value={search}
@@ -125,7 +126,7 @@ export default function StudentNotificationsPage() {
 
       <div className="space-y-3">
         {filtered.map((item) => (
-          <Card className={cn(!item.isRead ? "border-l-4 border-l-sky-500" : "")} key={item.id}>
+          <Card className={cn(!item.isRead ? "border-l-4 border-l-primary" : "")} key={item.id}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -134,12 +135,12 @@ export default function StudentNotificationsPage() {
                   </Badge>
                   {!item.isRead ? <Badge variant="danger">Unread</Badge> : null}
                 </div>
-                <p className={cn("mt-2 text-base text-slate-900", !item.isRead ? "font-semibold" : "font-medium")}>
+                <p className={cn("mt-2 text-base text-text", !item.isRead ? "font-semibold" : "font-medium")}>
                   {item.title}
                 </p>
-                <p className="mt-1 text-sm text-slate-600">{item.message}</p>
+                <p className="mt-1 text-sm text-mutedText">{item.message}</p>
               </div>
-              <p className="text-xs text-slate-500">{item.time}</p>
+              <p className="text-xs text-mutedText">{item.time}</p>
             </div>
           </Card>
         ))}
