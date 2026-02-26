@@ -33,37 +33,37 @@ export default function StudentDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Student Dashboard</h1>
-        <p className="text-sm text-mutedText">Your academic support overview for this week.</p>
+        <h1 className="text-3xl font-semibold text-heading">Student Dashboard</h1>
+        <p className="mt-2 text-sm text-text/75">Your academic support overview for this week.</p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <p className="text-sm text-mutedText">Notifications</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{studentSummary.notifications}</p>
+      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <Card accent>
+          <p className="text-sm text-text/72">Notifications</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.notifications}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Bookings</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{studentSummary.bookings}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Bookings</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.bookings}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Posts</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{studentSummary.posts}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Posts</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.posts}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Points</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{studentSummary.points}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Points</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.points}</p>
         </Card>
       </section>
 
       <Card title="Recent Alerts">
         <ul className="space-y-3">
           {notificationsByRole.STUDENT.slice(0, 3).map((item) => (
-            <li className="rounded-xl bg-surface2 p-3" key={item.id}>
+            <li className="rounded-2xl bg-tint p-3.5" key={item.id}>
               <p className="text-sm font-medium text-text">{item.title}</p>
-              <p className="mt-1 text-xs text-mutedText">{item.time}</p>
+              <p className="mt-1 text-xs text-text/72">{item.time}</p>
             </li>
           ))}
         </ul>

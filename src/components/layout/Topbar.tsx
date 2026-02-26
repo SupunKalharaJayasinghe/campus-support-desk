@@ -47,27 +47,27 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const workspaceTitle = role ? WORKSPACE_TITLE_BY_ROLE[role] : "UniHub Workspace";
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-surface">
-      <Container className="flex h-16 items-center justify-between">
+    <header className="sticky top-0 z-20 border-b border-border bg-card shadow-shadow">
+      <Container className="flex h-20 items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             aria-label="Open sidebar"
-            className="rounded-lg p-2 text-text hover:bg-surface2 md:hidden"
+            className="rounded-xl p-2 text-text hover:bg-primaryHover/8 hover:text-primaryHover md:hidden"
             onClick={onMenuClick}
             type="button"
           >
             <Menu size={20} />
           </button>
           <div>
-            <p className="text-sm font-semibold text-text">{workspaceTitle}</p>
-            <p className="text-xs text-mutedText">{pageTitle}</p>
+            <p className="text-sm font-semibold text-heading">{workspaceTitle}</p>
+            <p className="text-xs tracking-[0.14em] text-text/68">{pageTitle}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <Badge variant="info">Demo Mode</Badge>
-          {role ? <Badge variant="primary">{roleLabel(role)}</Badge> : null}
-          {user ? <p className="hidden text-xs text-mutedText sm:block">{user.name}</p> : null}
+          <Badge variant="primary">Demo Mode</Badge>
+          {role ? <Badge variant="neutral">{roleLabel(role)}</Badge> : null}
+          {user ? <p className="hidden text-xs text-text/68 sm:block">{user.name}</p> : null}
           <Button
             onClick={() => {
               clearDemoSession();

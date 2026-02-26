@@ -8,24 +8,24 @@ export default function LecturerDashboardPage() {
   const unread = notificationsByRole.LECTURER.filter((item) => item.unread).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Lecturer Dashboard</h1>
-        <p className="text-sm text-mutedText">Manage availability, bookings, and student support.</p>
+        <h1 className="text-3xl font-semibold text-heading">Lecturer Dashboard</h1>
+        <p className="mt-2 text-sm text-text/75">Manage availability, bookings, and student support.</p>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-mutedText">Pending bookings</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{pendingRequests}</p>
+      <section className="grid gap-5 sm:grid-cols-3">
+        <Card accent>
+          <p className="text-sm text-text/72">Pending bookings</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{pendingRequests}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Unread notifications</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{unread}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Unread notifications</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{unread}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Open student posts</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{lecturerPosts.length}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Open student posts</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{lecturerPosts.length}</p>
         </Card>
       </section>
     </div>

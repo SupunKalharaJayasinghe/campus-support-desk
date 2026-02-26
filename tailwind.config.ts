@@ -6,21 +6,22 @@ const config: Config = {
     extend: {
       colors: {
         bg: "var(--bg)",
-        surface: "var(--surface)",
-        surface2: "var(--surface-2)",
-        border: "var(--border)",
+        card: "var(--card)",
+        tint: "var(--tint)",
         text: "var(--text)",
-        mutedText: "var(--mutedText)",
+        heading: "var(--heading)",
         primary: "var(--primary)",
-        primary2: "var(--primary2)",
+        primaryHover: "var(--primaryHover)",
+        border: "var(--border)",
+        focus: "var(--focus)",
       },
       boxShadow: {
-        soft: "0 8px 30px rgba(3, 57, 166, 0.08)",
-        card: "0 4px 16px rgba(38, 21, 15, 0.06)",
+        shadow: "var(--shadow)",
+        shadowHover: "var(--shadowHover)",
       },
       borderRadius: {
-        xl: "0.875rem",
         "2xl": "1.25rem",
+        "3xl": "1.6rem",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],

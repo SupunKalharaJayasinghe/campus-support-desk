@@ -7,7 +7,7 @@ function cn(...classes: Array<string | undefined | false>) {
 export default function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-xl bg-surface2", className)}
+      className={cn("skeleton-shimmer rounded-2xl border border-border bg-tint", className)}
       {...props}
     />
   );

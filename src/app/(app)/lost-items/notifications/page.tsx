@@ -18,8 +18,8 @@ export default function LostItemsNotificationsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-text">Notifications</h1>
-          <p className="text-sm text-mutedText">Lost-item operations updates and alerts.</p>
+          <h1 className="text-2xl font-semibold text-heading">Notifications</h1>
+          <p className="text-sm text-text/72">Lost-item operations updates and alerts.</p>
         </div>
         <Button
           onClick={() => {
@@ -46,10 +46,10 @@ export default function LostItemsNotificationsPage() {
                   </Badge>
                   {!item.isRead ? <Badge variant="danger">Unread</Badge> : null}
                 </div>
-                <p className="mt-2 text-base font-semibold text-text">{item.title}</p>
-                <p className="mt-1 text-sm text-mutedText">{item.message}</p>
+                <p className="mt-2 text-base font-semibold text-heading">{item.title}</p>
+                <p className="mt-1 text-sm text-text/72">{item.message}</p>
               </div>
-              <p className="text-xs text-mutedText">{item.time}</p>
+              <p className="text-xs text-text/72">{item.time}</p>
             </div>
           </Card>
         ))}

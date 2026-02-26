@@ -26,16 +26,16 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Users</h1>
-        <p className="text-sm text-mutedText">Manage demo users and role assignments.</p>
+        <h1 className="text-2xl font-semibold text-heading">Users</h1>
+        <p className="text-sm text-text/72">Manage demo users and role assignments.</p>
       </div>
       <Card>
         <div className="space-y-3">
           {users.map((user) => (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4" key={user.id}>
               <div>
-                <p className="text-sm font-semibold text-text">{user.name}</p>
-                <p className="text-xs text-mutedText">{user.id}</p>
+                <p className="text-sm font-semibold text-heading">{user.name}</p>
+                <p className="text-xs text-text/72">{user.id}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={roleVariant(user.role)}>{user.role}</Badge>

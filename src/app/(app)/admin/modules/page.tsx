@@ -16,8 +16,8 @@ export default function AdminModulesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Modules</h1>
-        <p className="text-sm text-mutedText">Manage degree, module, and batch structures.</p>
+        <h1 className="text-2xl font-semibold text-heading">Modules</h1>
+        <p className="text-sm text-text/72">Manage degree, module, and batch structures.</p>
       </div>
 
       <Card title="Add module mapping">
@@ -47,8 +47,8 @@ export default function AdminModulesPage() {
       <Card title="Current structure">
         <div className="space-y-2">
           {rows.map((row) => (
-            <div className="flex items-center justify-between rounded-xl bg-surface2 px-3 py-2" key={row.id}>
-              <p className="text-sm text-mutedText">
+            <div className="flex items-center justify-between rounded-xl bg-tint px-3 py-2" key={row.id}>
+              <p className="text-sm text-text/72">
                 {row.degree} • {row.module} • Batch {row.batch}
               </p>
               <Button onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))} variant="ghost">

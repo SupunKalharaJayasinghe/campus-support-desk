@@ -20,8 +20,8 @@ export default function FoundItemsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Found Register</h1>
-        <p className="text-sm text-mutedText">Register found items and track return status.</p>
+        <h1 className="text-2xl font-semibold text-heading">Found Register</h1>
+        <p className="text-sm text-text/72">Register found items and track return status.</p>
       </div>
 
       <Card title="Register found item">
@@ -58,8 +58,8 @@ export default function FoundItemsPage() {
           {items.map((entry) => (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4" key={entry.id}>
               <div>
-                <p className="text-sm font-semibold text-text">{entry.item}</p>
-                <p className="text-sm text-mutedText">
+                <p className="text-sm font-semibold text-heading">{entry.item}</p>
+                <p className="text-sm text-text/72">
                   {entry.location} • {entry.recordedBy}
                 </p>
               </div>

@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "react";
 
-type ContainerSize = "6xl" | "7xl";
+type ContainerSize = "6xl" | "1200";
 
 interface ContainerProps extends HTMLAttributes<HTMLDivElement> {
   size?: ContainerSize;
@@ -11,7 +11,7 @@ function cn(...classes: Array<string | undefined | false>) {
 }
 
 export default function Container({
-  size = "7xl",
+  size = "1200",
   className,
   children,
   ...props
@@ -19,8 +19,8 @@ export default function Container({
   return (
     <div
       className={cn(
-        "mx-auto w-full px-4 sm:px-6 lg:px-8",
-        size === "6xl" ? "max-w-6xl" : "max-w-7xl",
+        "mx-auto w-full px-5 sm:px-8 lg:px-10",
+        size === "6xl" ? "max-w-6xl" : "max-w-[1200px]",
         className
       )}
       {...props}

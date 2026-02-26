@@ -7,23 +7,23 @@ export default function LostItemsDashboardPage() {
   const stored = foundItemsSeed.filter((item) => item.status === "Stored").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Lost & Found Dashboard</h1>
-        <p className="text-sm text-mutedText">Operational overview for queue, found register, and claims.</p>
+        <h1 className="text-3xl font-semibold text-heading">Lost & Found Dashboard</h1>
+        <p className="mt-2 text-sm text-text/75">Operational overview for queue, found register, and claims.</p>
       </div>
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-mutedText">Pending review</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{pending}</p>
+      <section className="grid gap-5 sm:grid-cols-3">
+        <Card accent>
+          <p className="text-sm text-text/72">Pending review</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{pending}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Verified reports</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{verified}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Verified reports</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{verified}</p>
         </Card>
-        <Card>
-          <p className="text-sm text-mutedText">Stored found items</p>
-          <p className="mt-2 text-3xl font-semibold text-text">{stored}</p>
+        <Card accent>
+          <p className="text-sm text-text/72">Stored found items</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{stored}</p>
         </Card>
       </section>
     </div>

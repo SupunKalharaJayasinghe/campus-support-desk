@@ -74,53 +74,63 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface p-5 transition-transform duration-200",
+          "fixed inset-y-0 left-0 z-40 w-72 p-3 transition-transform duration-200",
           open ? "translate-x-0" : "-translate-x-full",
           "md:translate-x-0"
         )}
       >
-        <div className="mb-8">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-mutedText">UniHub</p>
-          <h2 className="mt-2 text-xl font-semibold text-text">Academic Support</h2>
-        </div>
+        <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-5 shadow-shadow">
+          <div className="mb-8">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-text/68">UniHub</p>
+            <h2 className="mt-2 text-xl font-semibold text-heading">Academic Support</h2>
+          </div>
 
-        <nav className="flex-1 space-y-1">
-          {navItems.map((item) => {
-            const Icon = getIcon(item.icon);
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          <nav className="flex-1 space-y-1.5">
+            {navItems.map((item) => {
+              const Icon = getIcon(item.icon);
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-            return (
-              <Link
-                className={cn(
-                  "group flex items-center justify-between rounded-xl border-l-4 px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "border-l-primary bg-primary/10 text-primary"
-                    : "border-l-transparent text-text hover:bg-surface2"
-                )}
-                href={item.href}
-                key={item.href}
-                onClick={onClose}
-              >
-                <span className="flex items-center gap-2">
-                  <Icon size={20} strokeWidth={1.9} />
-                  {item.label}
-                </span>
-                {item.badge ? (
+              return (
+                <Link
+                  className={cn(
+                    "group relative flex items-center justify-between rounded-2xl px-3 py-2.5 pl-5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-text hover:bg-primaryHover/8 hover:text-primaryHover"
+                  )}
+                  href={item.href}
+                  key={item.href}
+                  onClick={onClose}
+                >
                   <span
                     className={cn(
-                      "rounded-full px-2 py-0.5 text-xs font-semibold",
-                      isActive ? "bg-primary text-white" : "bg-surface2 text-mutedText"
+                      "absolute bottom-2 left-2 top-2 w-1 rounded-full transition-colors",
+                      isActive ? "bg-primary" : "bg-transparent group-hover:bg-primary/30"
                     )}
-                  >
-                    {item.badge}
+                  />
+                  <span className="flex items-center gap-2">
+                    <Icon size={20} strokeWidth={1.9} />
+                    {item.label}
                   </span>
-                ) : null}
-              </Link>
-            );
-          })}
-        </nav>
+                  {item.badge ? (
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-xs font-semibold",
+                        isActive
+                          ? "border-primary/20 bg-primary/12 text-primary"
+                          : "border-border bg-tint text-text/72"
+                      )}
+                    >
+                      {item.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </nav>
 
-        <p className="mt-6 border-t border-border pt-4 text-xs text-mutedText">UniHub v0.1 Demo</p>
+          <p className="mt-6 border-t border-border pt-4 text-xs tracking-[0.14em] text-text/65">UniHub v0.1 Demo</p>
+        </div>
       </aside>
     </>
   );
