@@ -5,8 +5,19 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
 import { UserStatusBadge } from "@/components/features/users/UserStatusBadge";
+import type { UserStatus } from "@/types/user";
 
-const students = [
+type StudentRow = {
+  id: string;
+  name: string;
+  program: string;
+  year: number;
+  semester: number;
+  group: string;
+  status: UserStatus;
+};
+
+const students: StudentRow[] = [
   { id: "ST-1001", name: "Ariana Silva", program: "CS", year: 2, semester: 1, group: "A", status: "Active" },
   { id: "ST-1002", name: "Noah Kim", program: "IS", year: 2, semester: 1, group: "B", status: "Active" }
 ];

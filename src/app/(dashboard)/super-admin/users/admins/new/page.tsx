@@ -7,7 +7,7 @@ export default function NewAdminPage() {
     <div className="space-y-6">
       <PageHeader title="Add Admin" showBreadcrumbs />
       <Card>
-        <UserForm />
+        <UserForm defaultValues={{ role: "Department Admin" }} />
       </Card>
     </div>
   );

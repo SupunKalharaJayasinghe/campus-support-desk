@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { FormBuilder, FormField } from "@/components/forms/FormBuilder";
+import type { UserRole } from "@/types/user";
 
 const fields: FormField[] = [
   {
@@ -107,12 +109,82 @@ const fields: FormField[] = [
   }
 ];
 
-export function UserForm() {
+export type UserFormValues = {
+  profileImage?: File[];
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  degreeProgram?: string;
+  batch?: string;
+  group?: string;
+  subGroup?: string;
+  employeeId?: string;
+  specialization?: string;
+  assignedPrograms?: string[];
+  password?: string;
+  confirmPassword?: string;
+  isActive?: boolean;
+};
+
+export type UserFormProps = {
+  mode?: "create" | "edit";
+  defaultValues?: Partial<UserFormValues>;
+  submitLabel?: string;
+  cancelLabel?: string;
+  onSubmit?: (values: UserFormValues) => Promise<void> | void;
+  onCancel?: () => void;
+};
+
+export function UserForm({
+  mode = "create",
+  defaultValues,
+  submitLabel = "Save User",
+  cancelLabel = "Cancel",
+  onSubmit,
+  onCancel
+}: UserFormProps) {
+  const resolvedFields = useMemo(
+    () =>
+      fields.map((field) => {
+        if (field.name !== "password" && field.name !== "confirmPassword") {
+          return field;
+        }
+        return {
+          ...field,
+          required: mode === "create"
+        };
+      }),
+    [mode]
+  );
+
+  const mergedDefaults: Partial<UserFormValues> = {
+    role: "Student",
+    isActive: true,
+    ...defaultValues
+  };
+
   return (
-    <FormBuilder
-      fields={fields}
-      submitLabel="Save User"
-      defaultValues={{ role: "Student", isActive: true }}
+    <FormBuilder<UserFormValues>
+      fields={resolvedFields}
+      submitLabel={submitLabel}
+      cancelLabel={cancelLabel}
+      defaultValues={mergedDefaults}
+      onCancel={onCancel}
+      onSubmit={onSubmit}
+      validate={(values) => {
+        const password = values.password ?? "";
+        const confirmPassword = values.confirmPassword ?? "";
+        const shouldValidatePassword =
+          mode === "create" || password.length > 0 || confirmPassword.length > 0;
+
+        if (!shouldValidatePassword) return null;
+        if (!password) return "Password is required.";
+        if (!confirmPassword) return "Please confirm the password.";
+        if (password !== confirmPassword) return "Passwords do not match.";
+        return null;
+      }}
     />
   );
 }

@@ -7,7 +7,7 @@ export default function NewLostItemStaffPage() {
     <div className="space-y-6">
       <PageHeader title="Add Lost Item Staff" showBreadcrumbs />
       <Card>
-        <UserForm />
+        <UserForm defaultValues={{ role: "Lost Item Staff" }} />
       </Card>
     </div>
   );

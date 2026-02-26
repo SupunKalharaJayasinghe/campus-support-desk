@@ -5,8 +5,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
 import { UserStatusBadge } from "@/components/features/users/UserStatusBadge";
+import type { UserStatus } from "@/types/user";
 
-const admins = [
+type AdminRow = {
+  id: string;
+  name: string;
+  programs: string;
+  status: UserStatus;
+};
+
+const admins: AdminRow[] = [
   { id: "A-01", name: "Nadine Okafor", programs: "CS, IS", status: "Active" },
   { id: "A-02", name: "Ravi Patel", programs: "SE", status: "Active" }
 ];

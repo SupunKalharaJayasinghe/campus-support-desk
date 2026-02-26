@@ -2,7 +2,6 @@
 
 import {
   LayoutDashboard,
-  Folder,
   GraduationCap,
   Users,
   BookOpen,
@@ -22,17 +21,7 @@ export function SuperAdminSidebar() {
       icon: <LayoutDashboard className="h-4 w-4" />
     },
     {
-      label: "Degree Categories",
-      href: "/super-admin/degree-categories",
-      icon: <Folder className="h-4 w-4" />
-    },
-    {
-      label: "Degree Programs",
-      href: "/super-admin/degree-programs",
-      icon: <GraduationCap className="h-4 w-4" />
-    },
-    {
-      label: "Users",
+      label: "User Management",
       icon: <Users className="h-4 w-4" />,
       children: [
         { label: "All Users", href: "/super-admin/users" },
@@ -43,27 +32,37 @@ export function SuperAdminSidebar() {
       ]
     },
     {
-      label: "Modules",
+      label: "Degree Management",
       href: "/super-admin/degree-programs",
+      icon: <GraduationCap className="h-4 w-4" />
+    },
+    {
+      label: "Module Management",
+      href: "/super-admin/modules",
       icon: <BookOpen className="h-4 w-4" />
     },
     {
-      label: "Exam Schedule",
+      label: "Exam Management",
       href: "/super-admin/exam-schedule",
       icon: <Calendar className="h-4 w-4" />
     },
     {
-      label: "Notifications",
-      href: "/super-admin/notifications",
-      icon: <Bell className="h-4 w-4" />
-    },
-    {
-      label: "Lost Items",
+      label: "Lost Item Management",
       href: "/super-admin/lost-items",
       icon: <Package className="h-4 w-4" />
     },
     {
-      label: "Reports",
+      label: "Announcement Management",
+      href: "/super-admin/notifications",
+      icon: <Bell className="h-4 w-4" />
+    },
+    {
+      label: "Instructor Management",
+      href: "/super-admin/instructors",
+      icon: <Users className="h-4 w-4" />
+    },
+    {
+      label: "Reports Management",
       href: "/super-admin/reports",
       icon: <BarChart className="h-4 w-4" />
     },

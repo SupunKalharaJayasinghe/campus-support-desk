@@ -7,7 +7,7 @@ export default function NewLecturerPage() {
     <div className="space-y-6">
       <PageHeader title="Add Lecturer" showBreadcrumbs />
       <Card>
-        <UserForm />
+        <UserForm defaultValues={{ role: "Lecturer" }} />
       </Card>
     </div>
   );

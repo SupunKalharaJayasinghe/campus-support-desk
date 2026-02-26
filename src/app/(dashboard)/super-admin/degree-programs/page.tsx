@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +42,20 @@ const programs = [
 ];
 
 export default function DegreeProgramsPage() {
+  const router = useRouter();
+  const [programsData, setProgramsData] = useState(programs);
+
+  const handleEdit = (id: string) => {
+    router.push(`/super-admin/degree-programs/${id}/edit`);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to delete this program?")) {
+      setProgramsData(programsData.filter(p => p.id !== id));
+      alert("Program deleted successfully");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -53,7 +69,7 @@ export default function DegreeProgramsPage() {
         }
       />
       <DataTable
-        data={programs}
+        data={programsData}
         columns={[
           { key: "name", header: "Name", sortable: true },
           { key: "code", header: "Code", sortable: true },
@@ -72,9 +88,9 @@ export default function DegreeProgramsPage() {
           }
         ]}
         exportable
-        rowActions={() => [
-          { label: "View", onClick: () => undefined },
-          { label: "Edit", onClick: () => undefined }
+        rowActions={(row) => [
+          { label: "Edit", onClick: () => handleEdit(row.id) },
+          { label: "Delete", onClick: () => handleDelete(row.id) }
         ]}
       />
     </div>

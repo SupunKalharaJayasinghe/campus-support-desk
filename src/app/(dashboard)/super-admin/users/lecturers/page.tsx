@@ -5,8 +5,19 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
 import { UserStatusBadge } from "@/components/features/users/UserStatusBadge";
+import type { UserStatus } from "@/types/user";
 
-const lecturers = [
+type LecturerRow = {
+  id: string;
+  name: string;
+  email: string;
+  employeeId: string;
+  program: string;
+  modules: number;
+  status: UserStatus;
+};
+
+const lecturers: LecturerRow[] = [
   { id: "L-01", name: "Marcus Lee", email: "marcus@campus.edu", employeeId: "EMP-201", program: "CS", modules: 4, status: "Active" },
   { id: "L-02", name: "Amelia Tran", email: "amelia@campus.edu", employeeId: "EMP-202", program: "IS", modules: 3, status: "Active" }
 ];
