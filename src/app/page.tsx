@@ -7,11 +7,16 @@ import { BookOpen, Package, ShieldAlert, Users } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Container from '@/components/ui/Container';
 import universityLogo from '@/app/images/university-logo.png';
+import studentImg from '@/app/images/Services/student.png';
+import lecturerImg from '@/app/images/Services/lecturer.png';
+import officerImg from '@/app/images/Services/officer.png';
+import administratorImg from '@/app/images/Services/administrator.png';
 
 const roleCards = [
   {
     title: 'Student',
     icon: Users,
+    image: studentImg,
     items: [
       'View announcements',
       'Track academic progress',
@@ -23,6 +28,7 @@ const roleCards = [
   {
     title: 'Lecturer',
     icon: BookOpen,
+    image: lecturerImg,
     items: [
       'Manage availability',
       'Handle student bookings',
@@ -33,6 +39,7 @@ const roleCards = [
   {
     title: 'Lost Item Officer',
     icon: Package,
+    image: officerImg,
     items: [
       'Register found items',
       'Verify ownership claims',
@@ -42,6 +49,7 @@ const roleCards = [
   {
     title: 'Administrator',
     icon: ShieldAlert,
+    image: administratorImg,
     items: [
       'Manage users & permissions',
       'Oversee academic structure',
@@ -136,25 +144,41 @@ export default function LandingPage() {
               const Icon = item.icon;
               return (
                 <Card
-                  className="group border-t-[3px] border-t-primary transition-all duration-200 hover:-translate-y-1 hover:shadow-shadowHover"
+                  className="group border-t-[3px] border-t-primary transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#034AA6] hover:shadow-shadowHover"
                   key={item.title}
                 >
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
-                    <Icon size={20} />
+                  <div className="-mx-6 -mt-6 relative overflow-hidden rounded-t-3xl">
+                    <Image
+                      alt=""
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover opacity-80"
+                      fill
+                      sizes="(min-width: 1280px) 280px, (min-width: 768px) 45vw, 90vw"
+                      src={item.image}
+                    />
+                    <div className="absolute inset-0 z-0 bg-white/40" />
+                    <div className="relative z-10 px-6 py-6">
+                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+                        <Icon size={20} />
+                      </div>
+                      <h3 className="mt-5 text-lg font-semibold text-heading">
+                        {item.title}
+                      </h3>
+                    </div>
                   </div>
-                  <h3 className="mt-5 text-lg font-semibold text-heading">
-                    {item.title}
-                  </h3>
-                  <ul className="mt-5 space-y-3">
-                    {item.items.map((entry) => (
-                      <li
-                        className="text-sm leading-6 text-text/80"
-                        key={entry}
-                      >
-                        • {entry}
-                      </li>
-                    ))}
-                  </ul>
+
+                  <div className="-mx-6 mt-0 border-t border-border/70 px-6 pt-4">
+                    <ul className="space-y-3">
+                      {item.items.map((entry) => (
+                        <li
+                          className="text-sm leading-6 text-text/80"
+                          key={entry}
+                        >
+                          • {entry}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </Card>
               );
             })}
