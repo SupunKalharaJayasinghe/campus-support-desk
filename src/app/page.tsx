@@ -133,10 +133,10 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <section className="w-full py-20">
+      <section className="w-full py-16 lg:py-20">
         <Container size="6xl">
           <div>
-            <h2 className="text-3xl font-semibold text-heading">
+            <h2 className="text-3xl font-semibold tracking-tight text-[#0A0A0A] lg:text-4xl">
               Access Campus Services
             </h2>
           </div>
@@ -189,7 +189,7 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <section className="relative w-full overflow-hidden bg-[#034AA6] py-16 lg:py-20">
+      <section className="relative mt-16 w-full overflow-hidden bg-[#034AA6] py-16 lg:mt-20 lg:py-20">
         <div className="absolute -right-25 top-1/2 h-100 w-100 -translate-y-1/2 rounded-full bg-white/5 blur-3xl" />
         <Container size="6xl" className="relative z-10 flex items-center">
           <div className="flex flex-col gap-10 lg:flex-row lg:items-center lg:justify-between">
@@ -215,24 +215,52 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <section className="w-full py-20">
+      <section className="mt-16 w-full py-16 lg:mt-20 lg:py-20">
         <Container size="6xl">
           <div>
-            <h2 className="text-3xl font-semibold text-heading">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#26150F]/60">
+              STATUS
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#0A0A0A] lg:text-4xl">
               System Information
             </h2>
           </div>
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {systemInfo.map((item) => (
-              <Card key={item.label}>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text/62">
-                  {item.label}
-                </p>
-                <p className="mt-3 text-sm leading-6 text-text/85">
-                  {item.value}
-                </p>
-              </Card>
-            ))}
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {systemInfo.map((item, index) => {
+              const Icon =
+                index === 0
+                  ? ShieldAlert
+                  : index === 1
+                    ? LifeBuoy
+                    : index === 2
+                      ? BookOpen
+                      : Users;
+              const isStatus = item.value === 'Operational';
+
+              return (
+                <div
+                  className="rounded-3xl border border-black/15 bg-white/60 p-5 shadow-[0_4px_14px_rgba(38,21,15,0.05)] transition-colors duration-300 hover:border-[#034AA6]/60"
+                  key={item.label}
+                >
+                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
+                    <Icon size={16} />
+                  </div>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#26150F]/70">
+                    {item.label}
+                  </p>
+                  {isStatus ? (
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#034AA6]/20 bg-[#034AA6]/10 px-2.5 py-1 text-sm font-medium text-[#034AA6]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#034AA6]" />
+                      Operational
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-base font-medium text-[#26150F]">
+                      {item.value}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Container>
       </section>
