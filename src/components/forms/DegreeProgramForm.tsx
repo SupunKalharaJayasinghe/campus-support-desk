@@ -30,12 +30,38 @@ const fields: FormField[] = [
   { name: "isActive", label: "Is Active", type: "toggle" }
 ];
 
-export function DegreeProgramForm() {
+export type DegreeProgramFormValues = {
+  category: string;
+  name: string;
+  code: string;
+  duration: number;
+  description?: string;
+  isActive?: boolean;
+};
+
+export type DegreeProgramFormProps = {
+  defaultValues?: Partial<DegreeProgramFormValues>;
+  submitLabel?: string;
+  cancelLabel?: string;
+  onSubmit?: (values: DegreeProgramFormValues) => Promise<void> | void;
+  onCancel?: () => void;
+};
+
+export function DegreeProgramForm({
+  defaultValues,
+  submitLabel = "Save Program",
+  cancelLabel = "Cancel",
+  onSubmit,
+  onCancel
+}: DegreeProgramFormProps) {
   return (
-    <FormBuilder
+    <FormBuilder<DegreeProgramFormValues>
       fields={fields}
-      submitLabel="Save Program"
-      defaultValues={{ duration: 4, isActive: true }}
+      submitLabel={submitLabel}
+      cancelLabel={cancelLabel}
+      defaultValues={{ duration: 4, isActive: true, ...defaultValues }}
+      onSubmit={onSubmit}
+      onCancel={onCancel}
     />
   );
 }

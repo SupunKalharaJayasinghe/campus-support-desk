@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import {
+  Controller,
+  type DefaultValues,
+  type FieldValues,
+  type Path,
+  useForm
+} from "react-hook-form";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectOption } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
@@ -44,7 +50,7 @@ export type FormField = {
   multiple?: boolean;
 };
 
-export function FormBuilder<T extends Record<string, unknown>>({
+export function FormBuilder<T extends FieldValues>({
   fields,
   defaultValues,
   submitLabel = "Save",
@@ -67,7 +73,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
     control,
     watch,
     formState: { errors, isSubmitting }
-  } = useForm<T>({ defaultValues: defaultValues as T });
+  } = useForm<T>({ defaultValues: defaultValues as DefaultValues<T> });
   const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -119,9 +125,9 @@ export function FormBuilder<T extends Record<string, unknown>>({
                 key={field.name}
                 label={field.label}
                 placeholder={field.placeholder}
-                helper={field.helper}
-                error={error}
-                {...register(field.name as keyof T, {
+              helper={field.helper}
+              error={error}
+                {...register(field.name as Path<T>, {
                   required: field.required ? "This field is required" : false
                 })}
                 className="md:col-span-2"
@@ -139,7 +145,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
                 error={error}
                 multiple={field.type === "multiselect"}
                 options={field.options ?? []}
-                {...register(field.name as keyof T, {
+                {...register(field.name as Path<T>, {
                   required: field.required ? "This field is required" : false
                 })}
               />
@@ -151,7 +157,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
               <Controller
                 key={field.name}
                 control={control}
-                name={field.name as keyof T}
+                name={field.name as Path<T>}
                 render={({ field: controllerField }) => (
                   <DatePicker
                     label={field.label}
@@ -170,7 +176,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
               <Controller
                 key={field.name}
                 control={control}
-                name={field.name as keyof T}
+                name={field.name as Path<T>}
                 render={({ field: controllerField }) => (
                   <TimePicker
                     label={field.label}
@@ -189,7 +195,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
               <Controller
                 key={field.name}
                 control={control}
-                name={field.name as keyof T}
+                name={field.name as Path<T>}
                 render={({ field: controllerField }) => (
                   <FileUpload
                     label={field.label}
@@ -209,7 +215,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
               <Controller
                 key={field.name}
                 control={control}
-                name={field.name as keyof T}
+                name={field.name as Path<T>}
                 render={({ field: controllerField }) => (
                   <Toggle
                     label={field.label}
@@ -229,7 +235,7 @@ export function FormBuilder<T extends Record<string, unknown>>({
               placeholder={field.placeholder}
               helper={field.helper}
               error={error}
-              {...register(field.name as keyof T, {
+              {...register(field.name as Path<T>, {
                 required: field.required ? "This field is required" : false,
                 min: field.min,
                 max: field.max

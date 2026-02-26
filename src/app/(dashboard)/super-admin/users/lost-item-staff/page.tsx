@@ -5,8 +5,16 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
 import { UserStatusBadge } from "@/components/features/users/UserStatusBadge";
+import type { UserStatus } from "@/types/user";
 
-const staff = [
+type StaffRow = {
+  id: string;
+  name: string;
+  email: string;
+  status: UserStatus;
+};
+
+const staff: StaffRow[] = [
   { id: "LI-01", name: "Gavin Cruz", email: "gavin@campus.edu", status: "Active" },
   { id: "LI-02", name: "Tessa Reed", email: "tessa@campus.edu", status: "Active" }
 ];
