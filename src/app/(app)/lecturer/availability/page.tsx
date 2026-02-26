@@ -23,8 +23,8 @@ export default function LecturerAvailabilityPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Availability</h1>
-        <p className="text-sm text-mutedText">Create and maintain your consultation windows.</p>
+        <h1 className="text-2xl font-semibold text-heading">Availability</h1>
+        <p className="text-sm text-text/72">Create and maintain your consultation windows.</p>
       </div>
 
       <Card title="Add time slot">
@@ -54,14 +54,14 @@ export default function LecturerAvailabilityPage() {
             Add Slot
           </Button>
         </div>
-        {error ? <p className="mt-2 text-sm text-primary2">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-primaryHover">{error}</p> : null}
       </Card>
 
       <Card title="My slots">
         <div className="space-y-2">
           {slots.map((slot) => (
-            <div className="flex items-center justify-between rounded-xl bg-surface2 px-3 py-2" key={slot.id}>
-              <p className="text-sm text-mutedText">
+            <div className="flex items-center justify-between rounded-xl bg-tint px-3 py-2" key={slot.id}>
+              <p className="text-sm text-text/72">
                 {slot.date} • {slot.start} - {slot.end}
               </p>
               <Button onClick={() => setSlots((prev) => prev.filter((entry) => entry.id !== slot.id))} variant="ghost">

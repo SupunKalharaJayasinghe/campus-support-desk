@@ -15,8 +15,8 @@ export default function LecturerPostsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Posts</h1>
-        <p className="text-sm text-mutedText">Answer student questions from the discussion feed.</p>
+        <h1 className="text-2xl font-semibold text-heading">Posts</h1>
+        <p className="text-sm text-text/72">Answer student questions from the discussion feed.</p>
       </div>
 
       <div className="space-y-3">
@@ -25,8 +25,8 @@ export default function LecturerPostsPage() {
             <Badge variant={post.category === "Academic Question" ? "warning" : "neutral"}>
               {post.category}
             </Badge>
-            <h2 className="mt-2 text-base font-semibold text-text">{post.title}</h2>
-            <p className="mt-1 text-sm text-mutedText">{post.content}</p>
+            <h2 className="mt-2 text-base font-semibold text-heading">{post.title}</h2>
+            <p className="mt-1 text-sm text-text/72">{post.content}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <Input
                 onChange={(event) =>

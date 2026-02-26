@@ -10,13 +10,13 @@ interface ToastProps {
 export default function Toast({ title, message, onClose }: ToastProps) {
   return (
     <div
-      className="pointer-events-auto w-full rounded-2xl border border-border bg-surface p-4 shadow-card"
+      className="pointer-events-auto w-full rounded-3xl border border-border border-l-4 border-l-primary bg-card p-4 shadow-shadow"
       role="status"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-text">{title}</p>
-          {message ? <p className="mt-1 text-sm text-mutedText">{message}</p> : null}
+          <p className="text-sm font-semibold text-heading">{title}</p>
+          {message ? <p className="mt-1 text-sm text-text/74">{message}</p> : null}
         </div>
         <Button
           aria-label="Dismiss toast"

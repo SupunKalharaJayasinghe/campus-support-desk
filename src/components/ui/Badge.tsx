@@ -17,12 +17,12 @@ function cn(...classes: Array<string | undefined | false>) {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  neutral: "bg-surface2 text-mutedText border border-border",
-  success: "border border-primary/20 bg-primary/10 text-primary",
-  warning: "border border-primary/25 bg-primary/20 text-primary2",
-  danger: "border border-border bg-[rgba(38,21,15,0.08)] text-text",
-  primary: "border border-primary bg-primary text-white",
-  info: "border border-border bg-surface2 text-text",
+  neutral: "border border-border bg-tint text-text/80",
+  success: "border border-primary/25 bg-primary/10 text-primary",
+  warning: "border border-primary/20 bg-primary/8 text-primaryHover",
+  danger: "border border-border bg-tint text-heading",
+  primary: "border border-primary/25 bg-primary/12 text-primary",
+  info: "border border-border bg-tint text-text/85",
 };
 
 export default function Badge({
@@ -33,7 +33,7 @@ export default function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         variantClasses[variant],
         className
       )}

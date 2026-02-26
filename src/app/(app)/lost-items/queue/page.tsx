@@ -23,19 +23,19 @@ export default function LostItemsQueuePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Queue</h1>
-        <p className="text-sm text-mutedText">Review reported items and process claim verification.</p>
+        <h1 className="text-2xl font-semibold text-heading">Queue</h1>
+        <p className="text-sm text-text/72">Review reported items and process claim verification.</p>
       </div>
       <div className="space-y-3">
         {reports.map((report) => (
           <Card key={report.id}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-text">{report.item}</p>
-                <p className="text-sm text-mutedText">
+                <p className="text-sm font-semibold text-heading">{report.item}</p>
+                <p className="text-sm text-text/72">
                   {report.location} • {report.reporter}
                 </p>
-                <p className="text-xs text-mutedText">{report.date}</p>
+                <p className="text-xs text-text/72">{report.date}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={statusVariant(report.status)}>{report.status}</Badge>

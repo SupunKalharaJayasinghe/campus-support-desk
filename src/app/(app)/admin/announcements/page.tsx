@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import Textarea from "@/components/ui/Textarea";
 
 interface Announcement {
   id: string;
@@ -31,13 +32,13 @@ export default function AdminAnnouncementsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Announcements</h1>
-        <p className="text-sm text-mutedText">Create and publish platform-wide announcements.</p>
+        <h1 className="text-2xl font-semibold text-heading">Announcements</h1>
+        <p className="text-sm text-text/72">Create and publish platform-wide announcements.</p>
       </div>
       <Card title="Create announcement">
         <div className="space-y-3">
           <Input onChange={(e) => setTitle(e.target.value)} placeholder="Title" value={title} />
-          <textarea className="min-h-28 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-mutedText focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focusRing)]" onChange={(e) => setBody(e.target.value)} placeholder="Message body" value={body} />
+          <Textarea onChange={(e) => setBody(e.target.value)} placeholder="Message body" value={body} />
           <div className="flex items-center gap-2">
             <Select className="w-44" onChange={(e) => setAudience(e.target.value as Announcement["audience"])} value={audience}>
               <option value="All">All</option>
@@ -68,9 +69,9 @@ export default function AdminAnnouncementsPage() {
         <div className="space-y-3">
           {items.map((item) => (
             <div className="rounded-xl border border-border p-4" key={item.id}>
-              <p className="text-sm font-semibold text-text">{item.title}</p>
-              <p className="mt-1 text-sm text-mutedText">{item.body}</p>
-              <p className="mt-2 text-xs text-mutedText">
+              <p className="text-sm font-semibold text-heading">{item.title}</p>
+              <p className="mt-1 text-sm text-text/72">{item.body}</p>
+              <p className="mt-2 text-xs text-text/70">
                 Audience: {item.audience} • {item.time}
               </p>
             </div>

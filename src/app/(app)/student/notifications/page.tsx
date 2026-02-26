@@ -76,8 +76,8 @@ export default function StudentNotificationsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Notifications</h1>
-        <p className="text-sm text-mutedText">Student alerts and important updates.</p>
+        <h1 className="text-2xl font-semibold text-heading">Notifications</h1>
+        <p className="text-sm text-text/72">Student alerts and important updates.</p>
       </div>
 
       <Card>
@@ -87,7 +87,7 @@ export default function StudentNotificationsPage() {
               <button
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm font-medium",
-                  tab === entry ? "bg-primary text-white" : "bg-surface2 text-mutedText"
+                  tab === entry ? "bg-primary text-white" : "bg-tint text-text/72"
                 )}
                 key={entry}
                 onClick={() => setTab(entry)}
@@ -138,9 +138,9 @@ export default function StudentNotificationsPage() {
                 <p className={cn("mt-2 text-base text-text", !item.isRead ? "font-semibold" : "font-medium")}>
                   {item.title}
                 </p>
-                <p className="mt-1 text-sm text-mutedText">{item.message}</p>
+                <p className="mt-1 text-sm text-text/72">{item.message}</p>
               </div>
-              <p className="text-xs text-mutedText">{item.time}</p>
+              <p className="text-xs text-text/72">{item.time}</p>
             </div>
           </Card>
         ))}

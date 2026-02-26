@@ -23,17 +23,17 @@ export default function AdminModerationPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-text">Moderation</h1>
-        <p className="text-sm text-mutedText">Review reports and take moderation actions.</p>
+        <h1 className="text-2xl font-semibold text-heading">Moderation</h1>
+        <p className="text-sm text-text/72">Review reports and take moderation actions.</p>
       </div>
       <div className="space-y-3">
         {reports.map((report) => (
           <Card key={report.id}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-text">{report.target}</p>
-                <p className="text-sm text-mutedText">Reason: {report.reason}</p>
-                <p className="text-xs text-mutedText">Reported by: {report.submittedBy}</p>
+                <p className="text-sm font-semibold text-heading">{report.target}</p>
+                <p className="text-sm text-text/72">Reason: {report.reason}</p>
+                <p className="text-xs text-text/72">Reported by: {report.submittedBy}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={statusVariant(report.status)}>{report.status}</Badge>

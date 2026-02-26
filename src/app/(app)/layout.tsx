@@ -17,11 +17,11 @@ export default function AppLayout({
   return (
     <ToastProvider>
       <RoleGuard>
-        <div className="min-h-screen bg-bg md:pl-64">
+        <div className="min-h-screen bg-bg md:pl-72">
           <Sidebar onClose={() => setSidebarOpen(false)} open={sidebarOpen} />
           <div className="min-h-screen">
             <Topbar onMenuClick={() => setSidebarOpen((previous) => !previous)} />
-            <main className="py-6">
+            <main className="py-8">
               <Container>{children}</Container>
             </main>
           </div>
