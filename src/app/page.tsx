@@ -144,10 +144,10 @@ export default function LandingPage() {
               const Icon = item.icon;
               return (
                 <Card
-                  className="group border-t-[3px] border-t-primary transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#034AA6] hover:shadow-shadowHover"
+                  className="group p-0! rounded-3xl overflow-hidden border-2 outline-none transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#034AA6] hover:shadow-shadowHover focus-visible:outline-none focus-within:ring-2 focus-within:ring-[#034AA6]/40 focus-within:ring-offset-0"
                   key={item.title}
                 >
-                  <div className="-mx-6 -mt-6 relative overflow-hidden rounded-t-3xl">
+                  <div className="relative w-full h-40 lg:h-44">
                     <Image
                       alt=""
                       aria-hidden
@@ -156,18 +156,20 @@ export default function LandingPage() {
                       sizes="(min-width: 1280px) 280px, (min-width: 768px) 45vw, 90vw"
                       src={item.image}
                     />
-                    <div className="absolute inset-0 z-0 bg-white/40" />
+                    <div className="absolute inset-0 z-1 bg-linear-to-b from-black/65 via-black/40 to-black/10" />
                     <div className="relative z-10 px-6 py-6">
-                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
-                        <Icon size={20} />
+                      <div className="inline-flex items-center gap-3">
+                        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-white/25 text-white backdrop-blur-sm">
+                          <Icon size={18} />
+                        </div>
+                        <h3 className="text-lg font-semibold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                          {item.title}
+                        </h3>
                       </div>
-                      <h3 className="mt-5 text-lg font-semibold text-heading">
-                        {item.title}
-                      </h3>
                     </div>
                   </div>
 
-                  <div className="-mx-6 mt-0 border-t border-border/70 px-6 pt-4">
+                  <div className="border-t border-border/70 px-6 pb-6 pt-6">
                     <ul className="space-y-3">
                       {item.items.map((entry) => (
                         <li
