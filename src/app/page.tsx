@@ -4,7 +4,16 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { BookOpen, LifeBuoy, Package, ShieldAlert, Users } from 'lucide-react';
+import {
+  BookOpen,
+  Clock3,
+  LifeBuoy,
+  Mail,
+  Package,
+  Phone,
+  ShieldAlert,
+  Users,
+} from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Container from '@/components/ui/Container';
 import universityLogo from '@/app/images/university-logo.png';
@@ -215,7 +224,7 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <section className="mt-16 w-full py-16 lg:mt-20 lg:py-20">
+      <section className="mt-16 w-full py-16 lg:mt-20 lg:py-20" id="system-info">
         <Container size="6xl">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#26150F]/60">
@@ -265,18 +274,117 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <footer className="w-full pb-16 pt-8">
-        <Container size="6xl">
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-shadow">
-            <div className="grid gap-3 text-sm text-text/80 sm:grid-cols-3 sm:items-center">
-              <p className="text-left">UniHub © 2025</p>
-              <p className="text-left sm:text-center">
-                University Digital Services
+      <footer className="w-full bg-[#0A0A0A] text-[#D9D9D9]">
+        <div className="mx-auto max-w-6xl px-6 py-16 lg:px-8 lg:py-20">
+          <div className="grid grid-cols-1 items-start gap-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-14">
+            <div>
+              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-white/60">
+                UniHub
+              </h3>
+              <div className="space-y-3">
+                <p className="max-w-xs text-sm leading-relaxed text-white/70">
+                  Official campus portal for service requests, support, and
+                  operational updates.
+                </p>
+                <p className="text-xs uppercase tracking-[0.12em] text-white/55">
+                  Authorized university members only.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-wider text-white/60">
+                Quick Links
+              </h4>
+              <ul className="space-y-3">
+                <li>
+                  <Link
+                    className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                    href="/login"
+                  >
+                    Login
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                    href="/report-problem"
+                  >
+                    Report a Problem
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                    href="/dashboard"
+                  >
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                    href="/#system-info"
+                  >
+                    System Information
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-wider text-white/60">
+                Support & Contact
+              </h4>
+              <ul className="space-y-2 text-sm leading-relaxed text-white/70">
+                <li className="text-base font-medium leading-relaxed text-[#D9D9D9]">
+                  Campus IT Services
+                </li>
+                <li className="flex items-center gap-2">
+                  <Mail size={14} className="shrink-0 text-[#034AA6]" />
+                  <span>helpdesk@university.edu</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Phone size={14} className="shrink-0 text-[#034AA6]" />
+                  <span>555-0199</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Clock3 size={14} className="shrink-0 text-[#034AA6]" />
+                  <span>Mon–Fri 8:00 AM – 5:00 PM</span>
+                </li>
+              </ul>
+              <p className="mt-4 text-xs text-white/55">
+                Emergency line: 555-0199 (urgent only)
               </p>
-              <p className="text-left sm:text-right">Version 1.0</p>
+            </div>
+
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <div className="flex flex-col gap-3 text-center text-sm text-white/65 lg:flex-row lg:items-center lg:text-left">
+              <div className="flex items-center justify-center lg:flex-1 lg:justify-start">
+                <p>© 2025 UniHub</p>
+              </div>
+              <div className="flex items-center justify-center gap-6 lg:flex-1 lg:justify-center">
+                <Link
+                  className="text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                  href="/privacy"
+                >
+                  Privacy Policy
+                </Link>
+                <Link
+                  className="text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                  href="/terms"
+                >
+                  Terms of Use
+                </Link>
+              </div>
+              <div className="flex items-center justify-center lg:flex-1 lg:justify-end">
+                <p>Version 1.0</p>
+              </div>
             </div>
           </div>
-        </Container>
+        </div>
       </footer>
     </div>
   );
