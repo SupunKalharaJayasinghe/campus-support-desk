@@ -52,20 +52,20 @@ export default function StudentBookingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Booking</h1>
-        <p className="text-sm text-slate-500">Book and track lecturer consultation sessions.</p>
+        <h1 className="text-2xl font-semibold text-text">Booking</h1>
+        <p className="text-sm text-mutedText">Book and track lecturer consultation sessions.</p>
       </div>
 
       <Card title="Available Slots" description="Next 7 days lecturer availability">
         <div className="grid gap-4 md:grid-cols-2">
           {availableLecturerSlots.map((lecturer) => (
-            <div className="rounded-xl border border-slate-200 p-4" key={lecturer.id}>
-              <p className="text-sm font-semibold text-slate-900">{lecturer.lecturer}</p>
-              <p className="text-xs text-slate-500">{lecturer.department}</p>
+            <div className="rounded-xl border border-border p-4" key={lecturer.id}>
+              <p className="text-sm font-semibold text-text">{lecturer.lecturer}</p>
+              <p className="text-xs text-mutedText">{lecturer.department}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {lecturer.slots.map((slot) => (
                   <button
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-mutedText hover:bg-surface2"
                     key={slot.id}
                     onClick={() =>
                       setSelectedSlot({
@@ -90,13 +90,13 @@ export default function StudentBookingPage() {
         <div className="space-y-3">
           {bookings.map((booking) => (
             <div
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4"
               key={booking.id}
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">{booking.lecturer}</p>
-                <p className="text-sm text-slate-600">{booking.purpose}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-text">{booking.lecturer}</p>
+                <p className="text-sm text-mutedText">{booking.purpose}</p>
+                <p className="text-xs text-mutedText">
                   {booking.date} • {booking.time}
                 </p>
               </div>
@@ -118,12 +118,12 @@ export default function StudentBookingPage() {
       </Card>
 
       {selectedSlot ? (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 p-4">
+        <div className="fixed inset-0 z-40 bg-text/35 p-4">
           <div className="flex h-full items-center justify-center">
             <Card className="w-full max-w-lg">
-              <h2 className="text-lg font-semibold text-slate-900">Confirm booking</h2>
-              <p className="mt-2 text-sm text-slate-600">{selectedSlot.lecturer}</p>
-              <p className="mt-1 text-sm text-slate-600">
+              <h2 className="text-lg font-semibold text-text">Confirm booking</h2>
+              <p className="mt-2 text-sm text-mutedText">{selectedSlot.lecturer}</p>
+              <p className="mt-1 text-sm text-mutedText">
                 {selectedSlot.date} • {selectedSlot.start} - {selectedSlot.end}
               </p>
               <div className="mt-5 flex justify-end gap-2">

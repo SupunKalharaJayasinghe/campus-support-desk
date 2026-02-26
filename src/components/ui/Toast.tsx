@@ -1,4 +1,5 @@
 import Button from "@/components/ui/Button";
+import { X } from "lucide-react";
 
 interface ToastProps {
   title: string;
@@ -9,13 +10,13 @@ interface ToastProps {
 export default function Toast({ title, message, onClose }: ToastProps) {
   return (
     <div
-      className="pointer-events-auto w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-lg"
+      className="pointer-events-auto w-full rounded-2xl border border-border bg-surface p-4 shadow-card"
       role="status"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">{title}</p>
-          {message ? <p className="mt-1 text-sm text-slate-600">{message}</p> : null}
+          <p className="text-sm font-semibold text-text">{title}</p>
+          {message ? <p className="mt-1 text-sm text-mutedText">{message}</p> : null}
         </div>
         <Button
           aria-label="Dismiss toast"
@@ -23,7 +24,7 @@ export default function Toast({ title, message, onClose }: ToastProps) {
           onClick={onClose}
           variant="ghost"
         >
-          x
+          <X size={14} />
         </Button>
       </div>
     </div>

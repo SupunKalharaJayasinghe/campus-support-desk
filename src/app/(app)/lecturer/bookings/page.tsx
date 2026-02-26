@@ -23,8 +23,8 @@ export default function LecturerBookingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Bookings</h1>
-        <p className="text-sm text-slate-500">Approve or decline student booking requests.</p>
+        <h1 className="text-2xl font-semibold text-text">Bookings</h1>
+        <p className="text-sm text-mutedText">Approve or decline student booking requests.</p>
       </div>
 
       <div className="space-y-3">
@@ -32,9 +32,9 @@ export default function LecturerBookingsPage() {
           <Card key={request.id}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{request.studentName}</p>
-                <p className="text-sm text-slate-600">{request.topic}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-text">{request.studentName}</p>
+                <p className="text-sm text-mutedText">{request.topic}</p>
+                <p className="text-xs text-mutedText">
                   {request.date} • {request.start} - {request.end}
                 </p>
               </div>

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 
 interface Announcement {
   id: string;
@@ -29,20 +31,20 @@ export default function AdminAnnouncementsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Announcements</h1>
-        <p className="text-sm text-slate-500">Create and publish platform-wide announcements.</p>
+        <h1 className="text-2xl font-semibold text-text">Announcements</h1>
+        <p className="text-sm text-mutedText">Create and publish platform-wide announcements.</p>
       </div>
       <Card title="Create announcement">
         <div className="space-y-3">
-          <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setTitle(e.target.value)} placeholder="Title" value={title} />
-          <textarea className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setBody(e.target.value)} placeholder="Message body" value={body} />
+          <Input onChange={(e) => setTitle(e.target.value)} placeholder="Title" value={title} />
+          <textarea className="min-h-28 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-mutedText focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focusRing)]" onChange={(e) => setBody(e.target.value)} placeholder="Message body" value={body} />
           <div className="flex items-center gap-2">
-            <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" onChange={(e) => setAudience(e.target.value as Announcement["audience"])} value={audience}>
+            <Select className="w-44" onChange={(e) => setAudience(e.target.value as Announcement["audience"])} value={audience}>
               <option value="All">All</option>
               <option value="Students">Students</option>
               <option value="Lecturers">Lecturers</option>
               <option value="Staff">Staff</option>
-            </select>
+            </Select>
             <Button
               onClick={() => {
                 if (!title.trim() || !body.trim()) {
@@ -65,10 +67,10 @@ export default function AdminAnnouncementsPage() {
       <Card title="Recent announcements">
         <div className="space-y-3">
           {items.map((item) => (
-            <div className="rounded-xl border border-slate-200 p-4" key={item.id}>
-              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-              <p className="mt-1 text-sm text-slate-600">{item.body}</p>
-              <p className="mt-2 text-xs text-slate-500">
+            <div className="rounded-xl border border-border p-4" key={item.id}>
+              <p className="text-sm font-semibold text-text">{item.title}</p>
+              <p className="mt-1 text-sm text-mutedText">{item.body}</p>
+              <p className="mt-2 text-xs text-mutedText">
                 Audience: {item.audience} • {item.time}
               </p>
             </div>

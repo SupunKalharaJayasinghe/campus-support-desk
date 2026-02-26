@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
 import { studentPosts } from "@/lib/mockData";
@@ -70,8 +72,8 @@ export default function StudentPostsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Posts</h1>
-        <p className="text-sm text-slate-500">Ask questions and share study resources.</p>
+        <h1 className="text-2xl font-semibold text-text">Posts</h1>
+        <p className="text-sm text-mutedText">Ask questions and share study resources.</p>
       </div>
 
       <Card>
@@ -81,7 +83,7 @@ export default function StudentPostsPage() {
               <button
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm font-medium",
-                  filter === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                  filter === item ? "bg-primary text-white" : "bg-surface2 text-mutedText"
                 )}
                 key={item}
                 onClick={() => setFilter(item)}
@@ -92,8 +94,8 @@ export default function StudentPostsPage() {
             ))}
           </div>
           <div className="flex gap-2">
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm md:w-72"
+            <Input
+              className="md:w-72"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search posts"
               value={search}
@@ -106,7 +108,7 @@ export default function StudentPostsPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
           {filtered.map((post) => (
-            <Card className={selectedId === post.id ? "border-slate-300 bg-slate-50/50" : ""} key={post.id}>
+            <Card className={selectedId === post.id ? "bg-surface2/60" : ""} key={post.id}>
               <button className="w-full text-left" onClick={() => setSelectedId(post.id)} type="button">
                 <div className="flex items-center justify-between">
                   <Badge variant={post.category === "Academic Question" ? "warning" : "success"}>
@@ -114,9 +116,9 @@ export default function StudentPostsPage() {
                   </Badge>
                   <Badge variant={post.status === "Archived" ? "danger" : "neutral"}>{post.status}</Badge>
                 </div>
-                <h2 className="mt-2 text-base font-semibold text-slate-900">{post.title}</h2>
-                <p className="mt-1 text-sm text-slate-600">{post.description}</p>
-                <p className="mt-2 text-xs text-slate-500">
+                <h2 className="mt-2 text-base font-semibold text-text">{post.title}</h2>
+                <p className="mt-1 text-sm text-mutedText">{post.description}</p>
+                <p className="mt-2 text-xs text-mutedText">
                   {post.replies.length} replies • {post.upvotes} upvotes
                 </p>
               </button>
@@ -128,11 +130,11 @@ export default function StudentPostsPage() {
           <Card>
             {selected ? (
               <div className="space-y-3">
-                <h2 className="text-lg font-semibold text-slate-900">{selected.title}</h2>
-                <p className="text-sm text-slate-600">{selected.content}</p>
+                <h2 className="text-lg font-semibold text-text">{selected.title}</h2>
+                <p className="text-sm text-mutedText">{selected.content}</p>
                 <div className="flex flex-wrap gap-1">
                   {selected.tags.map((tag) => (
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs" key={tag}>
+                    <span className="rounded-full bg-surface2 px-2 py-1 text-xs text-mutedText" key={tag}>
                       #{tag}
                     </span>
                   ))}
@@ -157,35 +159,29 @@ export default function StudentPostsPage() {
                 </Button>
               </div>
             ) : (
-              <p className="text-sm text-slate-500">Select a post to view details.</p>
+              <p className="text-sm text-mutedText">Select a post to view details.</p>
             )}
           </Card>
         </aside>
       </div>
 
       {createOpen ? (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 p-4">
+        <div className="fixed inset-0 z-40 bg-text/35 p-4">
           <div className="flex h-full items-center justify-center">
             <Card className="w-full max-w-xl">
-              <h2 className="text-lg font-semibold text-slate-900">Create Post</h2>
+              <h2 className="text-lg font-semibold text-text">Create Post</h2>
               <div className="mt-4 space-y-3">
-                <select
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                <Select
                   onChange={(event) => setCategory(event.target.value as PostCategory)}
                   value={category}
                 >
                   <option value="Academic Question">Academic Question</option>
                   <option value="Study Material">Study Material</option>
                   <option value="Lost Item">Lost Item</option>
-                </select>
-                <input
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Title"
-                  value={title}
-                />
+                </Select>
+                <Input onChange={(event) => setTitle(event.target.value)} placeholder="Title" value={title} />
                 <textarea
-                  className="min-h-28 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  className="min-h-28 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-mutedText focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focusRing)]"
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Description"
                   value={description}
