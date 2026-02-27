@@ -4,18 +4,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/Button";
 import { UserStatusBadge } from "@/components/features/users/UserStatusBadge";
-import type { UserStatus } from "@/types/user";
 
-type ProgramStudentRow = {
-  id: string;
-  name: string;
-  year: number;
-  semester: number;
-  group: string;
-  status: UserStatus;
-};
-
-const students: ProgramStudentRow[] = [
+const students = [
   { id: "S-01", name: "Ariana Silva", year: 2, semester: 1, group: "A", status: "Active" },
   { id: "S-02", name: "Noah Kim", year: 2, semester: 1, group: "B", status: "Active" }
 ];
