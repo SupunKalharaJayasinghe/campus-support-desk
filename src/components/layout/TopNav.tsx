@@ -19,12 +19,6 @@ interface TopNavProps {
   currentPath?: string;
 }
 
-function isActivePath(pathname: string, href: string) {
-  if (pathname === href) return true;
-  if (href === "/") return pathname === "/";
-  return pathname.startsWith(`${href}/`);
-}
-
 export default function TopNav({
   links,
   homeHref,
@@ -35,6 +29,12 @@ export default function TopNav({
   const [menuOpen, setMenuOpen] = useState(false);
 
   const activePath = currentPath ?? pathname;
+  const isActive = (href: string) => {
+    if (href === homeHref) {
+      return activePath === homeHref || activePath === `${homeHref}/overview`;
+    }
+    return activePath === href || activePath.startsWith(`${href}/`);
+  };
 
   useEffect(() => {
     setMenuOpen(false);
@@ -57,7 +57,7 @@ export default function TopNav({
 
         <nav className="hidden items-center justify-center gap-3 lg:flex">
           {links.map((item) => {
-            const active = isActivePath(activePath, item.href);
+            const active = isActive(item.href);
             return (
               <Link
                 className={[
@@ -106,7 +106,7 @@ export default function TopNav({
             <div className="rounded-2xl border border-[#BFBFBF]/55 bg-white p-3 shadow-[0_8px_24px_rgba(38,21,15,0.08)]">
               <nav className="space-y-1">
                 {links.map((item) => {
-                  const active = isActivePath(activePath, item.href);
+                  const active = isActive(item.href);
                   return (
                     <Link
                       className={[

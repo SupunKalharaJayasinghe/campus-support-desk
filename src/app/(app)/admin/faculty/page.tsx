@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Building2,
@@ -54,6 +54,16 @@ interface FormValues {
   name: string;
   code: string;
   credits: string;
+}
+
+interface AdminModalProps {
+  open: boolean;
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
 }
 
 const TYPE_LABEL: Record<NodeType, string> = {
@@ -205,6 +215,134 @@ function findFirstPath(nodes: StructureNode[]): string[] | null {
   return [first.id];
 }
 
+function AdminModal({
+  open,
+  title,
+  description,
+  icon,
+  onClose,
+  children,
+  footer,
+}: AdminModalProps) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusFirstElement = () => {
+      const focusable = dialogRef.current?.querySelector<HTMLElement>(
+        "input, select, textarea, button, [href], [tabindex]:not([tabindex='-1'])"
+      );
+      focusable?.focus();
+    };
+
+    focusFirstElement();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = dialogRef.current?.querySelectorAll<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+      );
+      if (!focusableElements || focusableElements.length === 0) {
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey) {
+        if (!active || active === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
+
+  return (
+    <div
+      className={[
+        "fixed inset-0 z-50 flex items-center justify-center p-4",
+        "bg-black/40 backdrop-blur-sm transition-opacity duration-200 ease-out",
+        open ? "opacity-100" : "pointer-events-none opacity-0",
+      ].join(" ")}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
+      <div
+        aria-labelledby="admin-modal-title"
+        aria-modal="true"
+        className={[
+          "w-full max-w-[92vw] sm:max-w-xl rounded-2xl border border-[#26150F]/15 bg-white p-6 shadow-2xl sm:p-8",
+          "transition-all duration-200 ease-out",
+          open ? "scale-100 opacity-100" : "scale-95 opacity-0",
+        ].join(" ")}
+        onMouseDown={(event) => event.stopPropagation()}
+        ref={dialogRef}
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            {icon ? (
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#034AA6]/25 bg-[#034AA6]/10 text-[#034AA6]">
+                {icon}
+              </span>
+            ) : null}
+            <div>
+              <h3 className="text-xl font-semibold text-[#0A0A0A]" id="admin-modal-title">
+                {title}
+              </h3>
+              {description ? (
+                <p className="mt-1 text-sm text-[#26150F]/72">{description}</p>
+              ) : null}
+            </div>
+          </div>
+          <button
+            aria-label="Close"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#26150F]/20 text-[#26150F]/75 transition-colors duration-200 hover:border-[#034AA6]/45 hover:bg-[#034AA6]/8 hover:text-[#0339A6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#034AA6]/30"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-6">{children}</div>
+        <div className="mt-6">{footer}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminFacultyPage() {
   const [tree, setTree] = useState<StructureNode[]>(() => seedData());
   const [selected, setSelected] = useState<SelectedNode | null>(() => {
@@ -217,9 +355,22 @@ export default function AdminFacultyPage() {
   });
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [closingModal, setClosingModal] = useState<ModalState | null>(null);
   const [values, setValues] = useState<FormValues>({ name: "", code: "", credits: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const idCounter = useRef(1);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const modalView = modal ?? closingModal;
+  const modalOpen = Boolean(modal);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   const selectedNode = useMemo(
     () => (selected ? getNodeByPath(tree, selected.path) : null),
@@ -255,6 +406,11 @@ export default function AdminFacultyPage() {
   };
 
   const openAdd = (targetType: NodeType, parentPath?: string[]) => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setClosingModal(null);
     setModal({ mode: "add", targetType, targetPath: parentPath });
     setValues({
       name: targetType === "SEMESTER" ? "Semester 1" : "",
@@ -267,6 +423,11 @@ export default function AdminFacultyPage() {
   const openEdit = (path: string[]) => {
     const node = getNodeByPath(tree, path);
     if (!node) return;
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setClosingModal(null);
     setModal({ mode: "edit", targetType: node.type, targetPath: path });
     setValues({
       name: node.name,
@@ -274,6 +435,28 @@ export default function AdminFacultyPage() {
       credits: node.credits ? `${node.credits}` : "",
     });
     setErrors({});
+  };
+
+  const closeModal = () => {
+    if (!modal && !closingModal) {
+      return;
+    }
+
+    if (modal) {
+      setClosingModal(modal);
+      setModal(null);
+    }
+
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      setClosingModal(null);
+      setValues({ name: "", code: "", credits: "" });
+      setErrors({});
+      closeTimerRef.current = null;
+    }, 200);
   };
 
   const validate = (targetType: NodeType) => {
@@ -367,9 +550,7 @@ export default function AdminFacultyPage() {
       setTree(nextTree);
     }
 
-    setModal(null);
-    setValues({ name: "", code: "", credits: "" });
-    setErrors({});
+    closeModal();
   };
 
   const renderTree = (nodes: StructureNode[], pathPrefix: string[] = [], depth = 0): React.ReactNode =>
@@ -646,42 +827,53 @@ export default function AdminFacultyPage() {
         </div>
       </section>
 
-      {modal ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 pt-12">
-          <div className="w-full max-w-xl rounded-3xl border border-[#26150F]/20 bg-white p-6 shadow-xl shadow-black/20 lg:p-8">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.14em] text-[#26150F]/62">
-                  {modal.mode === "add" ? "Add" : "Edit"}
-                </p>
-                <h3 className="mt-1 text-2xl font-semibold text-[#0A0A0A]">
-                  {modal.mode === "add" ? "Add" : "Edit"} {TYPE_LABEL[modal.targetType]}
-                </h3>
-              </div>
-              <button
-                aria-label="Close modal"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#26150F]/20 text-[#26150F]/70 transition-colors hover:border-[#034AA6]/45 hover:text-[#0339A6]"
-                onClick={() => setModal(null)}
+      {modalView ? (
+        <AdminModal
+          description={
+            modalView.mode === "add"
+              ? `Provide details to create a ${TYPE_LABEL[
+                  modalView.targetType
+                ].toLowerCase()}.`
+              : `Update ${TYPE_LABEL[modalView.targetType].toLowerCase()} details.`
+          }
+          footer={
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                className="min-h-10 rounded-xl px-4"
+                onClick={closeModal}
                 type="button"
+                variant="secondary"
               >
-                <X size={16} />
-              </button>
+                Cancel
+              </Button>
+              <Button className="min-h-10 rounded-xl px-5" type="submit" form="faculty-modal-form">
+                {modalView.mode === "add" ? "Create" : "Save Changes"}
+              </Button>
             </div>
-
-            <form className="mt-6 space-y-4" onSubmit={handleSave}>
+          }
+          icon={(() => {
+            const Icon = TYPE_ICON[modalView.targetType];
+            return <Icon size={18} />;
+          })()}
+          onClose={closeModal}
+          open={modalOpen}
+          title={`${modalView.mode === "add" ? "Add" : "Edit"} ${TYPE_LABEL[
+            modalView.targetType
+          ]}`}
+        >
+          <form className="space-y-4" id="faculty-modal-form" onSubmit={handleSave}>
+            {modalView.targetType === "BADGE" ||
+            modalView.targetType === "YEAR" ||
+            modalView.targetType === "SEMESTER" ? (
               <div>
                 <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
-                  {modal.targetType === "BADGE"
+                  {modalView.targetType === "BADGE"
                     ? "Badge Label"
-                    : modal.targetType === "YEAR"
+                    : modalView.targetType === "YEAR"
                       ? "Year Label"
-                      : modal.targetType === "SEMESTER"
-                        ? "Semester Label"
-                        : modal.targetType === "MODULE"
-                          ? "Module Name"
-                          : "Name"}
+                      : "Semester Label"}
                 </label>
-                {modal.targetType === "SEMESTER" ? (
+                {modalView.targetType === "SEMESTER" ? (
                   <select
                     className="mt-1 w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     id="node-name"
@@ -700,44 +892,74 @@ export default function AdminFacultyPage() {
                     id="node-name"
                     onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
                     placeholder={
-                      modal.targetType === "BADGE"
-                        ? "e.g., 2026"
-                        : modal.targetType === "YEAR"
-                          ? "e.g., 1st Year"
-                          : "Enter value"
+                      modalView.targetType === "BADGE" ? "e.g., 2026" : "e.g., 1st Year"
                     }
                     value={values.name}
                   />
                 )}
                 {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
               </div>
+            ) : null}
 
-              {modal.targetType === "FACULTY" || modal.targetType === "PROGRAM" || modal.targetType === "MODULE" ? (
+            {modalView.targetType === "FACULTY" || modalView.targetType === "PROGRAM" ? (
+              <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+                <div>
+                  <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
+                    Name
+                  </label>
+                  <Input
+                    id="node-name"
+                    onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
+                    placeholder={
+                      modalView.targetType === "FACULTY" ? "Faculty name" : "Program name"
+                    }
+                    value={values.name}
+                  />
+                  {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
+                </div>
                 <div>
                   <label className="text-sm font-medium text-[#26150F]" htmlFor="node-code">
-                    {modal.targetType === "FACULTY"
-                      ? "Short Code"
-                      : modal.targetType === "PROGRAM"
-                        ? "Program Code"
-                        : "Module Code"}
+                    {modalView.targetType === "FACULTY" ? "Short Code" : "Program Code"}
                   </label>
                   <Input
                     id="node-code"
                     onChange={(event) => setValues((prev) => ({ ...prev, code: event.target.value }))}
-                    placeholder={
-                      modal.targetType === "FACULTY"
-                        ? "e.g., FOC"
-                        : modal.targetType === "PROGRAM"
-                          ? "e.g., CS"
-                          : "e.g., CS-26110"
-                    }
+                    placeholder={modalView.targetType === "FACULTY" ? "e.g., FOC" : "e.g., CS"}
                     value={values.code}
                   />
                   {errors.code ? <p className="mt-1 text-xs text-[#0339A6]">{errors.code}</p> : null}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
 
-              {modal.targetType === "MODULE" ? (
+            {modalView.targetType === "MODULE" ? (
+              <div className="space-y-4">
+                <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+                  <div>
+                    <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
+                      Module Name
+                    </label>
+                    <Input
+                      id="node-name"
+                      onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
+                      placeholder="Module name"
+                      value={values.name}
+                    />
+                    {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-[#26150F]" htmlFor="node-code">
+                      Module Code
+                    </label>
+                    <Input
+                      id="node-code"
+                      onChange={(event) => setValues((prev) => ({ ...prev, code: event.target.value }))}
+                      placeholder="e.g., CS-26110"
+                      value={values.code}
+                    />
+                    {errors.code ? <p className="mt-1 text-xs text-[#0339A6]">{errors.code}</p> : null}
+                  </div>
+                </div>
                 <div>
                   <label className="text-sm font-medium text-[#26150F]" htmlFor="node-credits">
                     Credits
@@ -752,17 +974,10 @@ export default function AdminFacultyPage() {
                   />
                   {errors.credits ? <p className="mt-1 text-xs text-[#0339A6]">{errors.credits}</p> : null}
                 </div>
-              ) : null}
-
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-                <Button onClick={() => setModal(null)} type="button" variant="secondary">
-                  Cancel
-                </Button>
-                <Button type="submit">{modal.mode === "add" ? "Create" : "Save Changes"}</Button>
               </div>
-            </form>
-          </div>
-        </div>
+            ) : null}
+          </form>
+        </AdminModal>
       ) : null}
     </div>
   );
