@@ -5,12 +5,14 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
+  ChevronsUp,
   ChevronDown,
   ChevronRight,
   GraduationCap,
   Layers3,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Tag,
   Trash2,
@@ -307,6 +309,19 @@ export default function AdminFacultyPage() {
     }
   };
 
+  const handleCollapseAll = () => {
+    setExpanded(new Set());
+  };
+
+  const handleRefresh = () => {
+    const nextTree = seedData();
+    const firstPath = findFirstPath(nextTree);
+    setTree(nextTree);
+    setSelected(firstPath ? { path: firstPath } : null);
+    setExpanded(new Set(firstPath ?? []));
+    setSearch("");
+  };
+
   const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!modal) return;
@@ -450,17 +465,42 @@ export default function AdminFacultyPage() {
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,35%)_minmax(0,65%)]">
         <Card className="rounded-3xl border border-[#26150F]/30 bg-white p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 border-b border-[#26150F]/12 pb-4">
             <div>
-              <h2 className="text-xl font-semibold text-[#0A0A0A]">Academic Structure</h2>
-              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-[#26150F]/65">
-                Navigator Tree
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#26150F]/60">
+                Navigator
               </p>
             </div>
-            <Button className="gap-2" onClick={() => openAdd("FACULTY")} type="button">
-              <Plus size={16} />
-              Add Faculty
-            </Button>
+
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex items-center gap-1 rounded-full bg-[#034AA6] px-3 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-[#0339A6]"
+                onClick={() => openAdd("FACULTY")}
+                type="button"
+              >
+                <Plus size={14} />
+                Faculty
+              </button>
+
+              <button
+                aria-label="Collapse all"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-white text-[#26150F] transition-colors duration-200 hover:border-[#034AA6] hover:bg-[#034AA6]/5 hover:text-[#034AA6]"
+                onClick={handleCollapseAll}
+                title="Collapse all"
+                type="button"
+              >
+                <ChevronsUp size={14} />
+              </button>
+
+              <button
+                aria-label="Refresh navigator"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/20 text-[#26150F] transition-colors duration-200 hover:border-[#034AA6] hover:text-[#034AA6]"
+                onClick={handleRefresh}
+                type="button"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 relative">
