@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Container from "@/components/ui/Container";
-import { clearDemoSession } from "@/lib/rbac";
+import { clearDemoSession, isDemoModeEnabled } from "@/lib/rbac";
 
 export interface TopNavLink {
   label: string;
@@ -27,6 +27,7 @@ export default function TopNav({
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const signOutRedirect = isDemoModeEnabled() ? "/" : "/login";
 
   const activePath = currentPath ?? pathname;
   const isActive = (href: string) => {
@@ -80,7 +81,7 @@ export default function TopNav({
             className="border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
             onClick={() => {
               clearDemoSession();
-              router.replace("/login");
+              router.replace(signOutRedirect);
             }}
             variant="secondary"
           >
@@ -128,7 +129,7 @@ export default function TopNav({
                 className="mt-3 w-full justify-center border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
                 onClick={() => {
                   clearDemoSession();
-                  router.replace("/login");
+                  router.replace(signOutRedirect);
                 }}
                 variant="secondary"
               >

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   HOME_BY_ROLE,
   getExpectedRoleForPath,
+  isDemoModeEnabled,
   readStoredRole,
 } from "@/lib/rbac";
 import type { AppRole } from "@/lib/rbac";
@@ -18,7 +19,7 @@ export default function RoleGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const isDemoMode = isDemoModeEnabled();
 
   const currentRole = isDemoMode ? null : readStoredRole();
   const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);

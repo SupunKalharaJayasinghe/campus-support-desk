@@ -10,6 +10,7 @@ import { NAV_BY_ROLE } from "@/lib/nav";
 import {
   WORKSPACE_TITLE_BY_ROLE,
   clearDemoSession,
+  isDemoModeEnabled,
   readStoredRole,
   readStoredUser,
 } from "@/lib/rbac";
@@ -30,6 +31,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const router = useRouter();
   const [role, setRole] = useState<AppRole | null>(null);
   const [user, setUser] = useState<DemoUser | null>(null);
+  const switchAccountRedirect = isDemoModeEnabled() ? "/" : "/login";
 
   useEffect(() => {
     setRole(readStoredRole());
@@ -71,7 +73,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <Button
             onClick={() => {
               clearDemoSession();
-              router.replace("/login");
+              router.replace(switchAccountRedirect);
             }}
             variant="secondary"
           >

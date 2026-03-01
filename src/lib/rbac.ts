@@ -23,6 +23,15 @@ export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
   STUDENT: "Student Portal",
 };
 
+export function isDemoModeEnabled() {
+  const raw = process.env.NEXT_PUBLIC_DEMO_MODE;
+  if (!raw) {
+    return false;
+  }
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "true" || normalized === "1";
+}
+
 export function roleLabel(role: AppRole) {
   if (role === "SUPER_ADMIN") {
     return "SUPER_ADMIN";
