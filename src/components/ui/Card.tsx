@@ -1,49 +1,51 @@
-"use client";
+import type { HTMLAttributes } from "react";
 
-import { cn } from "@/lib/utils";
+type CardVariant = "default" | "subtle";
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   title?: string;
   description?: string;
-  actions?: React.ReactNode;
-  footer?: React.ReactNode;
-  children?: React.ReactNode;
-  hoverable?: boolean;
-  className?: string;
+  variant?: CardVariant;
+  accent?: boolean;
 }
 
-export function Card({
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+export default function Card({
   title,
   description,
-  actions,
-  footer,
+  variant = "default",
+  accent = false,
+  className,
   children,
-  hoverable,
-  className
+  ...props
 }: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-slate-200 bg-white shadow-sm",
-        hoverable && "transition hover:-translate-y-0.5 hover:shadow-md",
+        "relative overflow-hidden rounded-3xl border p-6",
+        variant === "default"
+          ? "border-border bg-card shadow-shadow"
+          : "border-border bg-tint",
         className
       )}
+      {...props}
     >
-      {(title || actions) && (
-        <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
-          <div>
-            {title && <h3 className="text-base font-semibold">{title}</h3>}
-            {description && (
-              <p className="text-sm text-slate-500">{description}</p>
-            )}
-          </div>
-          {actions}
-        </div>
-      )}
-      {children && <div className="px-5 py-4">{children}</div>}
-      {footer && (
-        <div className="border-t border-slate-100 px-5 py-4">{footer}</div>
-      )}
+      {accent ? (
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-20 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(3,74,166,0.12), rgba(3,57,166,0.06), transparent 60%)",
+          }}
+        />
+      ) : null}
+      {title ? <h3 className="text-base font-semibold text-heading">{title}</h3> : null}
+      {description ? <p className="mt-1 text-sm text-text/72">{description}</p> : null}
+      {children ? <div className={cn(title || description ? "mt-4" : "")}>{children}</div> : null}
     </div>
   );
 }
