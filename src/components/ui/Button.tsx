@@ -1,66 +1,38 @@
-"use client";
+import type { ButtonHTMLAttributes } from "react";
 
-import React from "react";
-import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+type ButtonVariant = "primary" | "secondary" | "ghost";
 
-type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "ghost";
-type ButtonSize = "sm" | "md" | "lg";
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: ButtonSize;
-  loading?: boolean;
-  iconLeft?: React.ReactNode;
-  iconRight?: React.ReactNode;
 }
 
-const variantStyles: Record<ButtonVariant, string> = {
-  primary:
-    "bg-indigo-600 text-white hover:bg-indigo-700 focus-visible:ring-indigo-500",
-  secondary:
-    "bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:ring-slate-400",
-  outline:
-    "border border-slate-200 text-slate-700 hover:bg-slate-50 focus-visible:ring-slate-300",
-  danger:
-    "bg-red-500 text-white hover:bg-red-600 focus-visible:ring-red-400",
-  ghost: "text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-300"
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+const variantClasses: Record<ButtonVariant, string> = {
+  primary: "bg-primary text-white hover:bg-primaryHover hover:shadow-shadowHover",
+  secondary: "border border-border bg-card text-text hover:bg-tint",
+  ghost: "bg-transparent text-primary hover:bg-tint hover:text-primaryHover",
 };
 
-const sizeStyles: Record<ButtonSize, string> = {
-  sm: "h-9 px-3 text-sm",
-  md: "h-11 px-4 text-sm",
-  lg: "h-12 px-5 text-base"
-};
-
-export function Button({
-  className,
+export default function Button({
   variant = "primary",
-  size = "md",
-  loading,
-  iconLeft,
-  iconRight,
-  disabled,
-  children,
+  className,
+  type = "button",
   ...props
 }: ButtonProps) {
   return (
     <button
-      type="button"
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70",
-        variantStyles[variant],
-        sizeStyles[size],
+        "inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-medium tracking-[0.01em] transition-all",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+        variantClasses[variant],
         className
       )}
-      disabled={disabled || loading}
+      type={type}
       {...props}
-    >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-      {!loading && iconLeft}
-      <span>{children}</span>
-      {!loading && iconRight}
-    </button>
+    />
   );
 }

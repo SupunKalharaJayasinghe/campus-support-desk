@@ -1,34 +1,33 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
-import { AppProviders } from "@/components/shared/AppProviders";
 
-const manrope = Manrope({
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap"
+  weight: ["400", "500"],
 });
 
-const spaceGrotesk = Space_Grotesk({
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap"
+  weight: ["600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Campus Support Desk",
-  description: "Campus Student Support Desk UI"
+  title: "UniHub",
+  description: "UniHub – Smart Academic & Student Support Portal",
 };
 
 export default function RootLayout({
-  children
-}: {
+  children,
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${spaceGrotesk.variable}`}>
-      <body className="font-sans text-slate-900">
-        <AppProviders>{children}</AppProviders>
+    <html lang="en">
+      <body className={`${inter.variable} ${poppins.variable} antialiased`}>
+        {children}
       </body>
     </html>
   );
