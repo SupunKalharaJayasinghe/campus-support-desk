@@ -499,7 +499,7 @@ export default function Page() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+        <div className="min-h-screen bg-bg text-gray-900 font-sans">
             <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         * { font-family: 'Space Grotesk', sans-serif; }

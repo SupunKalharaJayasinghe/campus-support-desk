@@ -81,6 +81,19 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-bg">
+
+{/* button for community help */}
+      <section className ="mt-16 flex w-full justify-center py-16 lg:mt-20 lg:py-20">
+         <button
+                    className="w-full rounded-2xl border-none bg-[#034AA6] px-8 py-3 text-sm font-semibold text-[#D9D9D9] transition-all duration-200 hover:bg-[#0339A6] hover:shadow-shadowHover sm:w-auto"
+                    onClick={() => router.push('/student-help/community-help')}
+                    type="button"
+                  >
+                    Community-help
+                  </button>
+          </section>
+
+
       <section className="w-full py-24">
         <Container size="6xl">
           <div
@@ -224,15 +237,6 @@ export default function LandingPage() {
         </Container>
       </section>
 
-      <section className ="mt-16 w-full py-16 lg:mt-20 lg:py-20">
-         <button
-                    className="w-full rounded-2xl border-none bg-[#034AA6] px-8 py-3 text-sm font-semibold text-[#D9D9D9] transition-all duration-200 hover:bg-[#0339A6] hover:shadow-shadowHover sm:w-auto"
-                    onClick={() => router.push('/student-help/community-help')}
-                    type="button"
-                  >
-                    Community-help
-                  </button>
-          </section>
 
       <section className="mt-16 w-full py-16 lg:mt-20 lg:py-20" id="system-info">
         <Container size="6xl">
