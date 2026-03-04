@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
@@ -26,10 +26,11 @@ export default function TopNav({
 }: TopNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
   const signOutRedirect = isDemoModeEnabled() ? "/" : "/login";
 
   const activePath = currentPath ?? pathname;
+  const [menuState, setMenuState] = useState(() => ({ open: false, path: activePath }));
+  const menuOpen = menuState.open && menuState.path === activePath;
   const isActive = (href: string) => {
     if (href === homeHref) {
       return activePath === homeHref || activePath === `${homeHref}/overview`;
@@ -37,9 +38,14 @@ export default function TopNav({
     return activePath === href || activePath.startsWith(`${href}/`);
   };
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [activePath]);
+  const closeMenu = () => setMenuState({ open: false, path: activePath });
+  const toggleMenu = () =>
+    setMenuState((previous) => {
+      if (previous.path !== activePath) {
+        return { open: true, path: activePath };
+      }
+      return { open: !previous.open, path: previous.path };
+    });
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-[#BFBFBF]/45 bg-white/96 backdrop-blur">
@@ -80,6 +86,7 @@ export default function TopNav({
           <Button
             className="border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
             onClick={() => {
+              closeMenu();
               clearDemoSession();
               router.replace(signOutRedirect);
             }}
@@ -94,7 +101,7 @@ export default function TopNav({
           aria-expanded={menuOpen}
           aria-label="Toggle menu"
           className="inline-flex h-9 w-9 items-center justify-center justify-self-end rounded-lg border border-[#26150F]/24 text-[#26150F] transition-colors duration-200 hover:border-[#0339A6]/50 hover:text-[#0339A6] lg:hidden"
-          onClick={() => setMenuOpen((previous) => !previous)}
+          onClick={toggleMenu}
           type="button"
         >
           {menuOpen ? <X size={18} /> : <Menu size={18} />}
@@ -118,6 +125,7 @@ export default function TopNav({
                       ].join(" ")}
                       href={item.href}
                       key={item.href}
+                      onClick={closeMenu}
                     >
                       {item.label}
                     </Link>
@@ -128,6 +136,7 @@ export default function TopNav({
               <Button
                 className="mt-3 w-full justify-center border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
                 onClick={() => {
+                  closeMenu();
                   clearDemoSession();
                   router.replace(signOutRedirect);
                 }}
