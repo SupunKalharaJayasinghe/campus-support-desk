@@ -1,16 +1,9 @@
-import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
+import { NextResponse } from "next/server";
 
 export async function GET() {
-  const client = await clientPromise;
-  const dbName = process.env.MONGODB_DB || 'unihub';
-  const db = client.db(dbName);
-
-  const collections = await db.collections();
-
   return NextResponse.json({
     ok: true,
-    db: dbName,
-    collections: collections.map((c) => c.collectionName),
+    nodeEnv: process.env.NODE_ENV ?? "unknown",
+    timestamp: new Date().toISOString(),
   });
 }

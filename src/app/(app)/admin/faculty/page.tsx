@@ -1,983 +1,805 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  BookOpen,
-  Building2,
-  CalendarDays,
-  ChevronsUp,
-  ChevronDown,
-  ChevronRight,
-  GraduationCap,
-  Layers3,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Tag,
-  Trash2,
-  X,
-} from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { useAdminContext } from "@/components/admin/AdminContext";
+import PageHeader from "@/components/admin/PageHeader";
+import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import { useToast } from "@/components/ui/ToastProvider";
 
-type NodeType =
-  | "FACULTY"
-  | "PROGRAM"
-  | "BADGE"
-  | "YEAR"
-  | "SEMESTER"
-  | "MODULE";
+type FacultyStatus = "ACTIVE" | "INACTIVE";
+type SortOption = "updated" | "created" | "az" | "za";
+type PageSize = 10 | 25 | 50 | 100;
 
-interface StructureNode {
-  id: string;
-  type: NodeType;
-  name: string;
-  code?: string;
-  credits?: number;
-  children: StructureNode[];
-}
-
-interface SelectedNode {
-  path: string[];
-}
-
-interface ModalState {
-  mode: "add" | "edit";
-  targetType: NodeType;
-  targetPath?: string[];
-}
-
-interface FormValues {
-  name: string;
+interface FacultyRecord {
   code: string;
-  credits: string;
+  name: string;
+  status: FacultyStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface AdminModalProps {
-  open: boolean;
-  title: string;
-  description?: string;
-  icon?: React.ReactNode;
-  onClose: () => void;
-  children: React.ReactNode;
-  footer: React.ReactNode;
+interface FacultyFormState {
+  code: string;
+  name: string;
+  status: FacultyStatus;
 }
 
-const TYPE_LABEL: Record<NodeType, string> = {
-  FACULTY: "Faculty",
-  PROGRAM: "Degree Program",
-  BADGE: "Badge",
-  YEAR: "Year",
-  SEMESTER: "Semester",
-  MODULE: "Module",
-};
+interface FacultyFormErrors {
+  code?: string;
+  name?: string;
+}
 
-const TYPE_ICON: Record<NodeType, React.ComponentType<{ size?: number }>> = {
-  FACULTY: Building2,
-  PROGRAM: GraduationCap,
-  BADGE: Tag,
-  YEAR: Layers3,
-  SEMESTER: CalendarDays,
-  MODULE: BookOpen,
-};
+interface FacultyModalState {
+  mode: "add" | "edit";
+  targetCode?: string;
+}
 
-const CHILD_TYPE_BY_PARENT: Record<NodeType, NodeType | null> = {
-  FACULTY: "PROGRAM",
-  PROGRAM: "BADGE",
-  BADGE: "YEAR",
-  YEAR: "SEMESTER",
-  SEMESTER: "MODULE",
-  MODULE: null,
-};
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
 
-const SEMESTER_OPTIONS = ["Semester 1", "Semester 2"];
-
-function seedData(): StructureNode[] {
-  const moduleTemplates = {
-    s1: ["Foundations", "Communication Skills", "Discrete Mathematics"],
-    s2: ["Applied Practice", "Systems Thinking", "Project Studio"],
+function emptyForm(): FacultyFormState {
+  return {
+    code: "",
+    name: "",
+    status: "ACTIVE",
   };
-
-  function modules(programCode: string, batch: string, year: number, sem: number) {
-    const names = sem === 1 ? moduleTemplates.s1 : moduleTemplates.s2;
-    return names.map((name, index) => ({
-      id: `mod-${programCode}-${batch}-${year}-${sem}-${index + 1}`,
-      type: "MODULE" as const,
-      name: `${name} ${year}`,
-      code: `${programCode}-${batch.slice(-2)}${year}${sem}${index + 1}0`,
-      credits: index === 2 ? 4 : 3,
-      children: [],
-    }));
-  }
-
-  function program(id: string, name: string, code: string): StructureNode {
-    return {
-      id,
-      type: "PROGRAM",
-      name,
-      code,
-      children: ["2025", "2026"].map((batch) => ({
-        id: `badge-${id}-${batch}`,
-        type: "BADGE",
-        name: batch,
-        children: ["1st Year", "2nd Year"].map((yearLabel, yearIndex) => ({
-          id: `year-${id}-${batch}-${yearIndex + 1}`,
-          type: "YEAR",
-          name: yearLabel,
-          children: SEMESTER_OPTIONS.map((semesterLabel, semIndex) => ({
-            id: `sem-${id}-${batch}-${yearIndex + 1}-${semIndex + 1}`,
-            type: "SEMESTER",
-            name: semesterLabel,
-            children: modules(code, batch, yearIndex + 1, semIndex + 1),
-          })),
-        })),
-      })),
-    };
-  }
-
-  return [
-    {
-      id: "fac-computing",
-      type: "FACULTY",
-      name: "Faculty of Computing",
-      code: "FOC",
-      children: [
-        program("prog-cs", "BSc Computer Science", "CS"),
-        program("prog-se", "BSc Software Engineering", "SE"),
-      ],
-    },
-    {
-      id: "fac-engineering",
-      type: "FACULTY",
-      name: "Faculty of Engineering",
-      code: "FOE",
-      children: [
-        program("prog-me", "BEng Mechanical Engineering", "ME"),
-        program("prog-ee", "BEng Electrical Engineering", "EE"),
-      ],
-    },
-  ];
 }
 
-function getNodeByPath(nodes: StructureNode[], path: string[]): StructureNode | null {
-  let current: StructureNode | null = null;
-  let level = nodes;
-  for (const id of path) {
-    current = level.find((item) => item.id === id) ?? null;
-    if (!current) return null;
-    level = current.children;
+function statusVariant(status: FacultyStatus) {
+  return status === "ACTIVE" ? "success" : "neutral";
+}
+
+function normalizeCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "—";
   }
-  return current;
-}
 
-function getTrail(nodes: StructureNode[], path: string[]): StructureNode[] {
-  const trail: StructureNode[] = [];
-  let level = nodes;
-  for (const id of path) {
-    const node = level.find((item) => item.id === id);
-    if (!node) return trail;
-    trail.push(node);
-    level = node.children;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
   }
-  return trail;
+
+  return parsed.toISOString().slice(0, 10);
 }
 
-function patchNode(
-  nodes: StructureNode[],
-  path: string[],
-  updater: (node: StructureNode) => StructureNode
-): StructureNode[] {
-  if (path.length === 0) return nodes;
-  return nodes.map((node) => {
-    if (node.id !== path[0]) return node;
-    if (path.length === 1) return updater(node);
-    return { ...node, children: patchNode(node.children, path.slice(1), updater) };
-  });
-}
+async function readJson<T>(response: Response) {
+  const payload = (await response.json().catch(() => null)) as T | { message?: string } | null;
 
-function removeNode(nodes: StructureNode[], path: string[]): StructureNode[] {
-  if (path.length === 0) return nodes;
-  return nodes
-    .filter((node) => node.id !== path[0] || path.length > 1)
-    .map((node) =>
-      node.id === path[0]
-        ? { ...node, children: removeNode(node.children, path.slice(1)) }
-        : node
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === "object" && "message" in payload && payload.message
+        ? payload.message
+        : "Request failed"
     );
+  }
+
+  return payload as T;
 }
 
-function findFirstPath(nodes: StructureNode[]): string[] | null {
-  const first = nodes[0];
-  if (!first) return null;
-  return [first.id];
-}
+export default function FacultyPage() {
+  const { setActiveWindow } = useAdminContext();
+  const { toast } = useToast();
 
-function AdminModal({
-  open,
-  title,
-  description,
-  icon,
-  onClose,
-  children,
-  footer,
-}: AdminModalProps) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [faculties, setFaculties] = useState<FacultyRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | FacultyStatus>("");
+  const [sortBy, setSortBy] = useState<SortOption>("updated");
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(1);
+
+  const [modal, setModal] = useState<FacultyModalState | null>(null);
+  const [form, setForm] = useState<FacultyFormState>(emptyForm);
+  const [errors, setErrors] = useState<FacultyFormErrors>({});
+  const [deleteTargetCode, setDeleteTargetCode] = useState<string | null>(null);
+
+  const deferredSearch = useDeferredValue(searchQuery);
+  const isOverlayOpen = Boolean(modal || deleteTargetCode);
+
+  const closeModal = useCallback(() => {
+    setModal(null);
+    setForm(emptyForm());
+    setErrors({});
+  }, []);
+
+  const loadFaculties = useCallback(async (options?: { background?: boolean; silent?: boolean }) => {
+    if (!options?.background) {
+      setIsLoading(true);
+    }
+
+    try {
+      const response = await fetch("/api/faculties", {
+        cache: "no-store",
+      });
+      const items = await readJson<FacultyRecord[]>(response);
+      setFaculties(Array.isArray(items) ? items : []);
+    } catch (error) {
+      if (!options?.silent) {
+        toast({
+          title: "Failed",
+          message:
+            error instanceof Error ? error.message : "Failed to load faculties",
+          variant: "error",
+        });
+        setFaculties([]);
+      }
+    } finally {
+      if (!options?.background) {
+        setIsLoading(false);
+      }
+    }
+  }, [toast]);
 
   useEffect(() => {
-    if (!open) {
+    void loadFaculties();
+  }, [loadFaculties]);
+
+  useEffect(() => {
+    if (!isOverlayOpen) {
       return;
     }
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    const focusFirstElement = () => {
-      const focusable = dialogRef.current?.querySelector<HTMLElement>(
-        "input, select, textarea, button, [href], [tabindex]:not([tabindex='-1'])"
-      );
-      focusable?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
     };
+  }, [isOverlayOpen]);
 
-    focusFirstElement();
+  useEffect(() => {
+    if (!modal) {
+      setActiveWindow("List");
+      return;
+    }
+
+    setActiveWindow(modal.mode === "add" ? "Create" : "Edit");
+  }, [modal, setActiveWindow]);
+
+  useEffect(() => {
+    return () => {
+      setActiveWindow(null);
+    };
+  }, [setActiveWindow]);
+
+  useEffect(() => {
+    if (!isOverlayOpen) {
+      return;
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
+      if (event.key !== "Escape") {
         return;
       }
 
-      if (event.key !== "Tab") {
+      if (deleteTargetCode && !isDeleting) {
+        setDeleteTargetCode(null);
         return;
       }
 
-      const focusableElements = dialogRef.current?.querySelectorAll<HTMLElement>(
-        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
-      );
-      if (!focusableElements || focusableElements.length === 0) {
-        return;
-      }
-
-      const first = focusableElements[0];
-      const last = focusableElements[focusableElements.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey) {
-        if (!active || active === first) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (active === last) {
-        event.preventDefault();
-        first.focus();
+      if (modal && !isSaving) {
+        closeModal();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onClose, open]);
+  }, [
+    closeModal,
+    deleteTargetCode,
+    isDeleting,
+    isOverlayOpen,
+    isSaving,
+    modal,
+  ]);
 
-  return (
-    <div
-      className={[
-        "fixed inset-0 z-50 flex items-center justify-center p-4",
-        "bg-black/40 backdrop-blur-sm transition-opacity duration-200 ease-out",
-        open ? "opacity-100" : "pointer-events-none opacity-0",
-      ].join(" ")}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      role="presentation"
-    >
-      <div
-        aria-labelledby="admin-modal-title"
-        aria-modal="true"
-        className={[
-          "w-full max-w-[92vw] sm:max-w-xl rounded-2xl border border-[#26150F]/15 bg-white p-6 shadow-2xl sm:p-8",
-          "transition-all duration-200 ease-out",
-          open ? "scale-100 opacity-100" : "scale-95 opacity-0",
-        ].join(" ")}
-        onMouseDown={(event) => event.stopPropagation()}
-        ref={dialogRef}
-        role="dialog"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            {icon ? (
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#034AA6]/25 bg-[#034AA6]/10 text-[#034AA6]">
-                {icon}
-              </span>
-            ) : null}
-            <div>
-              <h3 className="text-xl font-semibold text-[#0A0A0A]" id="admin-modal-title">
-                {title}
-              </h3>
-              {description ? (
-                <p className="mt-1 text-sm text-[#26150F]/72">{description}</p>
-              ) : null}
-            </div>
-          </div>
-          <button
-            aria-label="Close"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#26150F]/20 text-[#26150F]/75 transition-colors duration-200 hover:border-[#034AA6]/45 hover:bg-[#034AA6]/8 hover:text-[#0339A6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#034AA6]/30"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={16} />
-          </button>
-        </div>
+  const visibleFaculties = useMemo(() => {
+    const normalizedQuery = deferredSearch.trim().toLowerCase();
+    const filtered = faculties.filter((faculty) => {
+      const matchesStatus = statusFilter ? faculty.status === statusFilter : true;
+      const matchesSearch = normalizedQuery
+        ? `${faculty.code} ${faculty.name}`.toLowerCase().includes(normalizedQuery)
+        : true;
 
-        <div className="mt-6">{children}</div>
-        <div className="mt-6">{footer}</div>
-      </div>
-    </div>
-  );
-}
+      return matchesStatus && matchesSearch;
+    });
 
-export default function AdminFacultyPage() {
-  const [tree, setTree] = useState<StructureNode[]>(() => seedData());
-  const [selected, setSelected] = useState<SelectedNode | null>(() => {
-    const firstPath = findFirstPath(seedData());
-    return firstPath ? { path: firstPath } : null;
-  });
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const first = findFirstPath(seedData());
-    return new Set(first ?? []);
-  });
-  const [search, setSearch] = useState("");
-  const [modal, setModal] = useState<ModalState | null>(null);
-  const [closingModal, setClosingModal] = useState<ModalState | null>(null);
-  const [values, setValues] = useState<FormValues>({ name: "", code: "", credits: "" });
-  const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
-  const idCounter = useRef(1);
-  const closeTimerRef = useRef<number | null>(null);
-
-  const modalView = modal ?? closingModal;
-  const modalOpen = Boolean(modal);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) {
-        window.clearTimeout(closeTimerRef.current);
+    return [...filtered].sort((left, right) => {
+      if (sortBy === "az") {
+        return left.code.localeCompare(right.code);
       }
-    };
-  }, []);
 
-  const selectedNode = useMemo(
-    () => (selected ? getNodeByPath(tree, selected.path) : null),
-    [selected, tree]
+      if (sortBy === "za") {
+        return right.code.localeCompare(left.code);
+      }
+
+      if (sortBy === "created") {
+        return right.createdAt.localeCompare(left.createdAt);
+      }
+
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }, [deferredSearch, faculties, sortBy, statusFilter]);
+
+  const totalCount = visibleFaculties.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paginatedFaculties = visibleFaculties.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize
   );
-  const trail = useMemo(() => (selected ? getTrail(tree, selected.path) : []), [selected, tree]);
-  const visibleTree = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return tree;
 
-    const filter = (nodes: StructureNode[]): StructureNode[] =>
-      nodes.reduce<StructureNode[]>((acc, node) => {
-        const children = filter(node.children);
-        const matches =
-          node.name.toLowerCase().includes(query) ||
-          (node.code ?? "").toLowerCase().includes(query);
-        if (matches || children.length > 0) {
-          acc.push({ ...node, children });
-        }
-        return acc;
-      }, []);
+  const deleteTarget =
+    deleteTargetCode === null
+      ? null
+      : faculties.find((faculty) => faculty.code === deleteTargetCode) ?? null;
 
-    return filter(tree);
-  }, [search, tree]);
-
-  const childType = selectedNode ? CHILD_TYPE_BY_PARENT[selectedNode.type] : null;
-  const childRows = selectedNode?.children ?? [];
-
-  const nextId = (type: NodeType) => {
-    const id = `${type.toLowerCase()}-${Date.now()}-${idCounter.current}`;
-    idCounter.current += 1;
-    return id;
+  const openAddModal = () => {
+    setModal({ mode: "add" });
+    setForm(emptyForm());
+    setErrors({});
   };
 
-  const openAdd = (targetType: NodeType, parentPath?: string[]) => {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setClosingModal(null);
-    setModal({ mode: "add", targetType, targetPath: parentPath });
-    setValues({
-      name: targetType === "SEMESTER" ? "Semester 1" : "",
-      code: "",
-      credits: "",
+  const openEditModal = (faculty: FacultyRecord) => {
+    setModal({ mode: "edit", targetCode: faculty.code });
+    setForm({
+      code: faculty.code,
+      name: faculty.name,
+      status: faculty.status,
     });
     setErrors({});
   };
 
-  const openEdit = (path: string[]) => {
-    const node = getNodeByPath(tree, path);
-    if (!node) return;
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
+  const validateForm = () => {
+    const nextErrors: FacultyFormErrors = {};
+    const normalizedCode = normalizeCode(form.code.trim());
+    const trimmedName = form.name.trim();
+
+    if (!/^[A-Z]{2,6}$/.test(normalizedCode)) {
+      nextErrors.code = "Use 2–6 uppercase letters";
+    } else if (
+      modal?.mode === "add" &&
+      faculties.some((faculty) => faculty.code === normalizedCode)
+    ) {
+      nextErrors.code = "Faculty code already exists";
     }
-    setClosingModal(null);
-    setModal({ mode: "edit", targetType: node.type, targetPath: path });
-    setValues({
-      name: node.name,
-      code: node.code ?? "",
-      credits: node.credits ? `${node.credits}` : "",
-    });
-    setErrors({});
+
+    if (!trimmedName) {
+      nextErrors.name = "Faculty name is required";
+    }
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      toast({
+        title: "Failed",
+        message: Object.values(nextErrors)[0],
+        variant: "error",
+      });
+      return null;
+    }
+
+    return {
+      code: normalizedCode,
+      name: trimmedName,
+      status: form.status,
+    };
   };
 
-  const closeModal = () => {
-    if (!modal && !closingModal) {
+  const saveFaculty = async () => {
+    const payload = validateForm();
+
+    if (!payload || !modal) {
       return;
     }
 
-    if (modal) {
-      setClosingModal(modal);
-      setModal(null);
-    }
+    setIsSaving(true);
 
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-
-    closeTimerRef.current = window.setTimeout(() => {
-      setClosingModal(null);
-      setValues({ name: "", code: "", credits: "" });
-      setErrors({});
-      closeTimerRef.current = null;
-    }, 200);
-  };
-
-  const validate = (targetType: NodeType) => {
-    const next: Partial<Record<keyof FormValues, string>> = {};
-    if (!values.name.trim()) next.name = "Required";
-    if ((targetType === "FACULTY" || targetType === "PROGRAM" || targetType === "MODULE") && !values.code.trim()) {
-      next.code = "Required";
-    }
-    if (targetType === "MODULE") {
-      if (!values.credits.trim()) {
-        next.credits = "Required";
-      } else if (Number.isNaN(Number(values.credits)) || Number(values.credits) <= 0) {
-        next.credits = "Enter a valid number";
-      }
-    }
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  const handleDelete = (path: string[]) => {
-    const node = getNodeByPath(tree, path);
-    if (!node) return;
-    if (!window.confirm(`Delete this ${TYPE_LABEL[node.type].toLowerCase()}?`)) return;
-
-    const nextTree = removeNode(tree, path);
-    setTree(nextTree);
-    const parentPath = path.slice(0, -1);
-    if (parentPath.length > 0 && getNodeByPath(nextTree, parentPath)) {
-      setSelected({ path: parentPath });
-    } else {
-      const first = findFirstPath(nextTree);
-      setSelected(first ? { path: first } : null);
-    }
-  };
-
-  const handleCollapseAll = () => {
-    setExpanded(new Set());
-  };
-
-  const handleRefresh = () => {
-    const nextTree = seedData();
-    const firstPath = findFirstPath(nextTree);
-    setTree(nextTree);
-    setSelected(firstPath ? { path: firstPath } : null);
-    setExpanded(new Set(firstPath ?? []));
-    setSearch("");
-  };
-
-  const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!modal) return;
-    if (!validate(modal.targetType)) return;
-
-    if (modal.mode === "add") {
-      const newNode: StructureNode = {
-        id: nextId(modal.targetType),
-        type: modal.targetType,
-        name: values.name.trim(),
-        code: values.code.trim() || undefined,
-        credits: modal.targetType === "MODULE" ? Number(values.credits) : undefined,
-        children: [],
-      };
-
-      if (modal.targetType === "FACULTY") {
-        const nextTree = [...tree, newNode];
-        setTree(nextTree);
-        setSelected({ path: [newNode.id] });
-      } else if (modal.targetPath) {
-        const parentPath = modal.targetPath;
-        const nextTree = patchNode(tree, modal.targetPath, (parent) => ({
-          ...parent,
-          children: [...parent.children, newNode],
-        }));
-        setTree(nextTree);
-        setExpanded((prev) => {
-          const next = new Set(prev);
-          for (const id of parentPath) next.add(id);
-          return next;
+    try {
+      if (modal.mode === "add") {
+        const response = await fetch("/api/faculties", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         });
-        setSelected({ path: [...parentPath, newNode.id] });
+        const savedFaculty = await readJson<FacultyRecord>(response);
+
+        setFaculties((previous) => [savedFaculty, ...previous]);
+      } else {
+        const response = await fetch(
+          `/api/faculties/${encodeURIComponent(modal.targetCode ?? payload.code)}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: payload.name,
+              status: payload.status,
+            }),
+          }
+        );
+        const savedFaculty = await readJson<FacultyRecord>(response);
+
+        setFaculties((previous) =>
+          previous.map((faculty) =>
+            faculty.code === savedFaculty.code ? savedFaculty : faculty
+          )
+        );
       }
-    }
 
-    if (modal.mode === "edit" && modal.targetPath) {
-      const nextTree = patchNode(tree, modal.targetPath, (node) => ({
-        ...node,
-        name: values.name.trim(),
-        code: values.code.trim() || undefined,
-        credits: node.type === "MODULE" ? Number(values.credits) : undefined,
-      }));
-      setTree(nextTree);
-    }
+      toast({
+        title: "Saved",
+        message: "Saved successfully",
+        variant: "success",
+      });
+      closeModal();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save faculty";
 
-    closeModal();
+      if (message === "Faculty code already exists") {
+        setErrors((previous) => ({
+          ...previous,
+          code: "Faculty code already exists",
+        }));
+      }
+
+      toast({
+        title: "Failed",
+        message,
+        variant: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const renderTree = (nodes: StructureNode[], pathPrefix: string[] = [], depth = 0): React.ReactNode =>
-    nodes.map((node) => {
-      const path = [...pathPrefix, node.id];
-      const hasChildren = node.children.length > 0;
-      const childContent = hasChildren ? renderTree(node.children, path, depth + 1) : null;
+  const confirmDelete = async () => {
+    if (!deleteTargetCode) {
+      return;
+    }
 
-      const expandedNow = search.trim() ? true : expanded.has(node.id);
-      const isSelected =
-        selected?.path.length === path.length &&
-        selected.path.every((id, index) => id === path[index]);
-      const childTypeForNode = CHILD_TYPE_BY_PARENT[node.type];
-      const NodeIcon = TYPE_ICON[node.type];
+    setIsDeleting(true);
 
-      return (
-        <div key={node.id}>
-          <div
-            className={[
-              "group relative flex items-center gap-2 rounded-2xl border px-2 py-2 transition-all duration-200",
-              isSelected
-                ? "border-[#034AA6]/35 bg-[#034AA6]/10"
-                : "border-transparent hover:border-[#034AA6]/30 hover:bg-[#034AA6]/6",
-            ].join(" ")}
-            style={{ marginLeft: `${depth * 10}px` }}
-          >
-            {isSelected ? <span className="absolute inset-y-1 left-0 w-1 rounded-full bg-[#034AA6]" /> : null}
-            <button
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[#26150F]/75 transition-colors hover:bg-[#034AA6]/10 hover:text-[#0339A6]"
-              onClick={() =>
-                hasChildren &&
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  next.has(node.id) ? next.delete(node.id) : next.add(node.id);
-                  return next;
-                })
-              }
-              type="button"
-            >
-              {hasChildren ? (expandedNow ? <ChevronDown size={16} /> : <ChevronRight size={16} />) : <span className="h-1.5 w-1.5 rounded-full bg-[#26150F]/45" />}
-            </button>
-            <button
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-              onClick={() => {
-                setSelected({ path });
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  for (const id of path) next.add(id);
-                  return next;
-                });
-              }}
-              type="button"
-            >
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
-                <NodeIcon size={14} />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-[#0A0A0A]">{node.name}</span>
-                {node.code ? <span className="block truncate text-xs text-[#26150F]/70">{node.code}</span> : null}
-              </span>
-            </button>
-            <div className="mr-1 hidden items-center gap-1 opacity-0 transition-opacity group-hover:flex group-hover:opacity-100">
-              {childTypeForNode ? (
-                <button className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[#26150F]/70 transition-all hover:border-[#034AA6]/35 hover:bg-[#034AA6]/8 hover:text-[#0339A6]" onClick={(e) => { e.stopPropagation(); openAdd(childTypeForNode, path); }} type="button">
-                  <Plus size={14} />
-                </button>
-              ) : null}
-              <button className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[#26150F]/70 transition-all hover:border-[#034AA6]/35 hover:bg-[#034AA6]/8 hover:text-[#0339A6]" onClick={(e) => { e.stopPropagation(); openEdit(path); }} type="button">
-                <Pencil size={14} />
-              </button>
-              <button className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-[#26150F]/70 transition-all hover:border-[#034AA6]/35 hover:bg-[#034AA6]/8 hover:text-[#0339A6]" onClick={(e) => { e.stopPropagation(); handleDelete(path); }} type="button">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-          {hasChildren && expandedNow ? (
-            <div className="mt-1 space-y-1 border-l border-black/10 pl-2 transition-all duration-200">{childContent}</div>
-          ) : null}
-        </div>
+    try {
+      const response = await fetch(
+        `/api/faculties/${encodeURIComponent(deleteTargetCode)}`,
+        {
+          method: "DELETE",
+        }
       );
-    });
+
+      await readJson<{ ok: true }>(response);
+
+      setDeleteTargetCode(null);
+      setFaculties((previous) =>
+        previous.filter((faculty) => faculty.code !== deleteTargetCode)
+      );
+      void loadFaculties({ background: true, silent: true });
+      toast({
+        title: "Deleted",
+        message: "Faculty deleted successfully",
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Failed",
+        message: "Delete failed. Please try again.",
+        variant: "error",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#0A0A0A]">
-          Academic Structure Manager
-        </h1>
-        <p className="mt-2 text-sm text-[#26150F]/80">
-          Manage faculties, degree programs, badges, years, semesters, and modules.
-        </p>
-      </div>
+    <div className="space-y-6 lg:space-y-8">
+      <PageHeader
+        actions={
+          <Button
+            className="h-11 min-w-[164px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] transition-colors hover:bg-[#0339a6]"
+            onClick={openAddModal}
+          >
+            <Plus size={16} />
+            Add Faculty
+          </Button>
+        }
+        description="Manage faculty list and settings"
+        title="Faculties"
+      />
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,35%)_minmax(0,65%)]">
-        <Card className="rounded-3xl border border-[#26150F]/30 bg-white p-6">
-          <div className="flex items-center justify-between gap-3 border-b border-[#26150F]/12 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#26150F]/60">
-                Navigator
+      <Card
+        className={cn(
+          "transition-all",
+          isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : ""
+        )}
+      >
+        <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px_220px]">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Search
+              </label>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50"
+                  size={16}
+                />
+                <Input
+                  aria-label="Search faculty"
+                  className="h-12 pl-10"
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search by faculty code or name"
+                  value={searchQuery}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Status
+              </label>
+              <Select
+                aria-label="Filter by status"
+                className="h-12"
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as "" | FacultyStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Sort
+              </label>
+              <Select
+                aria-label="Sort faculties"
+                className="h-12"
+                onChange={(event) => {
+                  setSortBy(event.target.value as SortOption);
+                  setPage(1);
+                }}
+                value={sortBy}
+              >
+                <option value="updated">Recently Updated</option>
+                <option value="created">Recently Added</option>
+                <option value="az">A-Z</option>
+                <option value="za">Z-A</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+              Total Faculties
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead className="border-b border-border bg-tint">
+              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                <th className="px-4 py-3">Faculty Code</th>
+                <th className="px-4 py-3">Faculty Name</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Last Updated</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={5}>
+                    Loading faculty records…
+                  </td>
+                </tr>
+              ) : null}
+
+              {!isLoading
+                ? paginatedFaculties.map((faculty) => (
+                    <tr
+                      className="border-b border-border/70 transition-colors hover:bg-tint"
+                      key={faculty.code}
+                    >
+                      <td className="px-4 py-4">
+                        <span className="font-semibold text-heading">{faculty.code}</span>
+                      </td>
+                      <td className="px-4 py-4 text-text/78">{faculty.name}</td>
+                      <td className="px-4 py-4">
+                        <Badge variant={statusVariant(faculty.status)}>{faculty.status}</Badge>
+                      </td>
+                      <td className="px-4 py-4 text-text/70">
+                        {formatDate(faculty.updatedAt)}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            aria-label={`Edit ${faculty.code}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                            onClick={() => openEditModal(faculty)}
+                            type="button"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            aria-label={`Delete ${faculty.code}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                            onClick={() => setDeleteTargetCode(faculty.code)}
+                            type="button"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                : null}
+
+              {!isLoading && paginatedFaculties.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={5}>
+                    No faculties match the current filters.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+
+        <TablePagination
+          onPageChange={setPage}
+          onPageSizeChange={(value) => {
+            setPageSize(value as PageSize);
+            setPage(1);
+          }}
+          page={safePage}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalItems={totalCount}
+        />
+      </Card>
+
+      {modal ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[3px]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSaving) {
+              closeModal();
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)]"
+            role="dialog"
+          >
+            <div className="overflow-y-auto px-6 py-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                    {modal.mode === "add" ? "CREATE" : "EDIT"}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-heading">
+                    {modal.mode === "add" ? "Add Faculty" : "Edit Faculty"}
+                  </p>
+                  <p className="mt-1 text-sm text-text/65">
+                    Scope: Super Admin / Academic Structure / Faculties
+                  </p>
+                </div>
+                <button
+                  aria-label="Close modal"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={closeModal}
+                  type="button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label
+                    className="mb-1.5 block text-sm font-medium text-heading"
+                    htmlFor="facultyCode"
+                  >
+                    Faculty Code
+                  </label>
+                  <Input
+                    className={cn(
+                      "h-12",
+                      errors.code
+                        ? "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-200"
+                        : ""
+                    )}
+                    disabled={modal.mode === "edit" || isSaving}
+                    id="facultyCode"
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        code: normalizeCode(event.target.value),
+                      }))
+                    }
+                    placeholder="FOC"
+                    value={form.code}
+                  />
+                  {errors.code ? (
+                    <p className="mt-1.5 text-xs font-medium text-red-600">{errors.code}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label
+                    className="mb-1.5 block text-sm font-medium text-heading"
+                    htmlFor="facultyStatus"
+                  >
+                    Status
+                  </label>
+                  <Select
+                    aria-label="Faculty status"
+                    className="h-12"
+                    disabled={isSaving}
+                    id="facultyStatus"
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        status: event.target.value as FacultyStatus,
+                      }))
+                    }
+                    value={form.status}
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </Select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label
+                    className="mb-1.5 block text-sm font-medium text-heading"
+                    htmlFor="facultyName"
+                  >
+                    Faculty Name
+                  </label>
+                  <Input
+                    className={cn(
+                      "h-12",
+                      errors.name
+                        ? "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-200"
+                        : ""
+                    )}
+                    disabled={isSaving}
+                    id="facultyName"
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Faculty of Computing"
+                    value={form.name}
+                  />
+                  {errors.name ? (
+                    <p className="mt-1.5 text-xs font-medium text-red-600">{errors.name}</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4 shadow-[0_-1px_0_rgba(15,23,42,0.04)]">
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <Button
+                  className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                  disabled={isSaving}
+                  onClick={closeModal}
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="h-11 min-w-[132px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+                  disabled={isSaving}
+                  onClick={() => {
+                    void saveFaculty();
+                  }}
+                >
+                  <Save size={16} />
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isDeleting) {
+              setDeleteTargetCode(null);
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_36px_rgba(15,23,42,0.2)]"
+            role="dialog"
+          >
+            <div className="px-6 py-6">
+              <p className="text-lg font-semibold text-heading">Delete Faculty</p>
+              <p className="mt-2 text-sm leading-6 text-text/70">
+                Are you sure you want to delete faculty{" "}
+                <span className="font-semibold text-heading">
+                  &lsquo;{deleteTarget.code}&rsquo; ({deleteTarget.name})
+                </span>
+                ? This action cannot be undone.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex items-center gap-1 rounded-full bg-[#034AA6] px-3 py-1.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-[#0339A6]"
-                onClick={() => openAdd("FACULTY")}
-                type="button"
-              >
-                <Plus size={14} />
-                Faculty
-              </button>
-
-              <button
-                aria-label="Collapse all"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/20 bg-white text-[#26150F] transition-colors duration-200 hover:border-[#034AA6] hover:bg-[#034AA6]/5 hover:text-[#034AA6]"
-                onClick={handleCollapseAll}
-                title="Collapse all"
-                type="button"
-              >
-                <ChevronsUp size={14} />
-              </button>
-
-              <button
-                aria-label="Refresh navigator"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/20 text-[#26150F] transition-colors duration-200 hover:border-[#034AA6] hover:text-[#034AA6]"
-                onClick={handleRefresh}
-                type="button"
-              >
-                <RefreshCw size={14} />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#26150F]/55" size={16} />
-            <Input className="pl-9" onChange={(e) => setSearch(e.target.value)} placeholder="Search faculty/program/module..." value={search} />
-          </div>
-
-          <div className="mt-5 max-h-[620px] space-y-1 overflow-auto pr-1">
-            {renderTree(visibleTree)}
-          </div>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="rounded-3xl border border-[#26150F]/30 bg-white p-6">
-            {selectedNode ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[#26150F]/65">
-                  {trail.map((node, index) => (
-                    <div className="inline-flex items-center gap-2" key={node.id}>
-                      <span>{node.name}</span>
-                      {index < trail.length - 1 ? <ChevronRight size={14} /> : null}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-2xl font-semibold text-[#0A0A0A]">{selectedNode.name}</h2>
-                    <div className="mt-2">
-                      <Badge variant="primary">{TYPE_LABEL[selectedNode.type]}</Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button className="gap-2" disabled={!childType} onClick={() => selected && childType && openAdd(childType, selected.path)}>
-                      <Plus size={15} />
-                      Add Child
-                    </Button>
-                    <Button className="gap-2" onClick={() => selected && openEdit(selected.path)} variant="secondary">
-                      <Pencil size={15} />
-                      Edit
-                    </Button>
-                    <Button className="gap-2 border-[#26150F]/35 text-[#26150F] hover:border-[#0339A6] hover:text-[#0339A6]" onClick={() => selected && handleDelete(selected.path)} variant="secondary">
-                      <Trash2 size={15} />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-2xl border border-[#26150F]/18 bg-white px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-[#26150F]/60">Type</p>
-                    <p className="mt-1 text-sm font-medium text-[#26150F]">{TYPE_LABEL[selectedNode.type]}</p>
-                  </div>
-                  {selectedNode.code ? (
-                    <div className="rounded-2xl border border-[#26150F]/18 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-[#26150F]/60">Code</p>
-                      <p className="mt-1 text-sm font-medium text-[#26150F]">{selectedNode.code}</p>
-                    </div>
-                  ) : null}
-                  {selectedNode.type === "MODULE" ? (
-                    <div className="rounded-2xl border border-[#26150F]/18 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-[#26150F]/60">Credits</p>
-                      <p className="mt-1 text-sm font-medium text-[#26150F]">{selectedNode.credits ?? "-"}</p>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-[#26150F]/18 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-[#26150F]/60">
-                        {childType ? `${TYPE_LABEL[childType]} Count` : "Items"}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-[#26150F]">{selectedNode.children.length}</p>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-[#26150F]/75">Select a node from the tree to view details.</p>
-            )}
-          </Card>
-
-          <Card className="rounded-3xl border border-[#26150F]/30 bg-white p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-xl font-semibold text-[#0A0A0A]">
-                {selectedNode?.type === "MODULE" ? "Module Details" : childType ? `${TYPE_LABEL[childType]} List` : "Details"}
-              </h3>
-              {selected && childType ? (
-                <Button className="gap-2" onClick={() => openAdd(childType, selected.path)} variant="secondary">
-                  <Plus size={14} />
-                  Add {TYPE_LABEL[childType]}
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="mt-4">
-              {selectedNode?.type === "MODULE" ? (
-                <div className="space-y-3 rounded-2xl border border-[#26150F]/18 bg-[#034AA6]/6 p-4 text-sm text-[#26150F]">
-                  <p><span className="font-semibold text-[#0A0A0A]">Module Code:</span> {selectedNode.code}</p>
-                  <p><span className="font-semibold text-[#0A0A0A]">Module Name:</span> {selectedNode.name}</p>
-                  <p><span className="font-semibold text-[#0A0A0A]">Credits:</span> {selectedNode.credits}</p>
-                  <p><span className="font-semibold text-[#0A0A0A]">Lecturer Assignment:</span> Pending assignment (placeholder)</p>
-                </div>
-              ) : childRows.length > 0 ? (
-                <div className="space-y-3">
-                  {childRows.map((row) => (
-                    <button
-                      className={[
-                        "w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200",
-                        selected?.path[selected.path.length - 1] === row.id
-                          ? "border-[#034AA6]/35 bg-[#034AA6]/10"
-                          : "border-[#26150F]/20 bg-white hover:border-[#034AA6]/60",
-                      ].join(" ")}
-                      key={row.id}
-                      onClick={() => {
-                        if (!selected) return;
-                        const nextPath = [...selected.path, row.id];
-                        setSelected({ path: nextPath });
-                        setExpanded((prev) => {
-                          const next = new Set(prev);
-                          for (const id of nextPath) next.add(id);
-                          return next;
-                        });
-                      }}
-                      type="button"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-[#0A0A0A]">{row.name}</p>
-                          <p className="mt-1 text-xs text-[#26150F]/70">
-                            {row.code ? `${row.code}${row.credits ? ` • ${row.credits} credits` : ""}` : TYPE_LABEL[row.type]}
-                          </p>
-                        </div>
-                        <Badge variant="neutral">{TYPE_LABEL[row.type]}</Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-[#26150F]/18 bg-[#034AA6]/6 px-4 py-3 text-sm text-[#26150F]/75">
-                  No items available under this node yet.
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {modalView ? (
-        <AdminModal
-          description={
-            modalView.mode === "add"
-              ? `Provide details to create a ${TYPE_LABEL[
-                  modalView.targetType
-                ].toLowerCase()}.`
-              : `Update ${TYPE_LABEL[modalView.targetType].toLowerCase()} details.`
-          }
-          footer={
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
               <Button
-                className="min-h-10 rounded-xl px-4"
-                onClick={closeModal}
-                type="button"
+                className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                disabled={isDeleting}
+                onClick={() => setDeleteTargetCode(null)}
                 variant="secondary"
               >
                 Cancel
               </Button>
-              <Button className="min-h-10 rounded-xl px-5" type="submit" form="faculty-modal-form">
-                {modalView.mode === "add" ? "Create" : "Save Changes"}
+              <Button
+                className="h-11 min-w-[132px] gap-2 bg-red-600 px-5 text-white shadow-[0_10px_24px_rgba(220,38,38,0.22)] hover:bg-red-700"
+                disabled={isDeleting}
+                onClick={() => {
+                  void confirmDelete();
+                }}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Delete
+                  </>
+                )}
               </Button>
             </div>
-          }
-          icon={(() => {
-            const Icon = TYPE_ICON[modalView.targetType];
-            return <Icon size={18} />;
-          })()}
-          onClose={closeModal}
-          open={modalOpen}
-          title={`${modalView.mode === "add" ? "Add" : "Edit"} ${TYPE_LABEL[
-            modalView.targetType
-          ]}`}
-        >
-          <form className="space-y-4" id="faculty-modal-form" onSubmit={handleSave}>
-            {modalView.targetType === "BADGE" ||
-            modalView.targetType === "YEAR" ||
-            modalView.targetType === "SEMESTER" ? (
-              <div>
-                <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
-                  {modalView.targetType === "BADGE"
-                    ? "Badge Label"
-                    : modalView.targetType === "YEAR"
-                      ? "Year Label"
-                      : "Semester Label"}
-                </label>
-                {modalView.targetType === "SEMESTER" ? (
-                  <select
-                    className="mt-1 w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                    id="node-name"
-                    onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
-                    value={values.name}
-                  >
-                    <option value="">Select semester</option>
-                    {SEMESTER_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    id="node-name"
-                    onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder={
-                      modalView.targetType === "BADGE" ? "e.g., 2026" : "e.g., 1st Year"
-                    }
-                    value={values.name}
-                  />
-                )}
-                {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
-              </div>
-            ) : null}
-
-            {modalView.targetType === "FACULTY" || modalView.targetType === "PROGRAM" ? (
-              <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-                <div>
-                  <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
-                    Name
-                  </label>
-                  <Input
-                    id="node-name"
-                    onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder={
-                      modalView.targetType === "FACULTY" ? "Faculty name" : "Program name"
-                    }
-                    value={values.name}
-                  />
-                  {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-[#26150F]" htmlFor="node-code">
-                    {modalView.targetType === "FACULTY" ? "Short Code" : "Program Code"}
-                  </label>
-                  <Input
-                    id="node-code"
-                    onChange={(event) => setValues((prev) => ({ ...prev, code: event.target.value }))}
-                    placeholder={modalView.targetType === "FACULTY" ? "e.g., FOC" : "e.g., CS"}
-                    value={values.code}
-                  />
-                  {errors.code ? <p className="mt-1 text-xs text-[#0339A6]">{errors.code}</p> : null}
-                </div>
-              </div>
-            ) : null}
-
-            {modalView.targetType === "MODULE" ? (
-              <div className="space-y-4">
-                <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-                  <div>
-                    <label className="text-sm font-medium text-[#26150F]" htmlFor="node-name">
-                      Module Name
-                    </label>
-                    <Input
-                      id="node-name"
-                      onChange={(event) => setValues((prev) => ({ ...prev, name: event.target.value }))}
-                      placeholder="Module name"
-                      value={values.name}
-                    />
-                    {errors.name ? <p className="mt-1 text-xs text-[#0339A6]">{errors.name}</p> : null}
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-[#26150F]" htmlFor="node-code">
-                      Module Code
-                    </label>
-                    <Input
-                      id="node-code"
-                      onChange={(event) => setValues((prev) => ({ ...prev, code: event.target.value }))}
-                      placeholder="e.g., CS-26110"
-                      value={values.code}
-                    />
-                    {errors.code ? <p className="mt-1 text-xs text-[#0339A6]">{errors.code}</p> : null}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-[#26150F]" htmlFor="node-credits">
-                    Credits
-                  </label>
-                  <Input
-                    id="node-credits"
-                    min="1"
-                    onChange={(event) => setValues((prev) => ({ ...prev, credits: event.target.value }))}
-                    placeholder="e.g., 3"
-                    type="number"
-                    value={values.credits}
-                  />
-                  {errors.credits ? <p className="mt-1 text-xs text-[#0339A6]">{errors.credits}</p> : null}
-                </div>
-              </div>
-            ) : null}
-          </form>
-        </AdminModal>
+          </div>
+        </div>
       ) : null}
     </div>
   );

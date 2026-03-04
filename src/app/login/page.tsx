@@ -5,16 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import campusBackground from "@/app/images/Services/lecturer.png";
+import { HOME_BY_ROLE, persistDemoSession } from "@/lib/rbac";
+import type { AppRole } from "@/lib/rbac";
 
 export default function LoginPage() {
   const router = useRouter();
   const [campusIdOrEmail, setCampusIdOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [role, setRole] = useState<AppRole>("SUPER_ADMIN");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    router.push("/student");
+
+    const trimmedId = campusIdOrEmail.trim();
+    const displayName = trimmedId || (role === "SUPER_ADMIN" ? "Demo Admin" : "Demo User");
+
+    persistDemoSession({
+      id: trimmedId || `demo-${role.toLowerCase()}-${Date.now()}`,
+      name: displayName,
+      role,
+    });
+
+    router.push(HOME_BY_ROLE[role]);
   };
 
   return (
@@ -90,6 +103,27 @@ export default function LoginPage() {
                     type="password"
                     value={password}
                   />
+                </div>
+
+                <div>
+                  <label
+                    className="text-sm font-medium text-[#26150F]"
+                    htmlFor="role"
+                  >
+                    Login as
+                  </label>
+                  <select
+                    className="mt-2 w-full rounded-xl border border-black/15 bg-white px-4 py-3 text-[#26150F] outline-none transition focus:border-[#034AA6] focus:ring-4 focus:ring-[#034AA6]/30"
+                    id="role"
+                    name="role"
+                    onChange={(event) => setRole(event.target.value as AppRole)}
+                    value={role}
+                  >
+                    <option value="SUPER_ADMIN">Administrator</option>
+                    <option value="LECTURER">Lecturer</option>
+                    <option value="LOST_ITEM_STAFF">Lost Item Officer</option>
+                    <option value="STUDENT">Student</option>
+                  </select>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">

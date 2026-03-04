@@ -1,0 +1,9 @@
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.5s
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 8s (628 modules)
+ GET /admin 200 in 8701ms

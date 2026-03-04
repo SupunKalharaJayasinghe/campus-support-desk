@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Campus Support Desk (UniHub)
 
-## Getting Started
+Role-based campus portal UI built with Next.js (App Router) + Tailwind CSS.
+This repo currently focuses on the **frontend experience** (sample/demo data) and basic route-level guards.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20+ recommended
+- npm (comes with Node)
+
+## Getting started (dev)
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+If port `3000` is busy:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+$env:PORT=3004; npm run dev
+```
 
-## Learn More
+## Admin dashboard
 
-To learn more about Next.js, take a look at the following resources:
+Open: `http://localhost:3000/admin`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Demo mode (recommended for UI testing)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a `.env.local` file (it is git-ignored) with:
 
-## Deploy on Vercel
+```bash
+NEXT_PUBLIC_DEMO_MODE=true
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+When demo mode is enabled, route guarding is bypassed so you can open role pages directly.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Login (when demo mode is disabled)
+
+If you set `NEXT_PUBLIC_DEMO_MODE=false` (or remove it), role pages are guarded:
+
+1. Open `http://localhost:3000/login`
+2. Choose a role from **Login as** (pick **Administrator** for admin)
+3. Click **Login**
+
+The app stores a demo session in `localStorage` using:
+
+- `unihub_role`
+- `unihub_user`
+
+Guard logic lives in `src/components/auth/RoleGuard.tsx`.
+
+## Useful routes
+
+- `/` landing page
+- `/login` demo login (role picker)
+- `/admin` admin dashboard
+- `/admin/users` user management (demo UI)
+- `/admin/faculty` faculty/program structure (demo UI)
+- `/admin/groups` grouping (demo UI)
+- `/admin/notifications` announcements/notifications (demo UI)
+- `/admin/settings` settings (demo UI)
+- `/api/health` health endpoint (returns `{ ok: true, ... }`)
+
+## Scripts
+
+- `npm run dev` start dev server
+- `npm run build` production build
+- `npm run start` start production server (after build)
+- `npm run lint` run ESLint
+
+## Project structure (high level)
+
+- `src/app` Next.js routes (App Router)
+  - `src/app/(app)` role dashboards (admin/student/lecturer/lost-items)
+  - `src/app/api` API routes
+- `src/components` UI + layout components
+- `src/lib` helpers (RBAC, nav config, etc.)

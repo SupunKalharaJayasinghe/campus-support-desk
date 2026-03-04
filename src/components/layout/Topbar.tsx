@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu } from "lucide-react";
 import Badge from "@/components/ui/Badge";
@@ -14,7 +14,7 @@ import {
   readStoredRole,
   readStoredUser,
 } from "@/lib/rbac";
-import type { AppRole, DemoUser } from "@/lib/rbac";
+import type { AppRole } from "@/lib/rbac";
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -29,14 +29,9 @@ function roleLabel(role: AppRole) {
 export default function Topbar({ onMenuClick }: TopbarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [role, setRole] = useState<AppRole | null>(null);
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const role = readStoredRole();
+  const user = readStoredUser();
   const switchAccountRedirect = isDemoModeEnabled() ? "/" : "/login";
-
-  useEffect(() => {
-    setRole(readStoredRole());
-    setUser(readStoredUser());
-  }, [pathname]);
 
   const pageTitle = useMemo(() => {
     if (!role) return "Workspace";

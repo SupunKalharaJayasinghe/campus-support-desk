@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,7 +20,6 @@ import {
 import { NAV_BY_ROLE } from "@/lib/nav";
 import type { NavIcon, NavItem } from "@/lib/nav";
 import { readStoredRole } from "@/lib/rbac";
-import type { AppRole } from "@/lib/rbac";
 
 interface SidebarProps {
   open: boolean;
@@ -50,18 +48,8 @@ function getIcon(icon: NavIcon) {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const [role, setRole] = useState<AppRole | null>(null);
-
-  useEffect(() => {
-    setRole(readStoredRole());
-  }, [pathname]);
-
-  const navItems = useMemo<NavItem[]>(() => {
-    if (!role) {
-      return [];
-    }
-    return NAV_BY_ROLE[role];
-  }, [role]);
+  const role = readStoredRole();
+  const navItems: NavItem[] = role ? NAV_BY_ROLE[role] : [];
 
   return (
     <>

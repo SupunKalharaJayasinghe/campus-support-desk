@@ -10,9 +10,10 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
+import TablePagination from "@/components/admin/TablePagination";
 import { type StudentTrack, useGrouping } from "../GroupingContext";
 
-const PAGE_SIZE = 10;
+type PageSize = 10 | 25 | 50 | 100;
 
 type TargetTrack = "weekday" | "weekend";
 
@@ -52,6 +53,7 @@ function AddStudentsContent() {
   const [semesterFilter, setSemesterFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pageSize, setPageSize] = useState<PageSize>(10);
   const [currentPage, setCurrentPage] = useState(1);
 
   const filteredStudents = useMemo(() => {
@@ -73,11 +75,11 @@ function AddStudentsContent() {
     });
   }, [facultyFilter, programFilter, search, semesterFilter, students, yearFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
   const activePage = Math.min(currentPage, totalPages);
   const pageRows = filteredStudents.slice(
-    (activePage - 1) * PAGE_SIZE,
-    activePage * PAGE_SIZE
+    (activePage - 1) * pageSize,
+    activePage * pageSize
   );
 
   const allPageSelected =
@@ -109,8 +111,9 @@ function AddStudentsContent() {
     const updatedCount = assignStudentsToTrack(ids, targetTrack);
 
     toast({
-      title: `Added ${updatedCount} students to ${targetTrackLabel}`,
+      title: "Saved",
       message: `Added ${updatedCount} students to ${targetTrackLabel}`,
+      variant: "success",
     });
 
     router.push(`/admin/groups?tab=${targetTrack}`);
@@ -127,8 +130,9 @@ function AddStudentsContent() {
     });
 
     toast({
-      title: `Added ${studentName} to ${targetTrackLabel}`,
+      title: "Saved",
       message: `Added ${studentName} to ${targetTrackLabel}`,
+      variant: "success",
     });
   };
 
@@ -305,32 +309,17 @@ function AddStudentsContent() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-[#26150F]/65">
-            Showing {pageRows.length} of {filteredStudents.length} students
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={activePage <= 1}
-              onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
-              variant="secondary"
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-[#26150F]/75">
-              Page {activePage} / {totalPages}
-            </span>
-            <Button
-              disabled={activePage >= totalPages}
-              onClick={() =>
-                setCurrentPage((previous) => Math.min(totalPages, previous + 1))
-              }
-              variant="secondary"
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <TablePagination
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(value) => {
+            setPageSize(value as PageSize);
+            setCurrentPage(1);
+          }}
+          page={activePage}
+          pageCount={totalPages}
+          pageSize={pageSize}
+          totalItems={filteredStudents.length}
+        />
       </Card>
     </div>
   );
