@@ -8,7 +8,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
@@ -24,22 +34,32 @@ type StudentStream = "WEEKDAY" | "WEEKEND";
 type SortOption = "updated" | "created" | "az" | "za";
 type PageSize = 10 | 25 | 50 | 100;
 
-interface StudentRecord {
+interface EnrollmentSummary {
   id: string;
-  studentId: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
   facultyId: string;
   facultyName: string;
   degreeProgramId: string;
   degreeProgramName: string;
   intakeId: string;
   intakeName: string;
-  intakeCurrentTerm: string;
+  currentTerm: string;
   stream: StudentStream;
+  subgroup: string;
   status: StudentStatus;
+  updatedAt: string;
+}
+
+interface StudentRecord {
+  id: string;
+  studentId: string;
+  email: string;
+  nicNumber: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  status: StudentStatus;
+  enrollmentCount: number;
+  latestEnrollment: EnrollmentSummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,12 +96,15 @@ interface StudentsResponse {
 interface StudentFormState {
   firstName: string;
   lastName: string;
+  nicNumber: string;
   phone: string;
+  status: StudentStatus;
   facultyId: string;
   degreeProgramId: string;
   intakeId: string;
   stream: StudentStream;
-  status: StudentStatus;
+  subgroup: string;
+  enrollmentStatus: StudentStatus;
   studentId: string;
   email: string;
 }
@@ -111,10 +134,19 @@ function sanitizeStudentStream(value: unknown): StudentStream {
   return value === "WEEKEND" ? "WEEKEND" : "WEEKDAY";
 }
 
+function sanitizeNicNumber(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^0-9A-Z]/g, "")
+    .slice(0, 20);
+}
+
 function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "-";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
+  if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -126,12 +158,15 @@ function emptyForm(): StudentFormState {
   return {
     firstName: "",
     lastName: "",
+    nicNumber: "",
     phone: "",
+    status: "ACTIVE",
     facultyId: "",
     degreeProgramId: "",
     intakeId: "",
     stream: "WEEKDAY",
-    status: "ACTIVE",
+    subgroup: "",
+    enrollmentStatus: "ACTIVE",
     studentId: "",
     email: "",
   };
@@ -166,6 +201,38 @@ async function readJson<T>(response: Response) {
   return (payload ?? ({} as T)) as T;
 }
 
+function parseEnrollmentSummary(value: unknown): EnrollmentSummary | null {
+  const row = asObject(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = String(row.id ?? row._id ?? "").trim();
+  const facultyId = normalizeAcademicCode(row.facultyId);
+  const degreeProgramId = normalizeAcademicCode(row.degreeProgramId);
+  const intakeId = String(row.intakeId ?? "").trim();
+  const stream = sanitizeStudentStream(row.stream);
+
+  if (!id || !facultyId || !degreeProgramId || !intakeId) {
+    return null;
+  }
+
+  return {
+    id,
+    facultyId,
+    facultyName: collapseSpaces(row.facultyName),
+    degreeProgramId,
+    degreeProgramName: collapseSpaces(row.degreeProgramName),
+    intakeId,
+    intakeName: collapseSpaces(row.intakeName),
+    currentTerm: collapseSpaces(row.currentTerm),
+    stream,
+    subgroup: collapseSpaces(row.subgroup),
+    status: sanitizeStudentStatus(row.status),
+    updatedAt: String(row.updatedAt ?? ""),
+  };
+}
+
 function parseStudentsResponse(payload: unknown): StudentsResponse {
   const root = asObject(payload);
   const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
@@ -181,14 +248,9 @@ function parseStudentsResponse(payload: unknown): StudentsResponse {
       const email = String(item.email ?? "").trim().toLowerCase();
       const firstName = collapseSpaces(item.firstName);
       const lastName = collapseSpaces(item.lastName);
-      const facultyId = normalizeAcademicCode(item.facultyId);
-      const degreeProgramId = normalizeAcademicCode(
-        item.degreeProgramId ?? item.degreeId
-      );
-      const intakeId = String(item.intakeId ?? "").trim();
-      const intakeInfo = asObject(item.intake);
+      const nicNumber = sanitizeNicNumber(item.nicNumber);
 
-      if (!id || !studentId || !email || !firstName || !lastName || !facultyId || !degreeProgramId || !intakeId) {
+      if (!id || !studentId || !email || !firstName || !lastName) {
         return null;
       }
 
@@ -196,18 +258,13 @@ function parseStudentsResponse(payload: unknown): StudentsResponse {
         id,
         studentId,
         email,
+        nicNumber,
         firstName,
         lastName,
         phone: collapseSpaces(item.phone),
-        facultyId,
-        facultyName: collapseSpaces(item.facultyName),
-        degreeProgramId,
-        degreeProgramName: collapseSpaces(item.degreeProgramName),
-        intakeId,
-        intakeName: collapseSpaces(intakeInfo?.name ?? item.intakeName),
-        intakeCurrentTerm: collapseSpaces(intakeInfo?.currentTerm ?? item.currentTerm),
-        stream: sanitizeStudentStream(item.stream),
         status: sanitizeStudentStatus(item.status),
+        enrollmentCount: Math.max(0, Number(item.enrollmentCount) || 0),
+        latestEnrollment: parseEnrollmentSummary(item.latestEnrollment),
         createdAt: String(item.createdAt ?? ""),
         updatedAt: String(item.updatedAt ?? ""),
       } satisfies StudentRecord;
@@ -318,6 +375,7 @@ export default function StudentsAdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
@@ -338,11 +396,13 @@ export default function StudentsAdminPage() {
   const [selectedIntakeTerm, setSelectedIntakeTerm] = useState("");
   const [formError, setFormError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] =
+    useState<StudentRecord | null>(null);
 
   const deferredSearch = useDeferredValue(searchQuery);
   const previewRequestIdRef = useRef(0);
   const intakeTermRequestIdRef = useRef(0);
-  const isOverlayOpen = Boolean(modal || deleteTarget);
+  const isOverlayOpen = Boolean(modal || deleteTarget || resetPasswordTarget);
 
   const loadStudents = useCallback(
     async (options?: { background?: boolean }) => {
@@ -604,6 +664,7 @@ export default function StudentsAdminPage() {
     setIntakeOptions([]);
     setSelectedIntakeTerm("");
     setFormError("");
+    setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
   };
@@ -613,25 +674,25 @@ export default function StudentsAdminPage() {
     setForm({
       firstName: student.firstName,
       lastName: student.lastName,
+      nicNumber: student.nicNumber,
       phone: student.phone,
-      facultyId: student.facultyId,
-      degreeProgramId: student.degreeProgramId,
-      intakeId: student.intakeId,
-      stream: student.stream,
       status: student.status,
+      facultyId: "",
+      degreeProgramId: "",
+      intakeId: "",
+      stream: "WEEKDAY",
+      subgroup: "",
+      enrollmentStatus: "ACTIVE",
       studentId: student.studentId,
       email: student.email,
     });
+    setDegreeOptions([]);
+    setIntakeOptions([]);
+    setSelectedIntakeTerm("");
     setFormError("");
+    setResetPasswordTarget(null);
     setIsLoadingPreview(false);
-    setSelectedIntakeTerm(student.intakeCurrentTerm);
     setIsLoadingIntakeTerm(false);
-
-    void (async () => {
-      await loadDegrees(student.facultyId);
-      await loadIntakes(student.facultyId, student.degreeProgramId);
-      await loadIntakeTerm(student.intakeId);
-    })();
   };
 
   const closeModal = () => {
@@ -645,6 +706,7 @@ export default function StudentsAdminPage() {
     setIntakeOptions([]);
     setSelectedIntakeTerm("");
     setFormError("");
+    setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
   };
@@ -652,11 +714,18 @@ export default function StudentsAdminPage() {
   const validateForm = () => {
     if (!collapseSpaces(form.firstName)) return "First name is required";
     if (!collapseSpaces(form.lastName)) return "Last name is required";
-    if (!form.facultyId) return "Faculty is required";
-    if (!form.degreeProgramId) return "Degree is required";
-    if (!form.intakeId) return "Intake is required";
-    if (!form.stream) return "Stream is required";
-    if (!form.studentId || !form.email) return "Student ID and email preview are required";
+    if (!sanitizeNicNumber(form.nicNumber)) return "NIC number is required";
+
+    if (modal?.mode === "add") {
+      if (!form.facultyId) return "Faculty is required";
+      if (!form.degreeProgramId) return "Degree is required";
+      if (!form.intakeId) return "Intake is required";
+      if (!form.stream) return "Stream is required";
+      if (!form.studentId || !form.email) {
+        return "Student ID and email preview are required";
+      }
+    }
+
     return "";
   };
 
@@ -676,20 +745,23 @@ export default function StudentsAdminPage() {
       return;
     }
 
-    const payload = {
-      firstName: collapseSpaces(form.firstName),
-      lastName: collapseSpaces(form.lastName),
-      phone: collapseSpaces(form.phone),
-      facultyId: form.facultyId,
-      degreeProgramId: form.degreeProgramId,
-      intakeId: form.intakeId,
-      stream: form.stream,
-      status: form.status,
-    };
-
     setIsSaving(true);
     try {
       if (modal.mode === "add") {
+        const payload = {
+          firstName: collapseSpaces(form.firstName),
+          lastName: collapseSpaces(form.lastName),
+          nicNumber: sanitizeNicNumber(form.nicNumber),
+          phone: collapseSpaces(form.phone),
+          status: form.status,
+          facultyId: form.facultyId,
+          degreeProgramId: form.degreeProgramId,
+          intakeId: form.intakeId,
+          stream: form.stream,
+          subgroup: collapseSpaces(form.subgroup) || null,
+          enrollmentStatus: form.enrollmentStatus,
+        };
+
         await readJson<unknown>(
           await fetch("/api/students", {
             method: "POST",
@@ -704,6 +776,14 @@ export default function StudentsAdminPage() {
           variant: "success",
         });
       } else {
+        const payload = {
+          firstName: collapseSpaces(form.firstName),
+          lastName: collapseSpaces(form.lastName),
+          nicNumber: sanitizeNicNumber(form.nicNumber),
+          phone: collapseSpaces(form.phone),
+          status: form.status,
+        };
+
         await readJson<unknown>(
           await fetch(`/api/students/${encodeURIComponent(String(modal.targetId ?? ""))}`, {
             method: "PUT",
@@ -714,7 +794,7 @@ export default function StudentsAdminPage() {
 
         toast({
           title: "Saved",
-          message: "Student updated successfully",
+          message: "Student profile updated",
           variant: "success",
         });
       }
@@ -722,8 +802,7 @@ export default function StudentsAdminPage() {
       closeModal();
       await loadStudents({ background: true });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to save student";
+      const message = error instanceof Error ? error.message : "Failed to save student";
       setFormError(message);
       toast({
         title: "Failed",
@@ -765,14 +844,67 @@ export default function StudentsAdminPage() {
     }
   };
 
+  const openResetPasswordConfirm = () => {
+    if (modal?.mode !== "edit" || !modal.targetId) {
+      return;
+    }
+
+    const target = students.find((item) => item.id === modal.targetId);
+    if (!target) {
+      toast({
+        title: "Failed",
+        message: "Student not found in current list. Refresh and try again.",
+        variant: "error",
+      });
+      return;
+    }
+
+    setResetPasswordTarget(target);
+  };
+
+  const confirmResetPassword = async () => {
+    if (!resetPasswordTarget) {
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      await readJson<unknown>(
+        await fetch(
+          `/api/students/${encodeURIComponent(resetPasswordTarget.id)}/reset-password`,
+          {
+            method: "POST",
+          }
+        )
+      );
+
+      toast({
+        title: "Saved",
+        message: "Password reset to student's NIC number",
+        variant: "success",
+      });
+      setResetPasswordTarget(null);
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message: error instanceof Error ? error.message : "Failed to reset password",
+        variant: "error",
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   const selectedFacultyDegrees = useMemo(
     () =>
-      degreeOptions.filter((degree) => degree.facultyCode === form.facultyId),
+      degreeOptions.filter(
+        (item) => !form.facultyId || item.facultyCode === form.facultyId
+      ),
     [degreeOptions, form.facultyId]
   );
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="space-y-5">
       <PageHeader
         actions={
           <Button
@@ -782,7 +914,7 @@ export default function StudentsAdminPage() {
             <Plus size={16} /> Add Student
           </Button>
         }
-        description="Register students with auto IT number, auto email, and auto login account creation."
+        description="Manage student profiles and multiple program enrollments."
         title="Students"
       />
 
@@ -855,15 +987,14 @@ export default function StudentsAdminPage() {
         </div>
 
         <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-left text-sm">
+          <table className="w-full min-w-[1180px] text-left text-sm">
             <thead className="border-b border-border bg-tint">
               <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
                 <th className="px-4 py-3">Student ID</th>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Faculty</th>
-                <th className="px-4 py-3">Degree</th>
-                <th className="px-4 py-3">Intake</th>
-                <th className="px-4 py-3">Stream</th>
+                <th className="px-4 py-3">Latest Enrollment</th>
+                <th className="px-4 py-3">Semester</th>
+                <th className="px-4 py-3">Enrollments</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -871,7 +1002,7 @@ export default function StudentsAdminPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
                     Loading student records...
                   </td>
                 </tr>
@@ -880,7 +1011,14 @@ export default function StudentsAdminPage() {
               {!isLoading
                 ? students.map((student) => (
                     <tr className="border-b border-border/70 transition-colors hover:bg-tint" key={student.id}>
-                      <td className="px-4 py-4 font-semibold text-heading">{student.studentId}</td>
+                      <td className="px-4 py-4 font-semibold text-heading">
+                        <Link
+                          className="text-[#034aa6] hover:text-[#0339a6]"
+                          href={`/admin/users/students/${encodeURIComponent(student.id)}`}
+                        >
+                          {student.studentId}
+                        </Link>
+                      </td>
                       <td className="px-4 py-4">
                         <p className="font-semibold text-heading">
                           {student.firstName} {student.lastName}
@@ -891,19 +1029,22 @@ export default function StudentsAdminPage() {
                         <p className="mt-0.5 text-xs text-text/65">{student.email}</p>
                       </td>
                       <td className="px-4 py-4 text-text/75">
-                        {student.facultyId}
-                        {student.facultyName ? (
-                          <p className="text-xs text-text/58">{student.facultyName}</p>
-                        ) : null}
+                        {student.latestEnrollment ? (
+                          <>
+                            <p>
+                              {student.latestEnrollment.facultyId} / {student.latestEnrollment.degreeProgramId}
+                            </p>
+                            <p className="text-xs text-text/58">{student.latestEnrollment.intakeName || student.latestEnrollment.intakeId}</p>
+                            <p className="text-xs text-text/58">{student.latestEnrollment.stream}</p>
+                          </>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="px-4 py-4 text-text/75">
-                        {student.degreeProgramId}
-                        {student.degreeProgramName ? (
-                          <p className="text-xs text-text/58">{student.degreeProgramName}</p>
-                        ) : null}
+                        {student.latestEnrollment?.currentTerm || "-"}
                       </td>
-                      <td className="px-4 py-4 text-text/75">{student.intakeName || "—"}</td>
-                      <td className="px-4 py-4 text-text/75">{student.stream}</td>
+                      <td className="px-4 py-4 text-text/75">{student.enrollmentCount}</td>
                       <td className="px-4 py-4">
                         <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
                       </td>
@@ -933,7 +1074,7 @@ export default function StudentsAdminPage() {
 
               {!isLoading && students.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
                     No students match the current filters.
                   </td>
                 </tr>
@@ -997,7 +1138,9 @@ export default function StudentsAdminPage() {
                   <Input
                     className="h-12"
                     disabled={isSaving}
-                    onChange={(event) => setForm((previous) => ({ ...previous, firstName: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, firstName: event.target.value }))
+                    }
                     value={form.firstName}
                   />
                 </div>
@@ -1006,7 +1149,9 @@ export default function StudentsAdminPage() {
                   <Input
                     className="h-12"
                     disabled={isSaving}
-                    onChange={(event) => setForm((previous) => ({ ...previous, lastName: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, lastName: event.target.value }))
+                    }
                     value={form.lastName}
                   />
                 </div>
@@ -1016,8 +1161,28 @@ export default function StudentsAdminPage() {
                   <Input
                     className="h-12"
                     disabled={isSaving}
-                    onChange={(event) => setForm((previous) => ({ ...previous, phone: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, phone: event.target.value }))
+                    }
                     value={form.phone}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">
+                    NIC Number
+                  </label>
+                  <Input
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        nicNumber: sanitizeNicNumber(event.target.value),
+                      }))
+                    }
+                    placeholder="Required"
+                    value={form.nicNumber}
                   />
                 </div>
 
@@ -1039,143 +1204,188 @@ export default function StudentsAdminPage() {
                   </Select>
                 </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">Faculty</label>
-                  <Select
-                    className="h-12"
-                    disabled={isSaving}
-                    onChange={(event) => {
-                      const facultyId = normalizeAcademicCode(event.target.value);
-                      setForm((previous) => ({
-                        ...previous,
-                        facultyId,
-                        degreeProgramId: "",
-                        intakeId: "",
-                        studentId: modal.mode === "add" ? "" : previous.studentId,
-                        email: modal.mode === "add" ? "" : previous.email,
-                      }));
-                      setIntakeOptions([]);
-                      setSelectedIntakeTerm("");
-                      setIsLoadingIntakeTerm(false);
-                      void loadDegrees(facultyId);
-                    }}
-                    value={form.facultyId}
-                  >
-                    <option value="">Select Faculty</option>
-                    {faculties.map((faculty) => (
-                      <option key={faculty.code} value={faculty.code}>
-                        {faculty.code} - {faculty.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                {modal.mode === "add" ? (
+                  <>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">Faculty</label>
+                      <Select
+                        className="h-12"
+                        disabled={isSaving}
+                        onChange={(event) => {
+                          const facultyId = normalizeAcademicCode(event.target.value);
+                          setForm((previous) => ({
+                            ...previous,
+                            facultyId,
+                            degreeProgramId: "",
+                            intakeId: "",
+                            studentId: "",
+                            email: "",
+                          }));
+                          setIntakeOptions([]);
+                          setSelectedIntakeTerm("");
+                          setIsLoadingIntakeTerm(false);
+                          void loadDegrees(facultyId);
+                        }}
+                        value={form.facultyId}
+                      >
+                        <option value="">Select Faculty</option>
+                        {faculties.map((faculty) => (
+                          <option key={faculty.code} value={faculty.code}>
+                            {faculty.code} - {faculty.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">Degree</label>
-                  <Select
-                    className="h-12"
-                    disabled={isSaving || !form.facultyId || isLoadingDegrees}
-                    onChange={(event) => {
-                      const degreeProgramId = normalizeAcademicCode(event.target.value);
-                      setForm((previous) => ({
-                        ...previous,
-                        degreeProgramId,
-                        intakeId: "",
-                        studentId: modal.mode === "add" ? "" : previous.studentId,
-                        email: modal.mode === "add" ? "" : previous.email,
-                      }));
-                      setSelectedIntakeTerm("");
-                      setIsLoadingIntakeTerm(false);
-                      void loadIntakes(form.facultyId, degreeProgramId);
-                    }}
-                    value={form.degreeProgramId}
-                  >
-                    <option value="">
-                      {isLoadingDegrees ? "Loading..." : "Select Degree"}
-                    </option>
-                    {selectedFacultyDegrees.map((degree) => (
-                      <option key={degree.code} value={degree.code}>
-                        {degree.code} - {degree.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">Degree</label>
+                      <Select
+                        className="h-12"
+                        disabled={isSaving || !form.facultyId || isLoadingDegrees}
+                        onChange={(event) => {
+                          const degreeProgramId = normalizeAcademicCode(event.target.value);
+                          setForm((previous) => ({
+                            ...previous,
+                            degreeProgramId,
+                            intakeId: "",
+                            studentId: "",
+                            email: "",
+                          }));
+                          setSelectedIntakeTerm("");
+                          setIsLoadingIntakeTerm(false);
+                          void loadIntakes(form.facultyId, degreeProgramId);
+                        }}
+                        value={form.degreeProgramId}
+                      >
+                        <option value="">
+                          {isLoadingDegrees ? "Loading..." : "Select Degree"}
+                        </option>
+                        {selectedFacultyDegrees.map((degree) => (
+                          <option key={degree.code} value={degree.code}>
+                            {degree.code} - {degree.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">Intake</label>
-                  <Select
-                    className="h-12"
-                    disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
-                    onChange={(event) => {
-                      const intakeId = String(event.target.value ?? "").trim();
-                      setForm((previous) => ({
-                        ...previous,
-                        intakeId,
-                        studentId: modal.mode === "add" ? "" : previous.studentId,
-                        email: modal.mode === "add" ? "" : previous.email,
-                      }));
-                      void loadIntakeTerm(intakeId);
-                      if (modal.mode === "add") {
-                        void loadPreview(intakeId);
-                      }
-                    }}
-                    value={form.intakeId}
-                  >
-                    <option value="">
-                      {isLoadingIntakes ? "Loading..." : "Select Intake"}
-                    </option>
-                    {intakeOptions.map((intake) => (
-                      <option key={intake.id} value={intake.id}>
-                        {intake.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">Intake</label>
+                      <Select
+                        className="h-12"
+                        disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
+                        onChange={(event) => {
+                          const intakeId = String(event.target.value ?? "").trim();
+                          setForm((previous) => ({
+                            ...previous,
+                            intakeId,
+                            studentId: "",
+                            email: "",
+                          }));
+                          void loadIntakeTerm(intakeId);
+                          void loadPreview(intakeId);
+                        }}
+                        value={form.intakeId}
+                      >
+                        <option value="">
+                          {isLoadingIntakes ? "Loading..." : "Select Intake"}
+                        </option>
+                        {intakeOptions.map((intake) => (
+                          <option key={intake.id} value={intake.id}>
+                            {intake.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">
-                    Current Semester
-                  </label>
-                  <Input
-                    className="h-12"
-                    disabled
-                    value={
-                      !form.intakeId
-                        ? "Select an intake"
-                        : isLoadingIntakeTerm
-                          ? "Loading..."
-                          : selectedIntakeTerm || "—"
-                    }
-                  />
-                  <p className="mt-1 text-xs text-text/60">
-                    This is controlled by the Intake term schedule.
-                  </p>
-                </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">
+                        Current Semester
+                      </label>
+                      <Input
+                        className="h-12"
+                        disabled
+                        value={
+                          !form.intakeId
+                            ? "Select an intake"
+                            : isLoadingIntakeTerm
+                              ? "Loading..."
+                              : selectedIntakeTerm || "-"
+                        }
+                      />
+                      <p className="mt-1 text-xs text-text/60">
+                        This is controlled by the Intake term schedule.
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">Stream</label>
-                  <Select
-                    className="h-12"
-                    disabled={isSaving}
-                    onChange={(event) =>
-                      setForm((previous) => ({
-                        ...previous,
-                        stream: sanitizeStudentStream(event.target.value),
-                      }))
-                    }
-                    value={form.stream}
-                  >
-                    <option value="WEEKDAY">WEEKDAY</option>
-                    <option value="WEEKEND">WEEKEND</option>
-                  </Select>
-                </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">Stream</label>
+                      <Select
+                        className="h-12"
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          setForm((previous) => ({
+                            ...previous,
+                            stream: sanitizeStudentStream(event.target.value),
+                          }))
+                        }
+                        value={form.stream}
+                      >
+                        <option value="WEEKDAY">WEEKDAY</option>
+                        <option value="WEEKEND">WEEKEND</option>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">Subgroup</label>
+                      <Input
+                        className="h-12"
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          setForm((previous) => ({ ...previous, subgroup: event.target.value }))
+                        }
+                        placeholder="Optional"
+                        value={form.subgroup}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-heading">
+                        Enrollment Status
+                      </label>
+                      <Select
+                        className="h-12"
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          setForm((previous) => ({
+                            ...previous,
+                            enrollmentStatus: sanitizeStudentStatus(event.target.value),
+                          }))
+                        }
+                        value={form.enrollmentStatus}
+                      >
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="INACTIVE">INACTIVE</option>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="sm:col-span-2 rounded-2xl border border-border bg-tint px-4 py-3 text-sm text-text/70">
+                    Manage program enrollments from the student profile page. {" "}
+                    <Link
+                      className="font-semibold text-[#034aa6] hover:text-[#0339a6]"
+                      href={`/admin/users/students/${encodeURIComponent(String(modal.targetId ?? ""))}`}
+                    >
+                      Open profile
+                    </Link>
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-heading">Student ID (Auto)</label>
                   <Input
                     className="h-12"
                     disabled
-                    placeholder={isLoadingPreview ? "Generating..." : "Auto-generated"}
+                    placeholder={modal.mode === "add" && isLoadingPreview ? "Generating..." : "Auto-generated"}
                     value={form.studentId}
                   />
                 </div>
@@ -1185,7 +1395,7 @@ export default function StudentsAdminPage() {
                   <Input
                     className="h-12"
                     disabled
-                    placeholder={isLoadingPreview ? "Generating..." : "Auto-generated"}
+                    placeholder={modal.mode === "add" && isLoadingPreview ? "Generating..." : "Auto-generated"}
                     value={form.email}
                   />
                 </div>
@@ -1200,6 +1410,17 @@ export default function StudentsAdminPage() {
 
             <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
               <div className="flex flex-wrap items-center justify-end gap-2.5">
+                {modal.mode === "edit" ? (
+                  <Button
+                    className="h-11 min-w-[160px] gap-2 border-amber-300 bg-amber-50 px-5 text-amber-700 hover:bg-amber-100"
+                    disabled={isSaving || isResettingPassword}
+                    onClick={openResetPasswordConfirm}
+                    variant="secondary"
+                  >
+                    <RotateCcw size={16} />
+                    Reset Password
+                  </Button>
+                ) : null}
                 <Button
                   className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
                   disabled={isSaving}
@@ -1242,7 +1463,7 @@ export default function StudentsAdminPage() {
             <div className="px-6 py-6">
               <p className="text-lg font-semibold text-heading">Delete Student</p>
               <p className="mt-2 text-sm leading-6 text-text/70">
-                Are you sure you want to delete student{" "}
+                Are you sure you want to delete student {" "}
                 <span className="font-semibold text-heading">
                   {deleteTarget.studentId} ({deleteTarget.firstName} {deleteTarget.lastName})
                 </span>
@@ -1275,6 +1496,68 @@ export default function StudentsAdminPage() {
                   <>
                     <Trash2 size={16} />
                     Delete
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {resetPasswordTarget ? (
+        <div
+          className="fixed inset-0 z-[96] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isResettingPassword) {
+              setResetPasswordTarget(null);
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_36px_rgba(15,23,42,0.2)]"
+            role="dialog"
+          >
+            <div className="px-6 py-6">
+              <p className="text-lg font-semibold text-heading">Reset Password</p>
+              <p className="mt-2 text-sm leading-6 text-text/70">
+                Reset password to student&apos;s NIC number?
+              </p>
+              <p className="mt-2 text-sm text-text/70">
+                Student: {" "}
+                <span className="font-semibold text-heading">
+                  {resetPasswordTarget.studentId} ({resetPasswordTarget.firstName}{" "}
+                  {resetPasswordTarget.lastName})
+                </span>
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
+              <Button
+                className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                disabled={isResettingPassword}
+                onClick={() => setResetPasswordTarget(null)}
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="h-11 min-w-[152px] gap-2 bg-amber-600 px-5 text-white shadow-[0_10px_24px_rgba(217,119,6,0.22)] hover:bg-amber-700"
+                disabled={isResettingPassword}
+                onClick={() => {
+                  void confirmResetPassword();
+                }}
+              >
+                {isResettingPassword ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw size={16} />
+                    Reset Password
                   </>
                 )}
               </Button>

@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
+import "@/models/Enrollment";
 import "@/models/Student";
 import "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
 import {
-  decorateStudentRecord,
+  decorateStudentDetailRecord,
   deleteStudentInMemory,
-  findStudentInMemoryById,
-  normalizeAcademicCode,
+  findStudentDetailInMemoryById,
+  getMongoDuplicateField,
   sanitizeName,
+  sanitizeNicNumber,
   sanitizePhone,
   sanitizeStudentStatus,
-  sanitizeStudentStream,
-  sanitizeSubgroup,
   updateStudentInMemory,
-  validateStudentRelations,
-  type StudentWriteInput,
+  type EnrollmentPersistedRecord,
+  type StudentPersistedRecord,
+  type StudentProfileWriteInput,
 } from "@/lib/student-registration";
+import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
 import { UserModel } from "@/models/User";
 
@@ -41,83 +43,90 @@ function toIsoDate(value: unknown) {
   return parsed.toISOString();
 }
 
-function toStudentInput(body: Partial<Record<string, unknown>>): StudentWriteInput | null {
+function toStudentProfileInput(
+  body: Partial<Record<string, unknown>>
+): StudentProfileWriteInput | null {
   const firstName = sanitizeName(body.firstName);
   const lastName = sanitizeName(body.lastName);
+  const nicNumber = sanitizeNicNumber(body.nicNumber);
   const phone = sanitizePhone(body.phone);
-  const facultyId = normalizeAcademicCode(body.facultyId);
-  const degreeProgramId = normalizeAcademicCode(body.degreeProgramId);
-  const intakeId = String(body.intakeId ?? "").trim();
-  const stream = sanitizeStudentStream(body.stream);
-  const subgroup = Object.prototype.hasOwnProperty.call(body, "subgroup")
-    ? sanitizeSubgroup(body.subgroup)
-    : undefined;
   const status = sanitizeStudentStatus(body.status);
 
-  if (!firstName || !lastName || !facultyId || !degreeProgramId || !intakeId || !stream) {
+  if (!firstName || !lastName || !nicNumber) {
     return null;
   }
 
   return {
     firstName,
     lastName,
+    nicNumber,
     phone,
-    facultyId,
-    degreeProgramId,
-    intakeId,
-    stream,
-    subgroup,
     status,
   };
 }
 
-function toApiStudentRecordFromUnknown(row: unknown) {
+function toStudentRecordFromUnknown(row: unknown): StudentPersistedRecord | null {
   const doc = asObject(row);
   if (!doc) {
     return null;
   }
 
-  const firstName = sanitizeName(doc.firstName);
-  const lastName = sanitizeName(doc.lastName);
-  const facultyId = normalizeAcademicCode(doc.facultyId);
-  const degreeProgramId = normalizeAcademicCode(doc.degreeProgramId);
-  const intakeId = String(doc.intakeId ?? "").trim();
-  const stream = sanitizeStudentStream(doc.stream);
-  const subgroup = sanitizeSubgroup(doc.subgroup);
+  const id = String(doc._id ?? doc.id ?? "").trim();
   const studentId = String(doc.studentId ?? "").trim().toUpperCase();
   const email = String(doc.email ?? "").trim().toLowerCase();
+  const firstName = sanitizeName(doc.firstName);
+  const lastName = sanitizeName(doc.lastName);
+  const nicNumber = sanitizeNicNumber(doc.nicNumber);
 
-  if (
-    !studentId ||
-    !email ||
-    !firstName ||
-    !lastName ||
-    !facultyId ||
-    !degreeProgramId ||
-    !intakeId ||
-    !stream
-  ) {
+  if (!id || !studentId || !email || !firstName || !lastName) {
     return null;
   }
 
-  const status = sanitizeStudentStatus(doc.status);
-
-  return decorateStudentRecord({
-    id: String(doc._id ?? doc.id ?? "").trim(),
+  return {
+    id,
     studentId,
     email,
     firstName,
     lastName,
+    nicNumber,
     phone: sanitizePhone(doc.phone),
+    status: sanitizeStudentStatus(doc.status),
+    createdAt: toIsoDate(doc.createdAt),
+    updatedAt: toIsoDate(doc.updatedAt),
+  };
+}
+
+function toEnrollmentRecordFromUnknown(
+  row: unknown
+): EnrollmentPersistedRecord | null {
+  const doc = asObject(row);
+  if (!doc) {
+    return null;
+  }
+
+  const id = String(doc._id ?? doc.id ?? "").trim();
+  const studentId = String(doc.studentId ?? "").trim();
+  const facultyId = String(doc.facultyId ?? "").trim().toUpperCase();
+  const degreeProgramId = String(doc.degreeProgramId ?? "").trim().toUpperCase();
+  const intakeId = String(doc.intakeId ?? "").trim();
+  const stream = doc.stream === "WEEKEND" ? "WEEKEND" : doc.stream === "WEEKDAY" ? "WEEKDAY" : null;
+
+  if (!id || !studentId || !facultyId || !degreeProgramId || !intakeId || !stream) {
+    return null;
+  }
+
+  return {
+    id,
+    studentId,
     facultyId,
     degreeProgramId,
     intakeId,
     stream,
-    subgroup,
-    status,
+    subgroup: String(doc.subgroup ?? "").trim() || null,
+    status: sanitizeStudentStatus(doc.status),
     createdAt: toIsoDate(doc.createdAt),
     updatedAt: toIsoDate(doc.updatedAt),
-  });
+  };
 }
 
 export async function PUT(
@@ -126,65 +135,89 @@ export async function PUT(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    const studentId = String(params.id ?? "").trim();
+    const studentRecordId = String(params.id ?? "").trim();
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;
     const body = rawBody ?? {};
-    const input = toStudentInput(body);
+    const profile = toStudentProfileInput(body);
 
-    if (!input) {
+    if (!profile) {
       return NextResponse.json(
         {
-          message:
-            "First name, last name, faculty, degree, intake, and stream are required",
+          message: "First name, last name, and NIC number are required",
         },
         { status: 400 }
       );
     }
 
-    try {
-      validateStudentRelations(input);
-    } catch (error) {
-      return NextResponse.json(
-        { message: error instanceof Error ? error.message : "Invalid student data" },
-        { status: 400 }
-      );
-    }
-
     if (!mongooseConnection) {
-      const updated = updateStudentInMemory(studentId, input);
+      let updated: StudentPersistedRecord | null = null;
+      try {
+        updated = updateStudentInMemory(studentRecordId, profile);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to update student";
+        if (message === "NIC number already exists") {
+          return NextResponse.json({ message }, { status: 409 });
+        }
+
+        throw error;
+      }
       if (!updated) {
         return NextResponse.json({ message: "Student not found" }, { status: 404 });
       }
 
-      return NextResponse.json(decorateStudentRecord(updated));
+      const detail = findStudentDetailInMemoryById(studentRecordId);
+      if (!detail) {
+        return NextResponse.json({ message: "Student not found" }, { status: 404 });
+      }
+
+      return NextResponse.json(detail);
     }
 
-    const current = await StudentModel.findById(studentId).exec();
+    const current = await StudentModel.findById(studentRecordId).exec();
     if (!current) {
       return NextResponse.json({ message: "Student not found" }, { status: 404 });
     }
 
-    current.firstName = input.firstName;
-    current.lastName = input.lastName;
-    current.phone = input.phone;
-    current.facultyId = input.facultyId;
-    current.degreeProgramId = input.degreeProgramId;
-    current.intakeId = input.intakeId;
-    current.stream = input.stream;
-    if (input.subgroup !== undefined) {
-      current.subgroup = input.subgroup;
-    }
-    current.status = input.status;
-    await current.save();
+    current.firstName = profile.firstName;
+    current.lastName = profile.lastName;
+    current.nicNumber = profile.nicNumber;
+    current.phone = profile.phone;
+    current.status = profile.status;
+    try {
+      await current.save();
+    } catch (error) {
+      const duplicateField = getMongoDuplicateField(error);
+      if (duplicateField === "nicNumber") {
+        return NextResponse.json(
+          { message: "NIC number already exists" },
+          { status: 409 }
+        );
+      }
 
-    const item = toApiStudentRecordFromUnknown(current.toObject());
-    if (!item) {
+      throw error;
+    }
+
+    const studentRecord = toStudentRecordFromUnknown(current.toObject());
+    if (!studentRecord) {
       return NextResponse.json({ message: "Failed to map student" }, { status: 500 });
     }
 
-    return NextResponse.json(item);
+    const enrollmentRows = (await EnrollmentModel.find({
+      studentId: current._id,
+    })
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec()
+      .catch(() => [])) as unknown[];
+
+    const enrollments = enrollmentRows
+      .map((row) => toEnrollmentRecordFromUnknown(row))
+      .filter((row): row is EnrollmentPersistedRecord => Boolean(row));
+
+    return NextResponse.json(decorateStudentDetailRecord(studentRecord, enrollments));
   } catch (error) {
     return NextResponse.json(
       {
@@ -201,10 +234,10 @@ export async function DELETE(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    const studentId = String(params.id ?? "").trim();
+    const studentRecordId = String(params.id ?? "").trim();
 
     if (!mongooseConnection) {
-      const deleted = deleteStudentInMemory(studentId);
+      const deleted = deleteStudentInMemory(studentRecordId);
       if (!deleted) {
         return NextResponse.json({ message: "Student not found" }, { status: 404 });
       }
@@ -212,15 +245,15 @@ export async function DELETE(
       return NextResponse.json({ ok: true });
     }
 
-    const current = await StudentModel.findById(studentId).exec();
+    const current = await StudentModel.findById(studentRecordId).exec();
     if (!current) {
       return NextResponse.json({ message: "Student not found" }, { status: 404 });
     }
 
-    const studentRef = String(current._id);
-    await StudentModel.deleteOne({ _id: studentRef }).catch(() => null);
+    await EnrollmentModel.deleteMany({ studentId: current._id }).catch(() => null);
+    await StudentModel.deleteOne({ _id: current._id }).catch(() => null);
     await UserModel.updateOne(
-      { studentRef },
+      { studentRef: current._id },
       {
         $set: {
           status: "INACTIVE",
@@ -245,26 +278,39 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const studentId = String(params.id ?? "").trim();
+  const studentRecordId = String(params.id ?? "").trim();
 
   if (!mongooseConnection) {
-    const student = findStudentInMemoryById(studentId);
-    if (!student) {
+    const detail = findStudentDetailInMemoryById(studentRecordId);
+    if (!detail) {
       return NextResponse.json({ message: "Student not found" }, { status: 404 });
     }
 
-    return NextResponse.json(decorateStudentRecord(student));
+    return NextResponse.json(detail);
   }
 
-  const row = await StudentModel.findById(studentId).lean().exec().catch(() => null);
+  const row = await StudentModel.findById(studentRecordId)
+    .lean()
+    .exec()
+    .catch(() => null);
   if (!row) {
     return NextResponse.json({ message: "Student not found" }, { status: 404 });
   }
 
-  const item = toApiStudentRecordFromUnknown(row);
-  if (!item) {
+  const studentRecord = toStudentRecordFromUnknown(row);
+  if (!studentRecord) {
     return NextResponse.json({ message: "Failed to map student" }, { status: 500 });
   }
 
-  return NextResponse.json(item);
+  const enrollmentRows = (await EnrollmentModel.find({ studentId: studentRecordId })
+    .sort({ updatedAt: -1 })
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
+
+  const enrollments = enrollmentRows
+    .map((item) => toEnrollmentRecordFromUnknown(item))
+    .filter((item): item is EnrollmentPersistedRecord => Boolean(item));
+
+  return NextResponse.json(decorateStudentDetailRecord(studentRecord, enrollments));
 }
