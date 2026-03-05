@@ -155,15 +155,52 @@ export function sanitizeCredits(value: unknown) {
 
 export function listDegreePrograms(options?: {
   search?: string;
+  faculty?: string;
+  code?: string;
+  award?: string;
+  creditsMin?: number;
+  creditsMax?: number;
+  durationYears?: number;
   status?: "" | DegreeProgramStatus;
   sort?: DegreeProgramSort;
 }) {
   const search = options?.search?.trim().toLowerCase() ?? "";
+  const faculty = normalizeCode(options?.faculty ?? "");
+  const code = normalizeCode(options?.code ?? "");
+  const award = options?.award?.trim().toLowerCase() ?? "";
+  const creditsMin = options?.creditsMin && options.creditsMin > 0 ? options.creditsMin : 0;
+  const creditsMax = options?.creditsMax && options.creditsMax > 0 ? options.creditsMax : 0;
+  const durationYears =
+    options?.durationYears && options.durationYears > 0 ? options.durationYears : 0;
   const status = options?.status ?? "";
   const sort = options?.sort ?? "updated";
 
   const filtered = degreeProgramStore().filter((program) => {
     if (program.isDeleted) {
+      return false;
+    }
+
+    if (faculty && program.facultyCode !== faculty) {
+      return false;
+    }
+
+    if (code && !program.code.includes(code)) {
+      return false;
+    }
+
+    if (award && program.award.toLowerCase() !== award) {
+      return false;
+    }
+
+    if (creditsMin && program.credits < creditsMin) {
+      return false;
+    }
+
+    if (creditsMax && program.credits > creditsMax) {
+      return false;
+    }
+
+    if (durationYears && program.durationYears !== durationYears) {
       return false;
     }
 

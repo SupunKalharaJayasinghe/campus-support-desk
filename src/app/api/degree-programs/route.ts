@@ -51,14 +51,37 @@ function sanitizeStatus(value: string | null): "" | DegreeProgramStatus {
   return "";
 }
 
+function sanitizePositiveNumber(value: string | null) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.floor(parsed);
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") ?? "";
+  const faculty = String(searchParams.get("faculty") ?? "")
+    .trim()
+    .toUpperCase();
+  const code = sanitizeDegreeProgramCode(searchParams.get("code"));
+  const award = String(searchParams.get("award") ?? "").trim();
+  const creditsMin = sanitizePositiveNumber(searchParams.get("creditsMin"));
+  const creditsMax = sanitizePositiveNumber(searchParams.get("creditsMax"));
+  const durationYears = sanitizePositiveNumber(searchParams.get("durationYears"));
   const status = sanitizeStatus(searchParams.get("status"));
   const sort = sanitizeSort(searchParams.get("sort"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
 
   const allItems = listDegreePrograms({
+    award,
+    code,
+    creditsMax,
+    creditsMin,
+    durationYears,
+    faculty,
     search,
     sort,
     status,
