@@ -7,10 +7,18 @@ export type StudentStream = "WEEKDAY" | "WEEKEND";
 export type StudentStatus = "ACTIVE" | "INACTIVE";
 export type StudentSort = "updated" | "created" | "az" | "za";
 
-export interface StudentWriteInput {
+export const DUPLICATE_ENROLLMENT_MESSAGE =
+  "Student already enrolled in this program intake";
+
+export interface StudentProfileWriteInput {
   firstName: string;
   lastName: string;
+  nicNumber: string;
   phone: string;
+  status: StudentStatus;
+}
+
+export interface EnrollmentWriteInput {
   facultyId: string;
   degreeProgramId: string;
   intakeId: string;
@@ -19,9 +27,12 @@ export interface StudentWriteInput {
   status: StudentStatus;
 }
 
-export interface StudentPersistedRecord
-  extends Omit<StudentWriteInput, "subgroup"> {
-  subgroup: string | null;
+export interface StudentRegistrationWriteInput {
+  profile: StudentProfileWriteInput;
+  enrollment: EnrollmentWriteInput;
+}
+
+export interface StudentPersistedRecord extends StudentProfileWriteInput {
   id: string;
   studentId: string;
   email: string;
@@ -29,15 +40,28 @@ export interface StudentPersistedRecord
   updatedAt: string;
 }
 
-export interface StudentApiRecord extends StudentPersistedRecord {
+export interface EnrollmentPersistedRecord extends EnrollmentWriteInput {
+  id: string;
+  studentId: string;
+  subgroup: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentApiEnrollment extends EnrollmentPersistedRecord {
   facultyName: string;
   degreeProgramName: string;
   intakeName: string;
-  intake: {
-    id: string;
-    name: string;
-    currentTerm: string;
-  };
+  currentTerm: string;
+}
+
+export interface StudentApiRecord extends StudentPersistedRecord {
+  enrollmentCount: number;
+  latestEnrollment: StudentApiEnrollment | null;
+}
+
+export interface StudentDetailApiRecord extends StudentApiRecord {
+  enrollments: StudentApiEnrollment[];
 }
 
 interface UserPersistedRecord {
@@ -69,17 +93,26 @@ const MONTH_NAME_TO_CODE: Record<string, string> = {
 };
 
 const globalForStudentRegistration = globalThis as typeof globalThis & {
-  __studentMemoryStore?: StudentPersistedRecord[];
+  __studentProfileMemoryStore?: StudentPersistedRecord[];
+  __studentEnrollmentMemoryStore?: EnrollmentPersistedRecord[];
   __studentUserMemoryStore?: UserPersistedRecord[];
   __studentCounterMemoryStore?: Map<string, number>;
 };
 
 function studentMemoryStore() {
-  if (!globalForStudentRegistration.__studentMemoryStore) {
-    globalForStudentRegistration.__studentMemoryStore = [];
+  if (!globalForStudentRegistration.__studentProfileMemoryStore) {
+    globalForStudentRegistration.__studentProfileMemoryStore = [];
   }
 
-  return globalForStudentRegistration.__studentMemoryStore;
+  return globalForStudentRegistration.__studentProfileMemoryStore;
+}
+
+function enrollmentMemoryStore() {
+  if (!globalForStudentRegistration.__studentEnrollmentMemoryStore) {
+    globalForStudentRegistration.__studentEnrollmentMemoryStore = [];
+  }
+
+  return globalForStudentRegistration.__studentEnrollmentMemoryStore;
 }
 
 function userMemoryStore() {
@@ -100,6 +133,67 @@ function counterMemoryStore() {
 
 function collapseSpaces(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function parseMonthCode(value: string) {
+  const normalized = value.toLowerCase().trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (/^(0[1-9]|1[0-2])$/.test(normalized)) {
+    return normalized;
+  }
+
+  const byFullName = MONTH_NAME_TO_CODE[normalized];
+  if (byFullName) {
+    return byFullName;
+  }
+
+  const partial = Object.entries(MONTH_NAME_TO_CODE).find(([monthName]) =>
+    monthName.startsWith(normalized)
+  );
+
+  return partial?.[1] ?? "";
+}
+
+function extractYearMonthFromIntakeName(name: string) {
+  const match = collapseSpaces(name).match(/(\d{4})\s+([A-Za-z0-9]+)/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const monthCode = parseMonthCode(String(match[2] ?? ""));
+  if (!Number.isFinite(year) || year < 2000 || year > 2100 || !monthCode) {
+    return null;
+  }
+
+  return { year, monthCode };
+}
+
+function enrollmentSearchText(item: StudentApiEnrollment) {
+  return [
+    item.facultyId,
+    item.facultyName,
+    item.degreeProgramId,
+    item.degreeProgramName,
+    item.intakeId,
+    item.intakeName,
+    item.currentTerm,
+    item.stream,
+    item.subgroup ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function sortEnrollmentsByLatest(
+  enrollments: StudentApiEnrollment[]
+): StudentApiEnrollment[] {
+  return [...enrollments].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
 }
 
 export function normalizeAcademicCode(value: unknown) {
@@ -128,49 +222,18 @@ export function sanitizePhone(value: unknown) {
   return collapseSpaces(String(value ?? "")).slice(0, 32);
 }
 
+export function sanitizeNicNumber(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^0-9A-Z]/g, "")
+    .slice(0, 20);
+}
+
 export function sanitizeSubgroup(value: unknown) {
   const trimmed = collapseSpaces(String(value ?? "")).slice(0, 40);
   return trimmed || null;
-}
-
-function parseMonthCode(value: string) {
-  const normalized = value.toLowerCase().trim();
-  if (!normalized) {
-    return "";
-  }
-
-  if (/^(0[1-9]|1[0-2])$/.test(normalized)) {
-    return normalized;
-  }
-
-  const byFullName = MONTH_NAME_TO_CODE[normalized];
-  if (byFullName) {
-    return byFullName;
-  }
-
-  const partial = Object.entries(MONTH_NAME_TO_CODE).find(([monthName]) =>
-    monthName.startsWith(normalized)
-  );
-  if (!partial) {
-    return "";
-  }
-
-  return partial[1];
-}
-
-function extractYearMonthFromIntakeName(name: string) {
-  const match = collapseSpaces(name).match(/(\d{4})\s+([A-Za-z0-9]+)/);
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const monthCode = parseMonthCode(String(match[2] ?? ""));
-  if (!Number.isFinite(year) || year < 2000 || year > 2100 || !monthCode) {
-    return null;
-  }
-
-  return { year, monthCode };
 }
 
 export function getStudentIdStartSeed() {
@@ -281,7 +344,9 @@ export function validateStudentRelations(input: {
   return { faculty, degree, intake };
 }
 
-export function decorateStudentRecord(record: StudentPersistedRecord): StudentApiRecord {
+export function decorateEnrollmentRecord(
+  record: EnrollmentPersistedRecord
+): StudentApiEnrollment {
   const faculty = findFaculty(record.facultyId);
   const degree = findDegreeProgram(record.degreeProgramId);
   const intake = findIntakeById(record.intakeId);
@@ -291,11 +356,38 @@ export function decorateStudentRecord(record: StudentPersistedRecord): StudentAp
     facultyName: faculty?.name ?? "",
     degreeProgramName: degree?.name ?? "",
     intakeName: intake?.name ?? "",
-    intake: {
-      id: intake?.id ?? record.intakeId,
-      name: intake?.name ?? "",
-      currentTerm: intake?.currentTerm ?? "",
-    },
+    currentTerm: intake?.currentTerm ?? "",
+  };
+}
+
+export function decorateStudentListRecord(
+  student: StudentPersistedRecord,
+  enrollments: EnrollmentPersistedRecord[]
+): StudentApiRecord {
+  const decoratedEnrollments = sortEnrollmentsByLatest(
+    enrollments.map((item) => decorateEnrollmentRecord(item))
+  );
+
+  return {
+    ...student,
+    enrollmentCount: decoratedEnrollments.length,
+    latestEnrollment: decoratedEnrollments[0] ?? null,
+  };
+}
+
+export function decorateStudentDetailRecord(
+  student: StudentPersistedRecord,
+  enrollments: EnrollmentPersistedRecord[]
+): StudentDetailApiRecord {
+  const decoratedEnrollments = sortEnrollmentsByLatest(
+    enrollments.map((item) => decorateEnrollmentRecord(item))
+  );
+
+  return {
+    ...student,
+    enrollmentCount: decoratedEnrollments.length,
+    latestEnrollment: decoratedEnrollments[0] ?? null,
+    enrollments: decoratedEnrollments,
   };
 }
 
@@ -307,22 +399,49 @@ export function listStudentsInMemory(options?: {
   const search = String(options?.search ?? "").trim().toLowerCase();
   const status = options?.status ?? "";
   const sort = options?.sort ?? "updated";
+  const enrollments = enrollmentMemoryStore();
 
-  const filtered = studentMemoryStore().filter((item) => {
-    if (status && item.status !== status) {
-      return false;
-    }
+  const mapped = studentMemoryStore()
+    .filter((student) => {
+      if (status && student.status !== status) {
+        return false;
+      }
 
-    if (!search) {
-      return true;
-    }
+      if (!search) {
+        return true;
+      }
 
-    return `${item.studentId} ${item.firstName} ${item.lastName} ${item.email}`
-      .toLowerCase()
-      .includes(search);
-  });
+      const studentSearch = [
+        student.studentId,
+        student.firstName,
+        student.lastName,
+        student.email,
+        student.nicNumber,
+      ]
+        .join(" ")
+        .toLowerCase();
 
-  return [...filtered].sort((left, right) => {
+      if (studentSearch.includes(search)) {
+        return true;
+      }
+
+      const studentEnrollments = enrollments.filter(
+        (item) => item.studentId === student.id
+      );
+
+      return studentEnrollments
+        .map((item) => enrollmentSearchText(decorateEnrollmentRecord(item)))
+        .some((text) => text.includes(search));
+    })
+    .map((student) => {
+      const studentEnrollments = enrollments.filter(
+        (item) => item.studentId === student.id
+      );
+
+      return decorateStudentListRecord(student, studentEnrollments);
+    });
+
+  return mapped.sort((left, right) => {
     if (sort === "az") {
       return left.studentId.localeCompare(right.studentId);
     }
@@ -342,6 +461,19 @@ export function listStudentsInMemory(options?: {
 export function findStudentInMemoryById(id: string) {
   const targetId = String(id ?? "").trim();
   return studentMemoryStore().find((item) => item.id === targetId) ?? null;
+}
+
+export function findStudentDetailInMemoryById(id: string) {
+  const target = findStudentInMemoryById(id);
+  if (!target) {
+    return null;
+  }
+
+  const enrollments = enrollmentMemoryStore().filter(
+    (item) => item.studentId === target.id
+  );
+
+  return decorateStudentDetailRecord(target, enrollments);
 }
 
 export function previewNextStudentIdentityInMemory(intakeId: string) {
@@ -364,6 +496,7 @@ export function previewNextStudentIdentityInMemory(intakeId: string) {
 function reserveNextStudentIdentityInMemory(intakeId: string) {
   const preview = previewNextStudentIdentityInMemory(intakeId);
   counterMemoryStore().set(preview.prefixKey, preview.nextSeq);
+
   return {
     prefixKey: preview.prefixKey,
     sequence: preview.nextSeq,
@@ -372,15 +505,58 @@ function reserveNextStudentIdentityInMemory(intakeId: string) {
   };
 }
 
-export async function createStudentAndUserInMemory(input: StudentWriteInput) {
-  const reserved = reserveNextStudentIdentityInMemory(input.intakeId);
+function createEnrollmentInMemoryInternal(
+  studentRecordId: string,
+  input: EnrollmentWriteInput
+) {
+  const store = enrollmentMemoryStore();
+  const duplicate = store.find(
+    (item) =>
+      item.studentId === studentRecordId &&
+      item.degreeProgramId === input.degreeProgramId &&
+      item.intakeId === input.intakeId
+  );
+
+  if (duplicate) {
+    throw new Error(DUPLICATE_ENROLLMENT_MESSAGE);
+  }
+
+  const now = new Date().toISOString();
+  const record: EnrollmentPersistedRecord = {
+    id: `enr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    studentId: studentRecordId,
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    subgroup: input.subgroup ?? null,
+    status: input.status,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.unshift(record);
+  return record;
+}
+
+export async function createStudentAndUserInMemory(
+  input: StudentRegistrationWriteInput
+) {
+  const reserved = reserveNextStudentIdentityInMemory(input.enrollment.intakeId);
   const students = studentMemoryStore();
   const users = userMemoryStore();
 
   const duplicateStudent = students.find(
-    (item) => item.studentId === reserved.studentId || item.email === reserved.email
+    (item) =>
+      item.studentId === reserved.studentId ||
+      item.email === reserved.email ||
+      item.nicNumber === input.profile.nicNumber
   );
   if (duplicateStudent) {
+    if (duplicateStudent.nicNumber === input.profile.nicNumber) {
+      throw new Error("NIC number already exists");
+    }
+
     throw new Error("Generated student ID already exists. Retry registration.");
   }
 
@@ -392,25 +568,34 @@ export async function createStudentAndUserInMemory(input: StudentWriteInput) {
   }
 
   const now = new Date().toISOString();
-  const studentId = `stu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const studentRecordId = `stu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const nextStudent: StudentPersistedRecord = {
-    id: studentId,
+    id: studentRecordId,
     studentId: reserved.studentId,
     email: reserved.email,
-    firstName: input.firstName,
-    lastName: input.lastName,
-    phone: input.phone,
-    facultyId: input.facultyId,
-    degreeProgramId: input.degreeProgramId,
-    intakeId: input.intakeId,
-    stream: input.stream,
-    subgroup: input.subgroup ?? null,
-    status: input.status,
+    firstName: input.profile.firstName,
+    lastName: input.profile.lastName,
+    nicNumber: input.profile.nicNumber,
+    phone: input.profile.phone,
+    status: input.profile.status,
     createdAt: now,
     updatedAt: now,
   };
 
-  const passwordHash = await bcrypt.hash(reserved.studentId, 10);
+  students.unshift(nextStudent);
+
+  try {
+    createEnrollmentInMemoryInternal(studentRecordId, input.enrollment);
+  } catch (error) {
+    const studentIndex = students.findIndex((item) => item.id === studentRecordId);
+    if (studentIndex >= 0) {
+      students.splice(studentIndex, 1);
+    }
+
+    throw error;
+  }
+
+  const passwordHash = await bcrypt.hash(input.profile.nicNumber, 10);
   const nextUser: UserPersistedRecord = {
     id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     username: reserved.studentId,
@@ -419,18 +604,42 @@ export async function createStudentAndUserInMemory(input: StudentWriteInput) {
     passwordHash,
     mustChangePassword: true,
     status: "ACTIVE",
-    studentRef: studentId,
+    studentRef: studentRecordId,
     createdAt: now,
     updatedAt: now,
   };
 
-  students.unshift(nextStudent);
   users.unshift(nextUser);
 
-  return nextStudent;
+  return findStudentDetailInMemoryById(studentRecordId);
 }
 
-export function updateStudentInMemory(id: string, input: StudentWriteInput) {
+export function addEnrollmentToStudentInMemory(
+  studentRecordId: string,
+  input: EnrollmentWriteInput
+) {
+  const student = findStudentInMemoryById(studentRecordId);
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  const enrollment = createEnrollmentInMemoryInternal(student.id, input);
+  const students = studentMemoryStore();
+  const index = students.findIndex((item) => item.id === student.id);
+  if (index >= 0) {
+    students[index] = {
+      ...students[index],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return decorateEnrollmentRecord(enrollment);
+}
+
+export function updateStudentInMemory(
+  id: string,
+  input: StudentProfileWriteInput
+) {
   const targetId = String(id ?? "").trim();
   const store = studentMemoryStore();
   const index = store.findIndex((item) => item.id === targetId);
@@ -438,22 +647,70 @@ export function updateStudentInMemory(id: string, input: StudentWriteInput) {
     return null;
   }
 
+  const duplicateNic = store.find(
+    (item) => item.id !== targetId && item.nicNumber === input.nicNumber
+  );
+  if (duplicateNic) {
+    throw new Error("NIC number already exists");
+  }
+
   const updated: StudentPersistedRecord = {
     ...store[index],
     firstName: input.firstName,
     lastName: input.lastName,
+    nicNumber: input.nicNumber,
     phone: input.phone,
-    facultyId: input.facultyId,
-    degreeProgramId: input.degreeProgramId,
-    intakeId: input.intakeId,
-    stream: input.stream,
-    subgroup: input.subgroup === undefined ? store[index].subgroup : input.subgroup,
     status: input.status,
     updatedAt: new Date().toISOString(),
   };
 
   store[index] = updated;
   return updated;
+}
+
+export async function resetStudentPasswordInMemory(studentRecordId: string) {
+  const targetId = String(studentRecordId ?? "").trim();
+  if (!targetId) {
+    throw new Error("Student not found");
+  }
+
+  const student = findStudentInMemoryById(targetId);
+  if (!student) {
+    throw new Error("Student not found");
+  }
+
+  if (!student.nicNumber) {
+    throw new Error("Student NIC number is missing");
+  }
+
+  const users = userMemoryStore();
+  const passwordHash = await bcrypt.hash(student.nicNumber, 10);
+  const now = new Date().toISOString();
+  const index = users.findIndex((user) => user.studentRef === student.id);
+
+  if (index >= 0) {
+    users[index] = {
+      ...users[index],
+      passwordHash,
+      mustChangePassword: true,
+      status: "ACTIVE",
+      updatedAt: now,
+    };
+    return;
+  }
+
+  users.unshift({
+    id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    username: student.studentId,
+    email: student.email,
+    role: "STUDENT",
+    passwordHash,
+    mustChangePassword: true,
+    status: "ACTIVE",
+    studentRef: student.id,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 export function deleteStudentInMemory(id: string) {
@@ -466,6 +723,13 @@ export function deleteStudentInMemory(id: string) {
 
   const target = students[index];
   students.splice(index, 1);
+
+  const enrollments = enrollmentMemoryStore();
+  for (let cursor = enrollments.length - 1; cursor >= 0; cursor -= 1) {
+    if (enrollments[cursor].studentId === target.id) {
+      enrollments.splice(cursor, 1);
+    }
+  }
 
   const users = userMemoryStore();
   const userIndex = users.findIndex((user) => user.studentRef === target.id);
@@ -488,4 +752,31 @@ export function isMongoDuplicateKeyError(error: unknown) {
 
   const row = error as { code?: unknown };
   return Number(row.code) === 11000;
+}
+
+export function getMongoDuplicateField(error: unknown) {
+  if (!isMongoDuplicateKeyError(error) || !error || typeof error !== "object") {
+    return null;
+  }
+
+  const row = error as {
+    keyPattern?: unknown;
+    keyValue?: unknown;
+  };
+
+  if (row.keyPattern && typeof row.keyPattern === "object") {
+    const key = Object.keys(row.keyPattern as Record<string, unknown>)[0];
+    if (key) {
+      return key;
+    }
+  }
+
+  if (row.keyValue && typeof row.keyValue === "object") {
+    const key = Object.keys(row.keyValue as Record<string, unknown>)[0];
+    if (key) {
+      return key;
+    }
+  }
+
+  return null;
 }
