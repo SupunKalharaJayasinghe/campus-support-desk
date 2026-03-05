@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MessageCircleQuestion, ArrowLeft, ShieldCheck } from "lucide-react";
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
+import communityImage from "@/app/images/community/community.jpg";
 
 const quickTips = [
   "Search for similar questions before posting.",
@@ -11,16 +12,19 @@ const quickTips = [
 
 export default function CommunityHelpPage() {
   return (
-    <main className="min-h-screen bg-bg py-16 lg:py-24">
-       <Link
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primaryHover hover:shadow-shadowHover"
-              href="/"
-            >
-              <ArrowLeft size={16} />
-              Back to Main Page
-            </Link>
+    <main
+      className="min-h-screen bg-cover bg-center bg-no-repeat py-16 lg:py-24"
+      style={{ backgroundImage: `url(${communityImage.src})` }}
+    >
+      <Link
+        className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-primaryHover hover:shadow-shadowHover"
+        href="/"
+      >
+        <ArrowLeft size={16} />
+        Back to Main Page
+      </Link>
       <Container size="6xl">
-        <div className="rounded-3xl border border-border bg-card p-8 shadow-shadow md:p-12">
+        <div className="rounded-3xl border border-gray-500/40 bg-gray-300/80 p-8 shadow-shadow md:p-12">
           <p className="text-xs uppercase tracking-[0.16em] text-text/60">
             Support Space
           </p>
@@ -33,7 +37,7 @@ export default function CommunityHelpPage() {
           </p>
 
           <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <Card accent className="p-6">
+            <Card accent className="bg-gray-100/90 p-6">
               <div className="flex items-start gap-3">
                 <div className="mt-1 rounded-full bg-primary/10 p-2 text-primary">
                   <MessageCircleQuestion size={18} />
@@ -51,7 +55,7 @@ export default function CommunityHelpPage() {
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className="bg-gray-100/90 p-6">
               <div className="flex items-start gap-3">
                 <div className="mt-1 rounded-full bg-primary/10 p-2 text-primary">
                   <ShieldCheck size={18} />
@@ -71,23 +75,23 @@ export default function CommunityHelpPage() {
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
-           
+
             <Link
-              className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-tint"
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-500/40 bg-gray-100/90 px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-gray-50"
               href="/report-problem"
             >
               Report a Problem
             </Link>
 
-             <Link
-              className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-tint"
-              href="/"
+            <Link
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-500/40 bg-gray-100/90 px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-gray-50"
+              href="/community"
             >
               Goto to Community
             </Link>
 
             <Link
-              className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-tint"
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-500/40 bg-gray-100/90 px-5 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-gray-50"
               href="/"
             >
               FAQ
