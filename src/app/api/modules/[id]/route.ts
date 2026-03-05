@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import "@/models/Module";
+import "@/models/ModuleOffering";
 import { connectMongoose } from "@/lib/mongoose";
 import { findDegreeProgram } from "@/lib/degree-program-store";
 import { findFaculty } from "@/lib/faculty-store";
+import { listModuleOfferingsByModuleId } from "@/lib/module-offering-store";
+import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   deleteModule,
   findModuleById,
@@ -16,12 +19,34 @@ import {
   type SyllabusVersion,
 } from "@/lib/module-store";
 
+function hasSameItems(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const leftSet = new Set(left);
+  return right.every((item) => leftSet.has(item));
+}
+
+async function countModuleDependencies(moduleId: string, useMongoose: boolean) {
+  const storeCount = listModuleOfferingsByModuleId(moduleId).length;
+
+  if (!useMongoose) {
+    return storeCount;
+  }
+
+  const dbCount = await ModuleOfferingModel.countDocuments({ moduleId }).catch(() => 0);
+
+  return dbCount > 0 ? dbCount : storeCount;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
   await connectMongoose().catch(() => null);
-  const moduleRecord = findModuleById(params.id);
+  const moduleId = String(params.id ?? "").trim();
+  const moduleRecord = findModuleById(moduleId);
   if (!moduleRecord) {
     return NextResponse.json({ message: "Module not found" }, { status: 404 });
   }
@@ -34,7 +59,13 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    const moduleId = String(params.id ?? "").trim();
+    const currentModule = findModuleById(moduleId);
+    if (!currentModule) {
+      return NextResponse.json({ message: "Module not found" }, { status: 404 });
+    }
+
     const body = (await request.json()) as Partial<{
       name: string;
       credits: number;
@@ -108,7 +139,33 @@ export async function PUT(
       );
     }
 
-    const updated = updateModule(params.id, {
+    const dependencyCount = await countModuleDependencies(
+      moduleId,
+      Boolean(mongooseConnection)
+    );
+    if (dependencyCount > 0) {
+      const isFacultyChanged = currentModule.facultyCode !== facultyCode;
+      const isTermsChanged = !hasSameItems(
+        currentModule.applicableTerms,
+        applicableTerms
+      );
+      const isDegreesChanged = !hasSameItems(
+        currentModule.applicableDegrees,
+        applicableDegrees
+      );
+
+      if (isFacultyChanged || isTermsChanged || isDegreesChanged) {
+        return NextResponse.json(
+          {
+            message:
+              "This module is assigned. Faculty, applicable degrees, and applicable terms are locked.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const updated = updateModule(moduleId, {
       name,
       credits,
       facultyCode,
@@ -131,8 +188,22 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  await connectMongoose().catch(() => null);
-  const deleted = deleteModule(params.id);
+  const mongooseConnection = await connectMongoose().catch(() => null);
+  const moduleId = String(params.id ?? "").trim();
+  const moduleRecord = findModuleById(moduleId);
+  if (!moduleRecord) {
+    return NextResponse.json({ message: "Module not found" }, { status: 404 });
+  }
+
+  const dependencyCount = await countModuleDependencies(
+    moduleId,
+    Boolean(mongooseConnection)
+  );
+  if (dependencyCount > 0) {
+    return NextResponse.json({ message: "Module is assigned" }, { status: 409 });
+  }
+
+  const deleted = deleteModule(moduleId);
   if (!deleted) {
     return NextResponse.json({ message: "Module not found" }, { status: 404 });
   }
