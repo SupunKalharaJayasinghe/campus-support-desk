@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
@@ -63,6 +72,16 @@ interface ProgramModalState {
   targetCode?: string;
 }
 
+interface DegreeProgramFilters {
+  faculty: string;
+  code: string;
+  award: string;
+  creditsMin: string;
+  creditsMax: string;
+  durationYears: string;
+  status: "" | ProgramStatus;
+}
+
 const AWARD_OPTIONS = ["BSc", "BSc (Hons)", "BEng", "BEng (Hons)", "BBA"];
 const DURATION_OPTIONS = [
   { label: "3 yrs", value: "3" },
@@ -82,6 +101,18 @@ function emptyForm(): ProgramFormState {
     credits: "120",
     durationYears: "4",
     status: "ACTIVE",
+  };
+}
+
+function emptyFilters(): DegreeProgramFilters {
+  return {
+    faculty: "",
+    code: "",
+    award: "",
+    creditsMin: "",
+    creditsMax: "",
+    durationYears: "",
+    status: "",
   };
 }
 
@@ -133,11 +164,13 @@ export default function DegreeProgramsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearch = useDeferredValue(searchQuery);
-  const [statusFilter, setStatusFilter] = useState<"" | ProgramStatus>("");
   const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<DegreeProgramFilters>(emptyFilters);
+  const [filterDraft, setFilterDraft] = useState<DegreeProgramFilters>(emptyFilters);
   const [modal, setModal] = useState<ProgramModalState | null>(null);
   const [form, setForm] = useState<ProgramFormState>(emptyForm);
   const [errors, setErrors] = useState<ProgramFormErrors>({});
@@ -145,7 +178,16 @@ export default function DegreeProgramsPage() {
 
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, pageCount);
-  const isOverlayOpen = Boolean(modal || deleteTargetCode);
+  const isOverlayOpen = Boolean(modal || deleteTargetCode || isFiltersOpen);
+  const activeFilterCount = [
+    appliedFilters.faculty,
+    appliedFilters.code,
+    appliedFilters.award,
+    appliedFilters.creditsMin,
+    appliedFilters.creditsMax,
+    appliedFilters.durationYears,
+    appliedFilters.status,
+  ].filter(Boolean).length;
   const deleteTarget =
     deleteTargetCode === null
       ? null
@@ -156,6 +198,11 @@ export default function DegreeProgramsPage() {
     setForm(emptyForm());
     setErrors({});
   }, []);
+
+  const closeFilters = useCallback(() => {
+    setIsFiltersOpen(false);
+    setFilterDraft(appliedFilters);
+  }, [appliedFilters]);
 
   const loadFacultyOptions = useCallback(async () => {
     try {
@@ -176,7 +223,15 @@ export default function DegreeProgramsPage() {
       try {
         const params = new URLSearchParams();
         if (deferredSearch.trim()) params.set("search", deferredSearch.trim());
-        if (statusFilter) params.set("status", statusFilter);
+        if (appliedFilters.faculty) params.set("faculty", appliedFilters.faculty);
+        if (appliedFilters.code) params.set("code", appliedFilters.code);
+        if (appliedFilters.award) params.set("award", appliedFilters.award);
+        if (appliedFilters.creditsMin) params.set("creditsMin", appliedFilters.creditsMin);
+        if (appliedFilters.creditsMax) params.set("creditsMax", appliedFilters.creditsMax);
+        if (appliedFilters.durationYears) {
+          params.set("durationYears", appliedFilters.durationYears);
+        }
+        if (appliedFilters.status) params.set("status", appliedFilters.status);
         params.set("sort", sortBy);
         params.set("page", String(safePage));
         params.set("pageSize", String(pageSize));
@@ -208,7 +263,7 @@ export default function DegreeProgramsPage() {
         }
       }
     },
-    [deferredSearch, pageSize, safePage, sortBy, statusFilter, toast]
+    [appliedFilters, deferredSearch, pageSize, safePage, sortBy, toast]
   );
 
   useEffect(() => {
@@ -254,12 +309,26 @@ export default function DegreeProgramsPage() {
       }
       if (modal && !isSaving) {
         closeModal();
+        return;
+      }
+
+      if (isFiltersOpen) {
+        closeFilters();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [closeModal, deleteTargetCode, isDeleting, isOverlayOpen, isSaving, modal]);
+  }, [
+    closeFilters,
+    closeModal,
+    deleteTargetCode,
+    isDeleting,
+    isFiltersOpen,
+    isOverlayOpen,
+    isSaving,
+    modal,
+  ]);
 
   const openAddModal = () => {
     setModal({ mode: "add" });
@@ -282,6 +351,36 @@ export default function DegreeProgramsPage() {
       status: program.status,
     });
     setErrors({});
+  };
+
+  const openFiltersModal = () => {
+    setFilterDraft(appliedFilters);
+    setIsFiltersOpen(true);
+  };
+
+  const applyFilters = () => {
+    const normalizedFilters: DegreeProgramFilters = {
+      ...filterDraft,
+      faculty: filterDraft.faculty.trim().toUpperCase(),
+      code: normalizeCode(filterDraft.code),
+      award: filterDraft.award.trim(),
+      creditsMin: filterDraft.creditsMin.trim(),
+      creditsMax: filterDraft.creditsMax.trim(),
+      durationYears: filterDraft.durationYears.trim(),
+      status: filterDraft.status,
+    };
+
+    setAppliedFilters(normalizedFilters);
+    setPage(1);
+    setIsFiltersOpen(false);
+  };
+
+  const clearFilters = () => {
+    const nextFilters = emptyFilters();
+    setFilterDraft(nextFilters);
+    setAppliedFilters(nextFilters);
+    setPage(1);
+    setIsFiltersOpen(false);
   };
 
   const validateForm = () => {
@@ -453,21 +552,15 @@ export default function DegreeProgramsPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Status</label>
-              <Select
-                aria-label="Filter by status"
-                className="h-12"
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as "" | ProgramStatus);
-                  setPage(1);
-                }}
-                value={statusFilter}
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Filters</label>
+              <Button
+                className="h-12 justify-start gap-2 border-slate-300 bg-white px-4 text-heading hover:bg-slate-50"
+                onClick={openFiltersModal}
+                variant="secondary"
               >
-                <option value="">All</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-                <option value="DRAFT">Draft</option>
-              </Select>
+                <SlidersHorizontal size={16} />
+                {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+              </Button>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -582,6 +675,196 @@ export default function DegreeProgramsPage() {
           totalItems={totalCount}
         />
       </Card>
+
+      {isFiltersOpen ? (
+        <div
+          className="fixed inset-0 z-[92] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeFilters();
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.24)]"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">FILTERS</p>
+                <p className="mt-1 text-2xl font-semibold text-heading">Filter Degree Programs</p>
+                <p className="mt-1 text-sm text-text/65">Refine the list using faculty, award, credits, and status.</p>
+              </div>
+              <button
+                aria-label="Close filters"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading"
+                onClick={closeFilters}
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-6">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="filterFaculty">Faculty</label>
+                  <Select
+                    className="h-12"
+                    id="filterFaculty"
+                    onChange={(event) =>
+                      setFilterDraft((previous) => ({
+                        ...previous,
+                        faculty: event.target.value,
+                      }))
+                    }
+                    value={filterDraft.faculty}
+                  >
+                    <option value="">All Faculties</option>
+                    {facultyOptions.map((faculty) => (
+                      <option key={faculty.code} value={faculty.code}>
+                        {faculty.code}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="filterProgramCode">Program Code</label>
+                  <Input
+                    className="h-12"
+                    id="filterProgramCode"
+                    onChange={(event) =>
+                      setFilterDraft((previous) => ({
+                        ...previous,
+                        code: normalizeCode(event.target.value),
+                      }))
+                    }
+                    placeholder="SE"
+                    value={filterDraft.code}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="filterAward">Award</label>
+                  <Select
+                    className="h-12"
+                    id="filterAward"
+                    onChange={(event) =>
+                      setFilterDraft((previous) => ({
+                        ...previous,
+                        award: event.target.value,
+                      }))
+                    }
+                    value={filterDraft.award}
+                  >
+                    <option value="">All Awards</option>
+                    {AWARD_OPTIONS.map((award) => (
+                      <option key={award} value={award}>
+                        {award}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="filterDuration">Duration</label>
+                  <Select
+                    className="h-12"
+                    id="filterDuration"
+                    onChange={(event) =>
+                      setFilterDraft((previous) => ({
+                        ...previous,
+                        durationYears: event.target.value,
+                      }))
+                    }
+                    value={filterDraft.durationYears}
+                  >
+                    <option value="">All Durations</option>
+                    {DURATION_OPTIONS.map((duration) => (
+                      <option key={duration.value} value={duration.value}>
+                        {duration.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Credits Range</label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      className="h-12"
+                      min="0"
+                      onChange={(event) =>
+                        setFilterDraft((previous) => ({
+                          ...previous,
+                          creditsMin: event.target.value,
+                        }))
+                      }
+                      placeholder="Min credits"
+                      type="number"
+                      value={filterDraft.creditsMin}
+                    />
+                    <Input
+                      className="h-12"
+                      min="0"
+                      onChange={(event) =>
+                        setFilterDraft((previous) => ({
+                          ...previous,
+                          creditsMax: event.target.value,
+                        }))
+                      }
+                      placeholder="Max credits"
+                      type="number"
+                      value={filterDraft.creditsMax}
+                    />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="filterStatus">Status</label>
+                  <Select
+                    className="h-12"
+                    id="filterStatus"
+                    onChange={(event) =>
+                      setFilterDraft((previous) => ({
+                        ...previous,
+                        status: event.target.value as "" | ProgramStatus,
+                      }))
+                    }
+                    value={filterDraft.status}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="DRAFT">Draft</option>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4 shadow-[0_-1px_0_rgba(15,23,42,0.04)]">
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <Button
+                  className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                  onClick={clearFilters}
+                  variant="secondary"
+                >
+                  Clear
+                </Button>
+                <Button
+                  className="h-11 min-w-[148px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+                  onClick={applyFilters}
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {modal ? (
         <div

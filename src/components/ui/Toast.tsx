@@ -17,28 +17,55 @@ const variantConfig: Record<
   {
     label: string;
     Icon: typeof CheckCircle2;
+    containerClassName: string;
     iconClassName: string;
+    textClassName: string;
+    titleClassName: string;
+    messageClassName: string;
+    closeButtonClassName: string;
+    trackClassName: string;
     progressClassName: string;
   }
 > = {
   success: {
     label: "Success",
     Icon: CheckCircle2,
-    iconClassName:
-      "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100",
-    progressClassName: "bg-emerald-500",
+    containerClassName: "border-emerald-500/70 bg-emerald-700 ring-1 ring-emerald-400/30",
+    iconClassName: "bg-white/18 text-white ring-1 ring-white/25",
+    textClassName: "text-white/85",
+    titleClassName: "text-white",
+    messageClassName: "text-white/88",
+    closeButtonClassName:
+      "border-white/30 bg-white/10 text-white/85 hover:bg-white/20 hover:text-white",
+    trackClassName: "bg-white/24",
+    progressClassName: "bg-white",
   },
   error: {
     label: "Failed",
     Icon: AlertTriangle,
-    iconClassName: "bg-rose-50 text-rose-600 ring-1 ring-rose-100",
-    progressClassName: "bg-rose-500",
+    containerClassName: "border-rose-500/70 bg-rose-700 ring-1 ring-rose-400/30",
+    iconClassName: "bg-white/18 text-white ring-1 ring-white/25",
+    textClassName: "text-white/85",
+    titleClassName: "text-white",
+    messageClassName: "text-white/88",
+    closeButtonClassName:
+      "border-white/30 bg-white/10 text-white/85 hover:bg-white/20 hover:text-white",
+    trackClassName: "bg-white/24",
+    progressClassName: "bg-white",
   },
   info: {
     label: "Info",
     Icon: Info,
-    iconClassName: "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
-    progressClassName: "bg-blue-500",
+    containerClassName:
+      "border-[#1D4FA6]/80 bg-[#0339A6] ring-1 ring-[#6697E8]/35",
+    iconClassName: "bg-white/18 text-white ring-1 ring-white/25",
+    textClassName: "text-white/85",
+    titleClassName: "text-white",
+    messageClassName: "text-white/88",
+    closeButtonClassName:
+      "border-white/30 bg-white/10 text-white/85 hover:bg-white/20 hover:text-white",
+    trackClassName: "bg-white/24",
+    progressClassName: "bg-white",
   },
 };
 
@@ -50,12 +77,24 @@ export default function Toast({
   closing,
   onClose,
 }: ToastProps) {
-  const { Icon, iconClassName, label, progressClassName } = variantConfig[variant];
+  const {
+    Icon,
+    containerClassName,
+    iconClassName,
+    label,
+    textClassName,
+    titleClassName,
+    messageClassName,
+    closeButtonClassName,
+    trackClassName,
+    progressClassName,
+  } = variantConfig[variant];
 
   return (
     <div
       className={[
-        "pointer-events-auto relative w-full overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.16)] ring-1 ring-black/5 transition-all duration-200",
+        "pointer-events-auto relative w-full overflow-hidden rounded-3xl border p-4 shadow-[0_18px_40px_rgba(15,23,42,0.2)] transition-all duration-200",
+        containerClassName,
         closing ? "translate-y-2 opacity-0" : "translate-y-0 opacity-100",
       ].join(" ")}
       role="status"
@@ -71,16 +110,18 @@ export default function Toast({
             <Icon size={18} />
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text/55">
+            <p className={["text-[11px] font-semibold uppercase tracking-[0.12em]", textClassName].join(" ")}>
               {label}
             </p>
-            <p className="mt-1 text-sm font-semibold text-heading">{title}</p>
-            {message ? <p className="mt-1 text-sm leading-6 text-text/78">{message}</p> : null}
+            <p className={["mt-1 text-sm font-semibold", titleClassName].join(" ")}>{title}</p>
+            {message ? (
+              <p className={["mt-1 text-sm leading-6", messageClassName].join(" ")}>{message}</p>
+            ) : null}
           </div>
         </div>
         <Button
           aria-label="Dismiss toast"
-          className="h-8 w-8 shrink-0 rounded-xl border border-slate-200 bg-white p-0 text-text/70 hover:bg-slate-50 hover:text-heading"
+          className={["h-8 w-8 shrink-0 rounded-xl border p-0", closeButtonClassName].join(" ")}
           onClick={onClose}
           variant="ghost"
         >
@@ -88,7 +129,7 @@ export default function Toast({
         </Button>
       </div>
 
-      <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className={["mt-4 h-1 w-full overflow-hidden rounded-full", trackClassName].join(" ")}>
         <div
           className={["toast-progress h-full rounded-full", progressClassName].join(" ")}
           style={{ animationDuration: `${duration}ms` }}

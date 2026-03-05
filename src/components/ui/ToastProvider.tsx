@@ -109,7 +109,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         aria-atomic="true"
         aria-live="polite"
-        className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(24rem,calc(100%-2rem))] flex-col gap-3"
+        className="pointer-events-none fixed right-4 top-4 z-[999] flex w-[min(24rem,calc(100%-2rem))] flex-col gap-3"
       >
         {toasts.map((item) => (
           <div className={item.closing ? "toast-exit" : "toast-enter"} key={item.id}>
