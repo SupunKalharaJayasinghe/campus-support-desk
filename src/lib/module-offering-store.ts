@@ -110,6 +110,12 @@ function hasOfferingProgress(
   return offering.hasGrades || offering.hasAttendance || offering.hasContent;
 }
 
+export function hasModuleOfferingProgress(
+  offering: Pick<ModuleOfferingRecord, "hasGrades" | "hasAttendance" | "hasContent">
+) {
+  return hasOfferingProgress(offering);
+}
+
 function isModuleApplicableToIntakeTerm(
   moduleRecord: Pick<ModuleRecord, "facultyCode" | "applicableDegrees" | "applicableTerms">,
   intake: Pick<IntakeRecord, "facultyCode" | "degreeCode">,
@@ -211,6 +217,15 @@ export function listModuleOfferings(options?: {
       return `${offering.moduleCode} ${offering.moduleName}`.toLowerCase().includes(search);
     })
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export function listModuleOfferingsByModuleId(moduleId: string) {
+  const targetModuleId = String(moduleId ?? "").trim();
+  if (!targetModuleId) {
+    return [] as ModuleOfferingRecord[];
+  }
+
+  return listModuleOfferings().filter((offering) => offering.moduleId === targetModuleId);
 }
 
 export function findModuleOfferingById(id: string) {

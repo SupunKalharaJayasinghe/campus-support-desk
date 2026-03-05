@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import "@/models/ModuleOffering";
 import { connectMongoose } from "@/lib/mongoose";
+import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   deleteModuleOffering,
   findModuleOfferingById,
+  hasModuleOfferingProgress,
   updateModuleOffering,
   type SyllabusVersion,
 } from "@/lib/module-offering-store";
@@ -53,8 +56,48 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  await connectMongoose().catch(() => null);
-  const deleted = deleteModuleOffering(params.id);
+  const mongooseConnection = await connectMongoose().catch(() => null);
+  const offeringId = String(params.id ?? "").trim();
+
+  if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
+    const dbOffering = (await ModuleOfferingModel.findById(offeringId)
+      .select("_id hasGrades hasAttendance hasContent")
+      .lean()
+      .exec()
+      .catch(() => null)) as Record<string, unknown> | null;
+
+    if (dbOffering) {
+      if (
+        hasModuleOfferingProgress({
+          hasGrades: dbOffering.hasGrades === true,
+          hasAttendance: dbOffering.hasAttendance === true,
+          hasContent: dbOffering.hasContent === true,
+        })
+      ) {
+        return NextResponse.json(
+          { message: "Offering has grades, attendance, or content data" },
+          { status: 409 }
+        );
+      }
+
+      await ModuleOfferingModel.deleteOne({ _id: offeringId }).catch(() => null);
+      return NextResponse.json({ ok: true });
+    }
+  }
+
+  const offering = findModuleOfferingById(offeringId);
+  if (!offering) {
+    return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
+  }
+
+  if (hasModuleOfferingProgress(offering)) {
+    return NextResponse.json(
+      { message: "Offering has grades, attendance, or content data" },
+      { status: 409 }
+    );
+  }
+
+  const deleted = deleteModuleOffering(offeringId);
   if (!deleted) {
     return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
   }
