@@ -1,16 +1,26 @@
-import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
+import { NextResponse } from "next/server";
+import mongoose from "mongoose";
+import { connectDB } from "@/lib/mongodb";
 
 export async function GET() {
-  const client = await clientPromise;
-  const dbName = process.env.MONGODB_DB || 'unihub';
-  const db = client.db(dbName);
+  try {
+    await connectDB();
 
-  const collections = await db.collections();
+    const db = mongoose.connection.db;
 
-  return NextResponse.json({
-    ok: true,
-    db: dbName,
-    collections: collections.map((c) => c.collectionName),
-  });
+    if (!db) {
+      return NextResponse.json({ ok: false, error: "Database not available" }, { status: 500 });
+    }
+
+    const collections = await db.listCollections().toArray();
+
+    return NextResponse.json({
+      ok: true,
+      db: db.databaseName,
+      collections: collections.map((c) => c.name),
+    });
+  } catch (error) {
+    console.error("health GET failed", error);
+    return NextResponse.json({ ok: false, error: "Health check failed" }, { status: 500 });
+  }
 }

@@ -17,5 +17,7 @@ const ReplyVoteSchema = new Schema(
 { timestamps: true }
 );
 
+ReplyVoteSchema.index({ replyId: 1, userId: 1 }, { unique: true });
+
 export default mongoose.models.ReplyVote ||
 mongoose.model("ReplyVote", ReplyVoteSchema);

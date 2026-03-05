@@ -2,21 +2,38 @@ import { connectDB } from "@/lib/mongodb";
 import Badge from "@/model/badge";
 
 export async function GET() {
+  try {
+    await connectDB();
 
-  await connectDB();
+    const badges = await Badge.find();
 
-  const badges = await Badge.find();
-
-  return Response.json(badges);
+    return Response.json(badges);
+  } catch (error) {
+    console.error("badges GET failed", error);
+    return Response.json({ error: "Failed to fetch badges" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
+  try {
+    await connectDB();
 
-  await connectDB();
+    const body = await req.json();
+    const { name, pointsRequired } = body;
 
-  const body = await req.json();
+    if (!name) {
+      return Response.json({ error: "name is required" }, { status: 400 });
+    }
 
-  const badge = await Badge.create(body);
+    if (pointsRequired != null && typeof pointsRequired !== "number") {
+      return Response.json({ error: "pointsRequired must be a number" }, { status: 400 });
+    }
 
-  return Response.json(badge);
+    const badge = await Badge.create(body);
+
+    return Response.json(badge, { status: 201 });
+  } catch (error) {
+    console.error("badges POST failed", error);
+    return Response.json({ error: "Failed to create badge" }, { status: 500 });
+  }
 }

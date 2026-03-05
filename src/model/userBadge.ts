@@ -22,5 +22,7 @@ const UserBadgeSchema = new Schema(
 { timestamps: true }
 );
 
+UserBadgeSchema.index({ userId: 1, badgeId: 1 }, { unique: true });
+
 export default mongoose.models.UserBadge ||
 mongoose.model("UserBadge", UserBadgeSchema);
