@@ -117,8 +117,16 @@ export async function GET(request: Request) {
   const search = searchParams.get("search") ?? "";
   const status = sanitizeStatus(searchParams.get("status"));
   const sort = sanitizeSort(searchParams.get("sort"));
-  const faculty = normalizeCode(searchParams.get("faculty"));
-  const degree = normalizeCode(searchParams.get("degree"));
+  const faculty = normalizeCode(
+    searchParams.get("faculty") ??
+      searchParams.get("facultyId") ??
+      searchParams.get("facultyCode")
+  );
+  const degree = normalizeCode(
+    searchParams.get("degree") ??
+      searchParams.get("degreeProgramId") ??
+      searchParams.get("degreeCode")
+  );
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
 
   const allItems = listIntakes({

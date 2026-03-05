@@ -1,504 +1,945 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Download, Pencil, Plus, Search, Trash2, UserPlus2 } from "lucide-react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { useAdminContext } from "@/components/admin/AdminContext";
 import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
-import { useAdminContext } from "@/components/admin/AdminContext";
 
-type StudentStatus = "Active" | "Inactive" | "Suspended";
+type StudentStatus = "ACTIVE" | "INACTIVE";
+type StudentStream = "WEEKDAY" | "WEEKEND";
+type SortOption = "updated" | "created" | "az" | "za";
+type PageSize = 10 | 25 | 50 | 100;
 
 interface StudentRecord {
   id: string;
   studentId: string;
-  name: string;
   email: string;
-  faculty: string;
-  degree: string;
-  intake: string;
-  term: string;
-  stream: string;
-  subgroup: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  facultyId: string;
+  facultyName: string;
+  degreeProgramId: string;
+  degreeProgramName: string;
+  intakeId: string;
+  intakeName: string;
+  intakeCurrentTerm: string;
+  stream: StudentStream;
   status: StudentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface FacultyOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface DegreeOption {
+  id: string;
+  code: string;
+  name: string;
+  facultyCode: string;
+}
+
+interface IntakeOption {
+  id: string;
+  name: string;
+  facultyCode: string;
+  degreeCode: string;
+  currentTerm: string;
+  status: string;
+}
+
+interface StudentsResponse {
+  items: StudentRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 interface StudentFormState {
-  studentId: string;
-  name: string;
-  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
   status: StudentStatus;
+  studentId: string;
+  email: string;
 }
 
-const STUDENTS_SEED: StudentRecord[] = [
-  {
-    id: "st-0001",
-    studentId: "IT23123456",
-    name: "Maya Rodrigo",
-    email: "maya.rodrigo@campus.edu",
-    faculty: "FOC",
-    degree: "SE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.1",
-    status: "Active",
-  },
-  {
-    id: "st-0002",
-    studentId: "IT23123457",
-    name: "Ava Martin",
-    email: "ava.martin@campus.edu",
-    faculty: "FOC",
-    degree: "SE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.2",
-    status: "Active",
-  },
-  {
-    id: "st-0003",
-    studentId: "IT23123458",
-    name: "Noah Perera",
-    email: "noah.perera@campus.edu",
-    faculty: "FOC",
-    degree: "SE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.3",
-    status: "Suspended",
-  },
-  {
-    id: "st-0004",
-    studentId: "CS22110402",
-    name: "Thilini Dias",
-    email: "thilini.dias@campus.edu",
-    faculty: "FOC",
-    degree: "CS",
-    intake: "2027 February",
-    term: "Y1S2",
-    stream: "Weekday",
-    subgroup: "1.1",
-    status: "Active",
-  },
-  {
-    id: "st-0005",
-    studentId: "EN20198112",
-    name: "Kalum Perera",
-    email: "kalum.perera@campus.edu",
-    faculty: "FOE",
-    degree: "CE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.1",
-    status: "Inactive",
-  },
-  {
-    id: "st-0006",
-    studentId: "BU20261201",
-    name: "Sachi Perera",
-    email: "sachi.perera@campus.edu",
-    faculty: "FOB",
-    degree: "BIZ",
-    intake: "2026 October",
-    term: "Y1S1",
-    stream: "Weekend",
-    subgroup: "1.1",
-    status: "Active",
-  },
-  {
-    id: "st-0007",
-    studentId: "BU20261202",
-    name: "Chamath Silva",
-    email: "chamath.silva@campus.edu",
-    faculty: "FOB",
-    degree: "FIN",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekend",
-    subgroup: "1.2",
-    status: "Active",
-  },
-  {
-    id: "st-0008",
-    studentId: "IT23124010",
-    name: "Ruvin Silva",
-    email: "ruvin.silva@campus.edu",
-    faculty: "FOC",
-    degree: "IT",
-    intake: "2026 October",
-    term: "Y1S1",
-    stream: "Weekend",
-    subgroup: "1.1",
-    status: "Active",
-  },
-  {
-    id: "st-0009",
-    studentId: "IT23124011",
-    name: "Nina Peris",
-    email: "nina.peris@campus.edu",
-    faculty: "FOC",
-    degree: "SE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.1",
-    status: "Active",
-  },
-  {
-    id: "st-0010",
-    studentId: "IT23124012",
-    name: "Kavindu Sen",
-    email: "kavindu.sen@campus.edu",
-    faculty: "FOC",
-    degree: "SE",
-    intake: "2026 June",
-    term: "Y1S1",
-    stream: "Weekday",
-    subgroup: "1.2",
-    status: "Active",
-  },
-];
-
-type PageSize = 10 | 25 | 50 | 100;
+interface StudentModalState {
+  mode: "add" | "edit";
+  targetId?: string;
+}
 
 function cn(...classes: Array<string | undefined | false>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function normalizeAcademicCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
+}
+
+function sanitizeStudentStatus(value: unknown): StudentStatus {
+  return value === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+}
+
+function sanitizeStudentStream(value: unknown): StudentStream {
+  return value === "WEEKEND" ? "WEEKEND" : "WEEKDAY";
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function collapseSpaces(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function emptyForm(): StudentFormState {
+  return {
+    firstName: "",
+    lastName: "",
+    phone: "",
+    facultyId: "",
+    degreeProgramId: "",
+    intakeId: "",
+    stream: "WEEKDAY",
+    status: "ACTIVE",
+    studentId: "",
+    email: "",
+  };
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
 function statusVariant(status: StudentStatus) {
-  if (status === "Active") return "success";
-  if (status === "Suspended") return "warning";
-  return "neutral";
+  return status === "ACTIVE" ? "success" : "neutral";
 }
 
-function createEmptyForm(): StudentFormState {
-  return { studentId: "", name: "", email: "", status: "Active" };
+async function readJson<T>(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | T
+    | { message?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === "object" && "message" in payload && payload.message
+        ? payload.message
+        : "Request failed"
+    );
+  }
+
+  return (payload ?? ({} as T)) as T;
 }
 
-function toCsv(rows: StudentRecord[]) {
-  const header = [
-    "Student ID",
-    "Name",
-    "Email",
-    "Faculty",
-    "Degree",
-    "Intake",
-    "Term",
-    "Stream",
-    "Subgroup",
-    "Status",
-  ];
-  const values = rows.map((row) => [
-    row.studentId,
-    row.name,
-    row.email,
-    row.faculty,
-    row.degree,
-    row.intake,
-    row.term,
-    row.stream,
-    row.subgroup,
-    row.status,
-  ]);
-  const lines = [header, ...values]
-    .map((line) => line.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
-    .join("\n");
-  return lines;
+function parseStudentsResponse(payload: unknown): StudentsResponse {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+  const items = rows
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const id = String(item.id ?? item._id ?? "").trim();
+      const studentId = String(item.studentId ?? "").trim().toUpperCase();
+      const email = String(item.email ?? "").trim().toLowerCase();
+      const firstName = collapseSpaces(item.firstName);
+      const lastName = collapseSpaces(item.lastName);
+      const facultyId = normalizeAcademicCode(item.facultyId);
+      const degreeProgramId = normalizeAcademicCode(
+        item.degreeProgramId ?? item.degreeId
+      );
+      const intakeId = String(item.intakeId ?? "").trim();
+      const intakeInfo = asObject(item.intake);
+
+      if (!id || !studentId || !email || !firstName || !lastName || !facultyId || !degreeProgramId || !intakeId) {
+        return null;
+      }
+
+      return {
+        id,
+        studentId,
+        email,
+        firstName,
+        lastName,
+        phone: collapseSpaces(item.phone),
+        facultyId,
+        facultyName: collapseSpaces(item.facultyName),
+        degreeProgramId,
+        degreeProgramName: collapseSpaces(item.degreeProgramName),
+        intakeId,
+        intakeName: collapseSpaces(intakeInfo?.name ?? item.intakeName),
+        intakeCurrentTerm: collapseSpaces(intakeInfo?.currentTerm ?? item.currentTerm),
+        stream: sanitizeStudentStream(item.stream),
+        status: sanitizeStudentStatus(item.status),
+        createdAt: String(item.createdAt ?? ""),
+        updatedAt: String(item.updatedAt ?? ""),
+      } satisfies StudentRecord;
+    })
+    .filter((item): item is StudentRecord => Boolean(item));
+
+  const total = Math.max(0, Number(root?.total) || items.length);
+  const page = Math.max(1, Number(root?.page) || 1);
+  const pageSize = [10, 25, 50, 100].includes(Number(root?.pageSize))
+    ? (Number(root?.pageSize) as PageSize)
+    : 10;
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+  };
+}
+
+function parseFaculties(payload: unknown): FacultyOption[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const code = normalizeAcademicCode(item.code);
+      if (!code) {
+        return null;
+      }
+
+      return {
+        id: code,
+        code,
+        name: collapseSpaces(item.name),
+      } satisfies FacultyOption;
+    })
+    .filter((item): item is FacultyOption => Boolean(item));
+}
+
+function parseDegrees(payload: unknown): DegreeOption[] {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+
+  return rows
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const code = normalizeAcademicCode(item.code);
+      const facultyCode = normalizeAcademicCode(item.facultyCode);
+      if (!code || !facultyCode) {
+        return null;
+      }
+
+      return {
+        id: String(item.id ?? code),
+        code,
+        name: collapseSpaces(item.name),
+        facultyCode,
+      } satisfies DegreeOption;
+    })
+    .filter((item): item is DegreeOption => Boolean(item));
+}
+
+function parseIntakes(payload: unknown): IntakeOption[] {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+
+  return rows
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const id = String(item.id ?? "").trim();
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        name: collapseSpaces(item.name),
+        facultyCode: normalizeAcademicCode(item.facultyCode),
+        degreeCode: normalizeAcademicCode(item.degreeCode),
+        currentTerm: collapseSpaces(item.currentTerm),
+        status: String(item.status ?? "").trim().toUpperCase(),
+      } satisfies IntakeOption;
+    })
+    .filter((item): item is IntakeOption => Boolean(item));
 }
 
 export default function StudentsAdminPage() {
   const { toast } = useToast();
-  const { scope } = useAdminContext();
-  const idCounter = useRef(STUDENTS_SEED.length);
+  const { setActiveWindow } = useAdminContext();
 
-  const [students, setStudents] = useState<StudentRecord[]>(STUDENTS_SEED);
+  const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
+  const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
+  const [isLoadingIntakeTerm, setIsLoadingIntakeTerm] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | StudentStatus>("");
-  const [scopeEnabled, setScopeEnabled] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [page, setPage] = useState(1);
 
-  const [modal, setModal] = useState<null | { mode: "add" | "edit"; id?: string }>(null);
-  const [form, setForm] = useState<StudentFormState>(createEmptyForm);
-  const [errors, setErrors] = useState<Partial<Record<keyof StudentFormState, string>>>({});
+  const [faculties, setFaculties] = useState<FacultyOption[]>([]);
+  const [degreeOptions, setDegreeOptions] = useState<DegreeOption[]>([]);
+  const [intakeOptions, setIntakeOptions] = useState<IntakeOption[]>([]);
 
-  const filtered = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return students
-      .filter((row) => (scopeEnabled ? row.faculty === scope.faculty : true))
-      .filter((row) => (scopeEnabled ? row.degree === scope.degree : true))
-      .filter((row) => (scopeEnabled ? row.intake === scope.intake : true))
-      .filter((row) => (scopeEnabled ? row.term === scope.term : true))
-      .filter((row) => (scopeEnabled ? row.stream === scope.stream : true))
-      .filter((row) => (scopeEnabled ? row.subgroup === scope.subgroup : true))
-      .filter((row) => (statusFilter ? row.status === statusFilter : true))
-      .filter((row) => {
-        if (!query) return true;
-        const target = `${row.studentId} ${row.name} ${row.email}`.toLowerCase();
-        return target.includes(query);
-      });
-  }, [students, scope, scopeEnabled, searchQuery, statusFilter]);
+  const [modal, setModal] = useState<StudentModalState | null>(null);
+  const [form, setForm] = useState<StudentFormState>(emptyForm());
+  const [selectedIntakeTerm, setSelectedIntakeTerm] = useState("");
+  const [formError, setFormError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const visible = filtered.slice(startIndex, startIndex + pageSize);
+  const deferredSearch = useDeferredValue(searchQuery);
+  const previewRequestIdRef = useRef(0);
+  const intakeTermRequestIdRef = useRef(0);
+  const isOverlayOpen = Boolean(modal || deleteTarget);
 
-  const openAdd = () => {
-    setModal({ mode: "add" });
-    setForm(createEmptyForm());
-    setErrors({});
-  };
+  const loadStudents = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!options?.background) {
+        setIsLoading(true);
+      }
 
-  const openEdit = (student: StudentRecord) => {
-    setModal({ mode: "edit", id: student.id });
-    setForm({
-      studentId: student.studentId,
-      name: student.name,
-      email: student.email,
-      status: student.status,
-    });
-    setErrors({});
-  };
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+          sort: sortBy,
+        });
+        if (deferredSearch.trim()) {
+          params.set("search", deferredSearch.trim());
+        }
+        if (statusFilter) {
+          params.set("status", statusFilter);
+        }
 
-  const validate = () => {
-    const nextErrors: Partial<Record<keyof StudentFormState, string>> = {};
-    if (!form.studentId.trim()) nextErrors.studentId = "Required";
-    if (!form.name.trim()) nextErrors.name = "Required";
-    if (!form.email.trim()) nextErrors.email = "Required";
-    setErrors(nextErrors);
-    const isValid = Object.keys(nextErrors).length === 0;
+        const response = await fetch(`/api/students?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const payload = await readJson<unknown>(response);
+        const parsed = parseStudentsResponse(payload);
+        setStudents(parsed.items);
+        setTotalCount(parsed.total);
+      } catch (error) {
+        toast({
+          title: "Failed",
+          message: error instanceof Error ? error.message : "Failed to load students",
+          variant: "error",
+        });
+        setStudents([]);
+        setTotalCount(0);
+      } finally {
+        if (!options?.background) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [deferredSearch, page, pageSize, sortBy, statusFilter, toast]
+  );
 
-    if (!isValid) {
-      toast({
-        title: "Failed",
-        message: "Please complete all required student fields before saving.",
-        variant: "error",
-      });
+  const loadFaculties = useCallback(async () => {
+    try {
+      const response = await fetch("/api/faculties", { cache: "no-store" });
+      const payload = await readJson<unknown>(response);
+      setFaculties(parseFaculties(payload));
+    } catch {
+      setFaculties([]);
+    }
+  }, []);
+
+  const loadDegrees = useCallback(async (facultyId: string) => {
+    const nextFacultyId = normalizeAcademicCode(facultyId);
+    if (!nextFacultyId) {
+      setDegreeOptions([]);
+      return;
     }
 
-    return isValid;
+    setIsLoadingDegrees(true);
+    try {
+      const response = await fetch(
+        `/api/degrees?facultyId=${encodeURIComponent(nextFacultyId)}&status=ACTIVE`,
+        { cache: "no-store" }
+      );
+      const payload = await readJson<unknown>(response);
+      setDegreeOptions(parseDegrees(payload));
+    } catch {
+      setDegreeOptions([]);
+    } finally {
+      setIsLoadingDegrees(false);
+    }
+  }, []);
+
+  const loadIntakes = useCallback(async (facultyId: string, degreeProgramId: string) => {
+    const nextDegreeProgramId = normalizeAcademicCode(degreeProgramId);
+    if (!nextDegreeProgramId) {
+      setIntakeOptions([]);
+      return;
+    }
+
+    setIsLoadingIntakes(true);
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "100",
+        sort: "az",
+        status: "ACTIVE",
+        degreeProgramId: nextDegreeProgramId,
+      });
+      const nextFacultyId = normalizeAcademicCode(facultyId);
+      if (nextFacultyId) {
+        params.set("facultyId", nextFacultyId);
+      }
+
+      const response = await fetch(`/api/intakes?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = await readJson<unknown>(response);
+      const parsed = parseIntakes(payload).filter(
+        (item) =>
+          !nextFacultyId ||
+          (item.facultyCode === nextFacultyId &&
+            item.degreeCode === nextDegreeProgramId)
+      );
+      setIntakeOptions(parsed);
+    } catch {
+      setIntakeOptions([]);
+    } finally {
+      setIsLoadingIntakes(false);
+    }
+  }, []);
+
+  const loadIntakeTerm = useCallback(async (intakeId: string) => {
+    const nextIntakeId = String(intakeId ?? "").trim();
+    if (!nextIntakeId) {
+      setSelectedIntakeTerm("");
+      return;
+    }
+
+    const requestId = intakeTermRequestIdRef.current + 1;
+    intakeTermRequestIdRef.current = requestId;
+    setIsLoadingIntakeTerm(true);
+
+    try {
+      const response = await fetch(
+        `/api/intakes/${encodeURIComponent(nextIntakeId)}`,
+        { cache: "no-store" }
+      );
+      const payload = await readJson<unknown>(response);
+      const root = asObject(payload);
+      const currentTerm = collapseSpaces(root?.currentTerm);
+
+      if (intakeTermRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSelectedIntakeTerm(currentTerm);
+    } catch {
+      if (intakeTermRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      const fallbackTerm =
+        intakeOptions.find((item) => item.id === nextIntakeId)?.currentTerm ?? "";
+      setSelectedIntakeTerm(fallbackTerm);
+    } finally {
+      if (intakeTermRequestIdRef.current === requestId) {
+        setIsLoadingIntakeTerm(false);
+      }
+    }
+  }, [intakeOptions]);
+
+  const loadPreview = useCallback(async (intakeId: string) => {
+    const nextIntakeId = String(intakeId ?? "").trim();
+    if (!nextIntakeId) {
+      setForm((previous) => ({
+        ...previous,
+        studentId: "",
+        email: "",
+      }));
+      return;
+    }
+
+    const requestId = previewRequestIdRef.current + 1;
+    previewRequestIdRef.current = requestId;
+    setIsLoadingPreview(true);
+
+    try {
+      const response = await fetch(
+        `/api/students/next-id?intakeId=${encodeURIComponent(nextIntakeId)}`,
+        { cache: "no-store" }
+      );
+      const payload = await readJson<unknown>(response);
+      const root = asObject(payload);
+      const studentIdPreview = String(root?.studentIdPreview ?? "").trim().toUpperCase();
+      const emailPreview = String(root?.emailPreview ?? "").trim().toLowerCase();
+
+      if (previewRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setForm((previous) =>
+        previous.intakeId !== nextIntakeId
+          ? previous
+          : {
+              ...previous,
+              studentId: studentIdPreview,
+              email: emailPreview,
+            }
+      );
+    } catch (error) {
+      if (previewRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        studentId: "",
+        email: "",
+      }));
+      toast({
+        title: "Failed",
+        message:
+          error instanceof Error ? error.message : "Failed to generate student ID preview",
+        variant: "error",
+      });
+    } finally {
+      if (previewRequestIdRef.current === requestId) {
+        setIsLoadingPreview(false);
+      }
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadStudents();
+  }, [loadStudents]);
+
+  useEffect(() => {
+    void loadFaculties();
+  }, [loadFaculties]);
+
+  useEffect(() => {
+    if (!isOverlayOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOverlayOpen]);
+
+  useEffect(() => {
+    if (!modal) {
+      setActiveWindow("List");
+      return;
+    }
+
+    setActiveWindow(modal.mode === "add" ? "Create" : "Edit");
+  }, [modal, setActiveWindow]);
+
+  useEffect(() => {
+    return () => {
+      setActiveWindow(null);
+    };
+  }, [setActiveWindow]);
+
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(page, pageCount);
+
+  const openAddModal = () => {
+    setModal({ mode: "add" });
+    setForm(emptyForm());
+    setDegreeOptions([]);
+    setIntakeOptions([]);
+    setSelectedIntakeTerm("");
+    setFormError("");
+    setIsLoadingPreview(false);
+    setIsLoadingIntakeTerm(false);
   };
 
-  const save = () => {
-    if (!validate() || !modal) return;
+  const openEditModal = (student: StudentRecord) => {
+    setModal({ mode: "edit", targetId: student.id });
+    setForm({
+      firstName: student.firstName,
+      lastName: student.lastName,
+      phone: student.phone,
+      facultyId: student.facultyId,
+      degreeProgramId: student.degreeProgramId,
+      intakeId: student.intakeId,
+      stream: student.stream,
+      status: student.status,
+      studentId: student.studentId,
+      email: student.email,
+    });
+    setFormError("");
+    setIsLoadingPreview(false);
+    setSelectedIntakeTerm(student.intakeCurrentTerm);
+    setIsLoadingIntakeTerm(false);
 
-    if (modal.mode === "add") {
-      idCounter.current += 1;
-      const next: StudentRecord = {
-        id: `st-${String(idCounter.current).padStart(4, "0")}`,
-        studentId: form.studentId.trim(),
-        name: form.name.trim(),
-        email: form.email.trim(),
-        faculty: scope.faculty,
-        degree: scope.degree,
-        intake: scope.intake,
-        term: scope.term,
-        stream: scope.stream,
-        subgroup: scope.subgroup,
-        status: form.status,
-      };
-      setStudents((previous) => [next, ...previous]);
-      toast({
-        title: "Saved",
-        message: "Student added successfully.",
-        variant: "success",
-      });
-    } else {
-      setStudents((previous) =>
-        previous.map((row) =>
-          row.id === modal.id
-            ? {
-                ...row,
-                studentId: form.studentId.trim(),
-                name: form.name.trim(),
-                email: form.email.trim(),
-                status: form.status,
-              }
-            : row
-        )
-      );
-      toast({
-        title: "Saved",
-        message: "Student updated successfully.",
-        variant: "success",
-      });
+    void (async () => {
+      await loadDegrees(student.facultyId);
+      await loadIntakes(student.facultyId, student.degreeProgramId);
+      await loadIntakeTerm(student.intakeId);
+    })();
+  };
+
+  const closeModal = () => {
+    if (isSaving) {
+      return;
     }
 
     setModal(null);
-    setForm(createEmptyForm());
-    setErrors({});
+    setForm(emptyForm());
+    setDegreeOptions([]);
+    setIntakeOptions([]);
+    setSelectedIntakeTerm("");
+    setFormError("");
+    setIsLoadingPreview(false);
+    setIsLoadingIntakeTerm(false);
   };
 
-  const remove = (student: StudentRecord) => {
-    if (!window.confirm(`Delete ${student.name}? This cannot be undone.`)) {
+  const validateForm = () => {
+    if (!collapseSpaces(form.firstName)) return "First name is required";
+    if (!collapseSpaces(form.lastName)) return "Last name is required";
+    if (!form.facultyId) return "Faculty is required";
+    if (!form.degreeProgramId) return "Degree is required";
+    if (!form.intakeId) return "Intake is required";
+    if (!form.stream) return "Stream is required";
+    if (!form.studentId || !form.email) return "Student ID and email preview are required";
+    return "";
+  };
+
+  const saveStudent = async () => {
+    if (!modal) {
       return;
     }
-    setStudents((previous) => previous.filter((row) => row.id !== student.id));
-    toast({
-      title: "Deleted",
-      message: `${student.name} was removed from the directory.`,
-      variant: "success",
-    });
+
+    const validationError = validateForm();
+    if (validationError) {
+      setFormError(validationError);
+      toast({
+        title: "Failed",
+        message: validationError,
+        variant: "error",
+      });
+      return;
+    }
+
+    const payload = {
+      firstName: collapseSpaces(form.firstName),
+      lastName: collapseSpaces(form.lastName),
+      phone: collapseSpaces(form.phone),
+      facultyId: form.facultyId,
+      degreeProgramId: form.degreeProgramId,
+      intakeId: form.intakeId,
+      stream: form.stream,
+      status: form.status,
+    };
+
+    setIsSaving(true);
+    try {
+      if (modal.mode === "add") {
+        await readJson<unknown>(
+          await fetch("/api/students", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        );
+
+        toast({
+          title: "Saved",
+          message: "Student registered + login created",
+          variant: "success",
+        });
+      } else {
+        await readJson<unknown>(
+          await fetch(`/api/students/${encodeURIComponent(String(modal.targetId ?? ""))}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        );
+
+        toast({
+          title: "Saved",
+          message: "Student updated successfully",
+          variant: "success",
+        });
+      }
+
+      closeModal();
+      await loadStudents({ background: true });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save student";
+      setFormError(message);
+      toast({
+        title: "Failed",
+        message,
+        variant: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const exportCsv = () => {
-    const csv = toCsv(filtered);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = href;
-    link.download = `students_${scope.faculty}_${scope.degree}_${scope.intake}_${scope.term}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(href);
+  const confirmDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await readJson<unknown>(
+        await fetch(`/api/students/${encodeURIComponent(deleteTarget.id)}`, {
+          method: "DELETE",
+        })
+      );
+      toast({
+        title: "Deleted",
+        message: "Student deleted and login deactivated",
+        variant: "success",
+      });
+      setDeleteTarget(null);
+      await loadStudents({ background: true });
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message: error instanceof Error ? error.message : "Failed to delete student",
+        variant: "error",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
+
+  const selectedFacultyDegrees = useMemo(
+    () =>
+      degreeOptions.filter((degree) => degree.facultyCode === form.facultyId),
+    [degreeOptions, form.facultyId]
+  );
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageHeader
         actions={
-          <>
-            <Button className="gap-2" onClick={exportCsv} variant="secondary">
-              <Download size={16} />
-              Export
-            </Button>
-            <Button className="gap-2" onClick={openAdd}>
-              <Plus size={16} />
-              Add Student
-            </Button>
-          </>
+          <Button
+            className="h-11 min-w-[164px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] transition-colors hover:bg-[#0339a6]"
+            onClick={openAddModal}
+          >
+            <Plus size={16} /> Add Student
+          </Button>
         }
-        description="Enterprise student directory with scoped filters, actions, and audit-ready UX."
+        description="Register students with auto IT number, auto email, and auto login account creation."
         title="Students"
       />
 
-      <div className="rounded-3xl border border-border bg-card p-4 shadow-shadow sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text/55" size={16} />
-            <Input
-              className="pl-9"
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search by ID, name, or email…"
-              value={searchQuery}
-            />
-          </div>
-
-          <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-auto lg:grid-cols-[220px_220px_auto]">
-            <Select
-              aria-label="Status filter"
-              onChange={(event) => {
-                setStatusFilter(event.target.value as "" | StudentStatus);
-                setPage(1);
-              }}
-              value={statusFilter}
-            >
-              <option value="">All statuses</option>
-              <option value="Active">Active</option>
-              <option value="Suspended">Suspended</option>
-              <option value="Inactive">Inactive</option>
-            </Select>
-
-            <div className="flex items-center justify-between rounded-2xl border border-border bg-tint px-3.5 py-2.5">
-              <span className="text-sm text-text/75">Scope to context</span>
-              <label className="inline-flex items-center gap-2 text-sm text-text/75">
-                <input
-                  checked={scopeEnabled}
-                  className="h-4 w-4 accent-primary"
+      <Card className={cn("transition-all", isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "")}> 
+        <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px_220px]">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Search
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50" size={16} />
+                <Input
+                  aria-label="Search students"
+                  className="h-12 pl-10"
                   onChange={(event) => {
-                    setScopeEnabled(event.target.checked);
+                    setSearchQuery(event.target.value);
                     setPage(1);
                   }}
-                  type="checkbox"
+                  placeholder="Search by student ID, name, email"
+                  value={searchQuery}
                 />
-              </label>
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-white px-3.5 py-2.5 text-sm text-text/75">
-              <span className="font-semibold text-heading">{filtered.length}</span> results
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Status
+              </label>
+              <Select
+                className="h-12"
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as "" | StudentStatus);
+                  setPage(1);
+                }}
+                value={statusFilter}
+              >
+                <option value="">All</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </Select>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                Sort
+              </label>
+              <Select
+                className="h-12"
+                onChange={(event) => {
+                  setSortBy(event.target.value as SortOption);
+                  setPage(1);
+                }}
+                value={sortBy}
+              >
+                <option value="updated">Recently Updated</option>
+                <option value="created">Recently Added</option>
+                <option value="az">A-Z</option>
+                <option value="za">Z-A</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+              Total Students
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p>
           </div>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-3xl border border-border bg-white">
-          <div className="overflow-x-auto">
-            <table className="min-w-[1040px] w-full border-collapse">
-              <thead className="bg-tint text-left text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[1200px] text-left text-sm">
+            <thead className="border-b border-border bg-tint">
+              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                <th className="px-4 py-3">Student ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Faculty</th>
+                <th className="px-4 py-3">Degree</th>
+                <th className="px-4 py-3">Intake</th>
+                <th className="px-4 py-3">Stream</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
                 <tr>
-                  <th className="px-4 py-3">Student</th>
-                  <th className="px-4 py-3">Program</th>
-                  <th className="px-4 py-3">Intake</th>
-                  <th className="px-4 py-3">Term</th>
-                  <th className="px-4 py-3">Stream</th>
-                  <th className="px-4 py-3">Subgroup</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
+                    Loading student records...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {visible.map((row) => (
-                  <tr className="hover:bg-tint/60" key={row.id}>
-                    <td className="px-4 py-4">
-                      <p className="text-sm font-semibold text-heading">{row.name}</p>
-                      <p className="mt-1 text-sm text-text/72">{row.studentId}</p>
-                      <p className="mt-1 text-xs text-text/60">{row.email}</p>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-text/75">
-                      <span className="font-semibold text-heading">{row.faculty}</span> /{" "}
-                      <span className="font-semibold text-heading">{row.degree}</span>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-text/75">{row.intake}</td>
-                    <td className="px-4 py-4 text-sm text-text/75">{row.term}</td>
-                    <td className="px-4 py-4 text-sm text-text/75">{row.stream}</td>
-                    <td className="px-4 py-4 text-sm text-text/75">{row.subgroup}</td>
-                    <td className="px-4 py-4">
-                      <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          aria-label={`Edit ${row.name}`}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border text-text/75 transition-colors hover:bg-tint"
-                          onClick={() => openEdit(row)}
-                          type="button"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          aria-label={`Delete ${row.name}`}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border text-red-700 transition-colors hover:bg-red-50"
-                          onClick={() => remove(row)}
-                          type="button"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {visible.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-10 text-center text-sm text-text/70" colSpan={8}>
-                      No students match the selected filters.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+              ) : null}
+
+              {!isLoading
+                ? students.map((student) => (
+                    <tr className="border-b border-border/70 transition-colors hover:bg-tint" key={student.id}>
+                      <td className="px-4 py-4 font-semibold text-heading">{student.studentId}</td>
+                      <td className="px-4 py-4">
+                        <p className="font-semibold text-heading">
+                          {student.firstName} {student.lastName}
+                        </p>
+                        <p className="mt-0.5 text-xs text-text/60">
+                          Updated {formatDate(student.updatedAt)}
+                        </p>
+                        <p className="mt-0.5 text-xs text-text/65">{student.email}</p>
+                      </td>
+                      <td className="px-4 py-4 text-text/75">
+                        {student.facultyId}
+                        {student.facultyName ? (
+                          <p className="text-xs text-text/58">{student.facultyName}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4 text-text/75">
+                        {student.degreeProgramId}
+                        {student.degreeProgramName ? (
+                          <p className="text-xs text-text/58">{student.degreeProgramName}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4 text-text/75">{student.intakeName || "—"}</td>
+                      <td className="px-4 py-4 text-text/75">{student.stream}</td>
+                      <td className="px-4 py-4">
+                        <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            aria-label={`Edit ${student.studentId}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                            onClick={() => openEditModal(student)}
+                            type="button"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            aria-label={`Delete ${student.studentId}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                            onClick={() => setDeleteTarget(student)}
+                            type="button"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                : null}
+
+              {!isLoading && students.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
+                    No students match the current filters.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
 
         <TablePagination
@@ -508,132 +949,335 @@ export default function StudentsAdminPage() {
             setPage(1);
           }}
           page={safePage}
-          pageCount={totalPages}
+          pageCount={pageCount}
           pageSize={pageSize}
-          totalItems={filtered.length}
+          totalItems={totalCount}
         />
-      </div>
+      </Card>
 
       {modal ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[3px]"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setModal(null);
-              setErrors({});
+            if (event.target === event.currentTarget && !isSaving) {
+              closeModal();
             }
           }}
           role="presentation"
         >
           <div
             aria-modal="true"
-            className="w-full max-w-xl rounded-3xl border border-border bg-white p-6 shadow-[0_12px_28px_rgba(38,21,15,0.18)]"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)]"
             role="dialog"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
-                  {modal.mode === "add" ? "Create" : "Edit"}
-                </p>
-                <p className="mt-1 text-xl font-semibold text-heading">
-                  {modal.mode === "add" ? "Add Student" : "Update Student"}
-                </p>
-                <p className="mt-1 text-sm text-text/70">
-                  Scope: {scope.faculty} / {scope.degree} / {scope.intake} / {scope.term} / {scope.stream} / {scope.subgroup}
-                </p>
-              </div>
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <UserPlus2 size={18} />
-              </span>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-1">
-                <label className="text-sm font-medium text-heading" htmlFor="studentId">
-                  Student ID
-                </label>
-                <Input
-                  className={cn(
-                    errors.studentId
-                      ? "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-200"
-                      : ""
-                  )}
-                  id="studentId"
-                  onChange={(event) =>
-                    setForm((previous) => ({ ...previous, studentId: event.target.value }))
-                  }
-                  placeholder="e.g., IT23123456"
-                  value={form.studentId}
-                />
-                {errors.studentId ? (
-                  <p className="mt-1 text-xs text-red-700">{errors.studentId}</p>
-                ) : null}
-              </div>
-
-              <div className="sm:col-span-1">
-                <label className="text-sm font-medium text-heading" htmlFor="status">
-                  Status
-                </label>
-                <Select
-                  id="status"
-                  onChange={(event) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      status: event.target.value as StudentStatus,
-                    }))
-                  }
-                  value={form.status}
+            <div className="overflow-y-auto px-6 py-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                    {modal.mode === "add" ? "CREATE" : "EDIT"}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-heading">
+                    {modal.mode === "add" ? "Add Student" : "Edit Student"}
+                  </p>
+                </div>
+                <button
+                  aria-label="Close student modal"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={closeModal}
+                  type="button"
                 >
-                  <option value="Active">Active</option>
-                  <option value="Suspended">Suspended</option>
-                  <option value="Inactive">Inactive</option>
-                </Select>
+                  <X size={16} />
+                </button>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium text-heading" htmlFor="name">
-                  Full name
-                </label>
-                <Input
-                  className={cn(
-                    errors.name ? "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-200" : ""
-                  )}
-                  id="name"
-                  onChange={(event) => setForm((previous) => ({ ...previous, name: event.target.value }))}
-                  placeholder="e.g., Maya Rodrigo"
-                  value={form.name}
-                />
-                {errors.name ? <p className="mt-1 text-xs text-red-700">{errors.name}</p> : null}
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">First Name</label>
+                  <Input
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) => setForm((previous) => ({ ...previous, firstName: event.target.value }))}
+                    value={form.firstName}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Last Name</label>
+                  <Input
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) => setForm((previous) => ({ ...previous, lastName: event.target.value }))}
+                    value={form.lastName}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Phone</label>
+                  <Input
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) => setForm((previous) => ({ ...previous, phone: event.target.value }))}
+                    value={form.phone}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Status</label>
+                  <Select
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        status: sanitizeStudentStatus(event.target.value),
+                      }))
+                    }
+                    value={form.status}
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Faculty</label>
+                  <Select
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) => {
+                      const facultyId = normalizeAcademicCode(event.target.value);
+                      setForm((previous) => ({
+                        ...previous,
+                        facultyId,
+                        degreeProgramId: "",
+                        intakeId: "",
+                        studentId: modal.mode === "add" ? "" : previous.studentId,
+                        email: modal.mode === "add" ? "" : previous.email,
+                      }));
+                      setIntakeOptions([]);
+                      setSelectedIntakeTerm("");
+                      setIsLoadingIntakeTerm(false);
+                      void loadDegrees(facultyId);
+                    }}
+                    value={form.facultyId}
+                  >
+                    <option value="">Select Faculty</option>
+                    {faculties.map((faculty) => (
+                      <option key={faculty.code} value={faculty.code}>
+                        {faculty.code} - {faculty.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Degree</label>
+                  <Select
+                    className="h-12"
+                    disabled={isSaving || !form.facultyId || isLoadingDegrees}
+                    onChange={(event) => {
+                      const degreeProgramId = normalizeAcademicCode(event.target.value);
+                      setForm((previous) => ({
+                        ...previous,
+                        degreeProgramId,
+                        intakeId: "",
+                        studentId: modal.mode === "add" ? "" : previous.studentId,
+                        email: modal.mode === "add" ? "" : previous.email,
+                      }));
+                      setSelectedIntakeTerm("");
+                      setIsLoadingIntakeTerm(false);
+                      void loadIntakes(form.facultyId, degreeProgramId);
+                    }}
+                    value={form.degreeProgramId}
+                  >
+                    <option value="">
+                      {isLoadingDegrees ? "Loading..." : "Select Degree"}
+                    </option>
+                    {selectedFacultyDegrees.map((degree) => (
+                      <option key={degree.code} value={degree.code}>
+                        {degree.code} - {degree.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Intake</label>
+                  <Select
+                    className="h-12"
+                    disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
+                    onChange={(event) => {
+                      const intakeId = String(event.target.value ?? "").trim();
+                      setForm((previous) => ({
+                        ...previous,
+                        intakeId,
+                        studentId: modal.mode === "add" ? "" : previous.studentId,
+                        email: modal.mode === "add" ? "" : previous.email,
+                      }));
+                      void loadIntakeTerm(intakeId);
+                      if (modal.mode === "add") {
+                        void loadPreview(intakeId);
+                      }
+                    }}
+                    value={form.intakeId}
+                  >
+                    <option value="">
+                      {isLoadingIntakes ? "Loading..." : "Select Intake"}
+                    </option>
+                    {intakeOptions.map((intake) => (
+                      <option key={intake.id} value={intake.id}>
+                        {intake.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">
+                    Current Semester
+                  </label>
+                  <Input
+                    className="h-12"
+                    disabled
+                    value={
+                      !form.intakeId
+                        ? "Select an intake"
+                        : isLoadingIntakeTerm
+                          ? "Loading..."
+                          : selectedIntakeTerm || "—"
+                    }
+                  />
+                  <p className="mt-1 text-xs text-text/60">
+                    This is controlled by the Intake term schedule.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Stream</label>
+                  <Select
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        stream: sanitizeStudentStream(event.target.value),
+                      }))
+                    }
+                    value={form.stream}
+                  >
+                    <option value="WEEKDAY">WEEKDAY</option>
+                    <option value="WEEKEND">WEEKEND</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Student ID (Auto)</label>
+                  <Input
+                    className="h-12"
+                    disabled
+                    placeholder={isLoadingPreview ? "Generating..." : "Auto-generated"}
+                    value={form.studentId}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">Email (Auto)</label>
+                  <Input
+                    className="h-12"
+                    disabled
+                    placeholder={isLoadingPreview ? "Generating..." : "Auto-generated"}
+                    value={form.email}
+                  />
+                </div>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium text-heading" htmlFor="email">
-                  Email
-                </label>
-                <Input
-                  className={cn(
-                    errors.email ? "border-red-500 focus-visible:border-red-500 focus-visible:ring-red-200" : ""
-                  )}
-                  id="email"
-                  onChange={(event) => setForm((previous) => ({ ...previous, email: event.target.value }))}
-                  placeholder="name@campus.edu"
-                  value={form.email}
-                />
-                {errors.email ? <p className="mt-1 text-xs text-red-700">{errors.email}</p> : null}
-              </div>
+              {formError ? (
+                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </p>
+              ) : null}
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <Button
+                  className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                  disabled={isSaving}
+                  onClick={closeModal}
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="h-11 min-w-[132px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+                  disabled={isSaving}
+                  onClick={() => {
+                    void saveStudent();
+                  }}
+                >
+                  {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isDeleting) {
+              setDeleteTarget(null);
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            aria-modal="true"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_36px_rgba(15,23,42,0.2)]"
+            role="dialog"
+          >
+            <div className="px-6 py-6">
+              <p className="text-lg font-semibold text-heading">Delete Student</p>
+              <p className="mt-2 text-sm leading-6 text-text/70">
+                Are you sure you want to delete student{" "}
+                <span className="font-semibold text-heading">
+                  {deleteTarget.studentId} ({deleteTarget.firstName} {deleteTarget.lastName})
+                </span>
+                ? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
               <Button
-                onClick={() => {
-                  setModal(null);
-                  setErrors({});
-                }}
+                className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
                 variant="secondary"
               >
                 Cancel
               </Button>
-              <Button onClick={save}>{modal.mode === "add" ? "Create" : "Save changes"}</Button>
+              <Button
+                className="h-11 min-w-[132px] gap-2 bg-red-600 px-5 text-white shadow-[0_10px_24px_rgba(220,38,38,0.22)] hover:bg-red-700"
+                disabled={isDeleting}
+                onClick={() => {
+                  void confirmDelete();
+                }}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Delete
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import "@/models/Intake";
 import { connectMongoose } from "@/lib/mongoose";
 import {
   deleteIntake,
+  findIntakeById,
   hasInvalidTermScheduleRange,
   hasIntakeConflict,
   isValidDegreeForFaculty,
@@ -66,6 +67,36 @@ function toApiIntake(intake: IntakeRecord) {
     schedules,
     termSchedules: schedules,
   };
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  await connectMongoose().catch(() => null);
+  const targetId = sanitizeIntakeId(params.id);
+
+  if (!targetId) {
+    return NextResponse.json(
+      { message: "Intake id is required" },
+      { status: 400 }
+    );
+  }
+
+  const intake = findIntakeById(targetId);
+  if (!intake) {
+    return NextResponse.json(
+      { message: "Intake not found" },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json({
+    id: intake.id,
+    _id: intake.id,
+    name: intake.name,
+    currentTerm: intake.currentTerm,
+  });
 }
 
 export async function PUT(
