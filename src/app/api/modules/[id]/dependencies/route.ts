@@ -39,7 +39,7 @@ interface NormalizedDbOffering {
   intakeId: string;
   termCode: string;
   syllabusVersion: string;
-  assignedLecturers: string[];
+  assignedLecturerIds: string[];
   updatedAt: string;
 }
 
@@ -100,7 +100,7 @@ function toDependencyItem(
     degreeCode: string;
     termCode: string;
     syllabusVersion: string;
-    assignedLecturers: string[];
+    assignedLecturerIds: string[];
     updatedAt: string;
   }
 ): ModuleDependencyItem {
@@ -112,8 +112,8 @@ function toDependencyItem(
   const degreeRecord = normalizedDegreeCode
     ? findDegreeProgram(normalizedDegreeCode)
     : null;
-  const lecturerCount = Array.isArray(input.assignedLecturers)
-    ? input.assignedLecturers.filter((item) => Boolean(String(item ?? "").trim())).length
+  const lecturerCount = Array.isArray(input.assignedLecturerIds)
+    ? input.assignedLecturerIds.filter((item) => Boolean(String(item ?? "").trim())).length
     : 0;
 
   return {
@@ -151,10 +151,10 @@ function normalizeDbOfferings(value: unknown): NormalizedDbOffering[] {
         return null;
       }
 
-      const assignedLecturers = Array.isArray(normalizedRow.assignedLecturers)
-        ? normalizedRow.assignedLecturers
-            .map((item) => String(item ?? "").trim())
-            .filter(Boolean)
+      const lecturerSource =
+        normalizedRow.assignedLecturerIds ?? normalizedRow.assignedLecturers;
+      const assignedLecturerIds = Array.isArray(lecturerSource)
+        ? lecturerSource.map((item) => String(item ?? "").trim()).filter(Boolean)
         : [];
 
       return {
@@ -162,7 +162,7 @@ function normalizeDbOfferings(value: unknown): NormalizedDbOffering[] {
         intakeId,
         termCode: String(normalizedRow.termCode ?? "").trim(),
         syllabusVersion: String(normalizedRow.syllabusVersion ?? "NEW"),
-        assignedLecturers,
+        assignedLecturerIds,
         updatedAt: toIsoDate(normalizedRow.updatedAt),
       } satisfies NormalizedDbOffering;
     })
@@ -229,7 +229,11 @@ function buildStoreDependencies(offerings: ModuleOfferingRecord[]): ModuleDepend
       degreeCode: intakeLookup?.degreeCode ?? "",
       termCode: offering.termCode,
       syllabusVersion: offering.syllabusVersion,
-      assignedLecturers: offering.assignedLecturers,
+      assignedLecturerIds:
+        Array.isArray(offering.assignedLecturerIds) &&
+        offering.assignedLecturerIds.length > 0
+          ? offering.assignedLecturerIds
+          : offering.assignedLecturers,
       updatedAt: offering.updatedAt,
     });
   });
@@ -267,7 +271,7 @@ async function buildMongooseDependencies(
       degreeCode: intakeLookup?.degreeCode ?? "",
       termCode: offering.termCode,
       syllabusVersion: offering.syllabusVersion,
-      assignedLecturers: offering.assignedLecturers,
+      assignedLecturerIds: offering.assignedLecturerIds,
       updatedAt: offering.updatedAt,
     });
   });

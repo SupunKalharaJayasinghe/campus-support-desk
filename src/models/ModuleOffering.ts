@@ -14,6 +14,18 @@ const OutlineWeekSchema = new Schema(
 
 const ModuleOfferingSchema = new Schema(
   {
+    facultyId: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
+    degreeProgramId: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+    },
     intakeId: { type: String, required: true, trim: true },
     termCode: {
       type: String,
@@ -22,6 +34,10 @@ const ModuleOfferingSchema = new Schema(
     },
     moduleId: { type: String, required: true, trim: true },
     syllabusVersion: { type: String, required: true, enum: ["OLD", "NEW"] },
+    assignedLecturerIds: { type: [String], default: [] },
+    assignedLabAssistantIds: { type: [String], default: [] },
+    status: { type: String, required: true, enum: ["ACTIVE", "INACTIVE"], default: "ACTIVE" },
+    // Backward-compatible alias used by existing module dependency/unassign flows.
     assignedLecturers: { type: [String], default: [] },
     outlineWeeks: { type: [OutlineWeekSchema], default: [] },
     outlinePending: { type: Boolean, default: false },
@@ -34,6 +50,29 @@ const ModuleOfferingSchema = new Schema(
     versionKey: false,
   }
 );
+
+ModuleOfferingSchema.index(
+  { intakeId: 1, termCode: 1, moduleId: 1 },
+  { unique: true }
+);
+ModuleOfferingSchema.index({ updatedAt: -1, status: 1 });
+
+ModuleOfferingSchema.pre("validate", function syncAssignedAliases(next) {
+  const row = this as {
+    assignedLecturerIds?: string[];
+    assignedLecturers?: string[];
+  };
+
+  const fromIds = Array.isArray(row.assignedLecturerIds) ? row.assignedLecturerIds : [];
+  const fromAlias = Array.isArray(row.assignedLecturers) ? row.assignedLecturers : [];
+  const normalized = Array.from(
+    new Set([...fromIds, ...fromAlias].map((item) => String(item ?? "").trim()).filter(Boolean))
+  );
+
+  row.assignedLecturerIds = normalized;
+  row.assignedLecturers = normalized;
+  next();
+});
 
 const ModuleOfferingModel =
   mongoose.models.ModuleOffering ||

@@ -7,6 +7,7 @@ import {
   addEnrollmentToStudentInMemory,
   decorateEnrollmentRecord,
   isMongoDuplicateKeyError,
+  listStudentEnrollmentsInMemory,
   normalizeAcademicCode,
   sanitizeStudentStatus,
   sanitizeStudentStream,
@@ -95,6 +96,64 @@ function toEnrollmentRecordFromUnknown(
     createdAt: toIsoDate(doc.createdAt),
     updatedAt: toIsoDate(doc.updatedAt),
   };
+}
+
+function toApiEnrollmentResponseItem(row: ReturnType<typeof decorateEnrollmentRecord>) {
+  return {
+    ...row,
+    facultyCode: row.facultyId,
+    degreeCode: row.degreeProgramId,
+    intakeCurrentTerm: row.currentTerm,
+  };
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    const studentRecordId = String(params.id ?? "").trim();
+    if (!studentRecordId) {
+      return NextResponse.json({ message: "Student id is required" }, { status: 400 });
+    }
+
+    if (!mongooseConnection) {
+      return NextResponse.json({
+        items: listStudentEnrollmentsInMemory(studentRecordId).map((item) =>
+          toApiEnrollmentResponseItem(item)
+        ),
+      });
+    }
+
+    const student = await StudentModel.findById(studentRecordId).exec();
+    if (!student) {
+      return NextResponse.json({ message: "Student not found" }, { status: 404 });
+    }
+
+    const enrollmentRows = (await EnrollmentModel.find({
+      studentId: student._id,
+    })
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec()
+      .catch(() => [])) as unknown[];
+
+    const items = enrollmentRows
+      .map((row) => toEnrollmentRecordFromUnknown(row))
+      .filter((row): row is EnrollmentPersistedRecord => Boolean(row))
+      .map((row) => toApiEnrollmentResponseItem(decorateEnrollmentRecord(row)));
+
+    return NextResponse.json({ items });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error ? error.message : "Failed to load enrollments",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(

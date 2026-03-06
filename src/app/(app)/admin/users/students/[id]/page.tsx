@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Plus, Save, X } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
@@ -11,6 +11,11 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useAdminContext } from "@/components/admin/AdminContext";
+import ConfirmDeleteEnrollmentModal from "./components/ConfirmDeleteEnrollmentModal";
+import EditEnrollmentModal, {
+  type EditEnrollmentFormState,
+  type EditIntakeOption,
+} from "./components/EditEnrollmentModal";
 
 type StudentStatus = "ACTIVE" | "INACTIVE";
 type StudentStream = "WEEKDAY" | "WEEKEND";
@@ -201,6 +206,19 @@ function parseStudentDetail(payload: unknown): StudentDetailRecord | null {
   };
 }
 
+function parseEnrollmentsResponse(payload: unknown): EnrollmentRecord[] {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items)
+    ? (root.items as unknown[])
+    : Array.isArray(payload)
+      ? (payload as unknown[])
+      : [];
+
+  return rows
+    .map((row) => parseEnrollment(row))
+    .filter((row): row is EnrollmentRecord => Boolean(row));
+}
+
 function parseFaculties(payload: unknown): FacultyOption[] {
   if (!Array.isArray(payload)) {
     return [];
@@ -270,6 +288,9 @@ export default function StudentProfilePage() {
   const [student, setStudent] = useState<StudentDetailRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [enrollments, setEnrollments] = useState<EnrollmentRecord[]>([]);
+  const [isLoadingEnrollments, setIsLoadingEnrollments] = useState(true);
+  const [enrollmentsError, setEnrollmentsError] = useState("");
 
   const [faculties, setFaculties] = useState<FacultyOption[]>([]);
   const [degrees, setDegrees] = useState<DegreeOption[]>([]);
@@ -284,7 +305,31 @@ export default function StudentProfilePage() {
   const [formError, setFormError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const [editTarget, setEditTarget] = useState<EnrollmentRecord | null>(null);
+  const [editForm, setEditForm] = useState<EditEnrollmentFormState>({
+    facultyId: "",
+    facultyName: "",
+    degreeProgramId: "",
+    degreeProgramName: "",
+    intakeId: "",
+    stream: "WEEKDAY",
+    subgroup: "",
+    status: "ACTIVE",
+  });
+  const [editFormError, setEditFormError] = useState("");
+  const [editIntakeOptions, setEditIntakeOptions] = useState<EditIntakeOption[]>(
+    []
+  );
+  const [selectedEditIntakeTerm, setSelectedEditIntakeTerm] = useState("");
+  const [isLoadingEditIntakes, setIsLoadingEditIntakes] = useState(false);
+  const [isLoadingEditTerm, setIsLoadingEditTerm] = useState(false);
+  const [isUpdatingEnrollment, setIsUpdatingEnrollment] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<EnrollmentRecord | null>(null);
+  const [isDeletingEnrollment, setIsDeletingEnrollment] = useState(false);
+
   const termRequestIdRef = useRef(0);
+  const editTermRequestIdRef = useRef(0);
 
   const loadStudent = useCallback(async () => {
     if (!studentRecordId) {
@@ -312,6 +357,32 @@ export default function StudentProfilePage() {
       setStudent(null);
     } finally {
       setIsLoading(false);
+    }
+  }, [studentRecordId]);
+
+  const loadEnrollments = useCallback(async () => {
+    if (!studentRecordId) {
+      setEnrollmentsError("Failed to load enrollments");
+      setIsLoadingEnrollments(false);
+      return;
+    }
+
+    setIsLoadingEnrollments(true);
+    setEnrollmentsError("");
+    try {
+      const response = await fetch(
+        `/api/students/${encodeURIComponent(studentRecordId)}/enrollments`,
+        {
+          cache: "no-store",
+        }
+      );
+      const payload = await readJson<unknown>(response);
+      setEnrollments(parseEnrollmentsResponse(payload));
+    } catch {
+      setEnrollments([]);
+      setEnrollmentsError("Failed to load enrollments");
+    } finally {
+      setIsLoadingEnrollments(false);
     }
   }, [studentRecordId]);
 
@@ -418,15 +489,134 @@ export default function StudentProfilePage() {
     }
   }, [intakes]);
 
+  const loadEditIntakes = useCallback(
+    async (
+      facultyId: string,
+      degreeProgramId: string,
+      currentEnrollment?: EnrollmentRecord | null
+    ) => {
+      const nextDegreeProgramId = normalizeAcademicCode(degreeProgramId);
+      if (!nextDegreeProgramId) {
+        setEditIntakeOptions([]);
+        return;
+      }
+
+      setIsLoadingEditIntakes(true);
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          pageSize: "100",
+          sort: "az",
+          status: "ACTIVE",
+          degreeProgramId: nextDegreeProgramId,
+        });
+        const nextFacultyId = normalizeAcademicCode(facultyId);
+        if (nextFacultyId) {
+          params.set("facultyId", nextFacultyId);
+        }
+
+        const response = await fetch(`/api/intakes?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const payload = await readJson<unknown>(response);
+        const options = parseIntakes(payload).map((item) => ({
+          id: item.id,
+          name: item.name,
+          currentTerm: item.currentTerm,
+        }));
+
+        if (
+          currentEnrollment &&
+          !options.some((option) => option.id === currentEnrollment.intakeId)
+        ) {
+          options.unshift({
+            id: currentEnrollment.intakeId,
+            name: currentEnrollment.intakeName || currentEnrollment.intakeId,
+            currentTerm: currentEnrollment.currentTerm,
+          });
+        }
+
+        setEditIntakeOptions(options);
+      } catch {
+        if (currentEnrollment) {
+          setEditIntakeOptions([
+            {
+              id: currentEnrollment.intakeId,
+              name: currentEnrollment.intakeName || currentEnrollment.intakeId,
+              currentTerm: currentEnrollment.currentTerm,
+            },
+          ]);
+        } else {
+          setEditIntakeOptions([]);
+        }
+      } finally {
+        setIsLoadingEditIntakes(false);
+      }
+    },
+    []
+  );
+
+  const loadEditIntakeTerm = useCallback(async (intakeId: string) => {
+    const nextIntakeId = String(intakeId ?? "").trim();
+    if (!nextIntakeId) {
+      setSelectedEditIntakeTerm("");
+      return;
+    }
+
+    const requestId = editTermRequestIdRef.current + 1;
+    editTermRequestIdRef.current = requestId;
+    setIsLoadingEditTerm(true);
+
+    try {
+      const response = await fetch(`/api/intakes/${encodeURIComponent(nextIntakeId)}`, {
+        cache: "no-store",
+      });
+      const payload = await readJson<unknown>(response);
+      const root = asObject(payload);
+      const currentTerm = collapseSpaces(root?.currentTerm);
+
+      if (editTermRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSelectedEditIntakeTerm(currentTerm);
+    } catch {
+      if (editTermRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      const fallback =
+        editIntakeOptions.find((item) => item.id === nextIntakeId)?.currentTerm ?? "";
+      setSelectedEditIntakeTerm(fallback);
+    } finally {
+      if (editTermRequestIdRef.current === requestId) {
+        setIsLoadingEditTerm(false);
+      }
+    }
+  }, [editIntakeOptions]);
+
   useEffect(() => {
     setActiveWindow("Profile");
     void loadStudent();
+    void loadEnrollments();
     void loadFaculties();
 
     return () => {
       setActiveWindow(null);
     };
-  }, [loadFaculties, loadStudent, setActiveWindow]);
+  }, [loadFaculties, loadEnrollments, loadStudent, setActiveWindow]);
+
+  useEffect(() => {
+    if (!isModalOpen && !editTarget && !deleteTarget) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [deleteTarget, editTarget, isModalOpen]);
 
   const selectedFacultyDegrees = useMemo(
     () => degrees.filter((item) => !form.facultyId || item.facultyCode === form.facultyId),
@@ -446,6 +636,45 @@ export default function StudentProfilePage() {
     if (isSaving) return;
     setIsModalOpen(false);
     setFormError("");
+  };
+
+  const openEditEnrollmentModal = (enrollment: EnrollmentRecord) => {
+    setEditTarget(enrollment);
+    setEditForm({
+      facultyId: enrollment.facultyId,
+      facultyName: enrollment.facultyName,
+      degreeProgramId: enrollment.degreeProgramId,
+      degreeProgramName: enrollment.degreeProgramName,
+      intakeId: enrollment.intakeId,
+      stream: enrollment.stream,
+      subgroup: enrollment.subgroup,
+      status: enrollment.status,
+    });
+    setEditFormError("");
+    setSelectedEditIntakeTerm(enrollment.currentTerm);
+    void loadEditIntakes(enrollment.facultyId, enrollment.degreeProgramId, enrollment);
+    void loadEditIntakeTerm(enrollment.intakeId);
+  };
+
+  const closeEditEnrollmentModal = () => {
+    if (isUpdatingEnrollment) {
+      return;
+    }
+
+    setEditTarget(null);
+    setEditForm({
+      facultyId: "",
+      facultyName: "",
+      degreeProgramId: "",
+      degreeProgramName: "",
+      intakeId: "",
+      stream: "WEEKDAY",
+      subgroup: "",
+      status: "ACTIVE",
+    });
+    setEditFormError("");
+    setSelectedEditIntakeTerm("");
+    setEditIntakeOptions([]);
   };
 
   const saveEnrollment = async () => {
@@ -482,13 +711,96 @@ export default function StudentProfilePage() {
       });
 
       closeEnrollmentModal();
-      await loadStudent();
+      await loadEnrollments();
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Failed to add enrollment";
-      setFormError(message);
-      toast({ title: "Failed", message, variant: "error" });
+      const friendlyMessage = message.toLowerCase().includes("already enrolled")
+        ? "Student already enrolled in this intake"
+        : message;
+      setFormError(friendlyMessage);
+      toast({ title: "Failed", message: friendlyMessage, variant: "error" });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveEditedEnrollment = async () => {
+    if (!editTarget) {
+      return;
+    }
+
+    if (!editForm.intakeId || !editForm.stream) {
+      setEditFormError("Intake and stream are required");
+      return;
+    }
+
+    setIsUpdatingEnrollment(true);
+    try {
+      await readJson<unknown>(
+        await fetch(`/api/enrollments/${encodeURIComponent(editTarget.id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            intakeId: editForm.intakeId,
+            stream: editForm.stream,
+            subgroup: collapseSpaces(editForm.subgroup) || null,
+            status: editForm.status,
+          }),
+        })
+      );
+
+      toast({
+        title: "Saved",
+        message: "Enrollment updated",
+        variant: "success",
+      });
+      closeEditEnrollmentModal();
+      await loadEnrollments();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update enrollment";
+      const friendlyMessage = message.toLowerCase().includes("already enrolled")
+        ? "Student already enrolled in this intake"
+        : message;
+      setEditFormError(friendlyMessage);
+      toast({
+        title: "Failed",
+        message: friendlyMessage,
+        variant: "error",
+      });
+    } finally {
+      setIsUpdatingEnrollment(false);
+    }
+  };
+
+  const confirmDeleteEnrollment = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsDeletingEnrollment(true);
+    try {
+      await readJson<unknown>(
+        await fetch(`/api/enrollments/${encodeURIComponent(deleteTarget.id)}`, {
+          method: "DELETE",
+        })
+      );
+      toast({
+        title: "Deleted",
+        message: "Enrollment deleted",
+        variant: "success",
+      });
+      setDeleteTarget(null);
+      await loadEnrollments();
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message:
+          error instanceof Error ? error.message : "Failed to delete enrollment",
+        variant: "error",
+      });
+    } finally {
+      setIsDeletingEnrollment(false);
     }
   };
 
@@ -543,7 +855,7 @@ export default function StudentProfilePage() {
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div>
                 <p className="text-lg font-semibold text-heading">Enrollments</p>
-                <p className="text-sm text-text/65">{student.enrollments.length} program enrollments</p>
+                <p className="text-sm text-text/65">{enrollments.length} program enrollments</p>
               </div>
               <Button
                 className="h-11 min-w-[160px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
@@ -554,7 +866,7 @@ export default function StudentProfilePage() {
             </div>
 
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[920px] text-left text-sm">
+              <table className="w-full min-w-[1040px] text-left text-sm">
                 <thead className="border-b border-border bg-tint">
                   <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
                     <th className="px-4 py-3">Faculty</th>
@@ -565,29 +877,73 @@ export default function StudentProfilePage() {
                     <th className="px-4 py-3">Subgroup</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Updated</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {student.enrollments.map((enrollment) => (
-                    <tr className="border-b border-border/70" key={enrollment.id}>
-                      <td className="px-4 py-4">{enrollment.facultyId}</td>
-                      <td className="px-4 py-4">{enrollment.degreeProgramId}</td>
-                      <td className="px-4 py-4">{enrollment.intakeName || enrollment.intakeId}</td>
-                      <td className="px-4 py-4">{enrollment.currentTerm || "-"}</td>
-                      <td className="px-4 py-4">{enrollment.stream}</td>
-                      <td className="px-4 py-4">{enrollment.subgroup || "-"}</td>
-                      <td className="px-4 py-4"><Badge variant={statusVariant(enrollment.status)}>{enrollment.status}</Badge></td>
-                      <td className="px-4 py-4">{formatDate(enrollment.updatedAt)}</td>
-                    </tr>
-                  ))}
-
-                  {student.enrollments.length === 0 ? (
+                  {isLoadingEnrollments ? (
                     <tr>
-                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
+                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={9}>
+                        Loading enrollments...
+                      </td>
+                    </tr>
+                  ) : enrollmentsError ? (
+                    <tr>
+                      <td className="px-4 py-8" colSpan={9}>
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                          <p className="text-sm font-medium text-red-700">Failed to load enrollments</p>
+                          <Button
+                            className="h-10 min-w-[96px] border-red-300 bg-white px-4 text-red-700 hover:bg-red-100"
+                            onClick={() => {
+                              void loadEnrollments();
+                            }}
+                            variant="secondary"
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : enrollments.length > 0 ? (
+                    enrollments.map((enrollment) => (
+                      <tr className="border-b border-border/70" key={enrollment.id}>
+                        <td className="px-4 py-4">{enrollment.facultyId}</td>
+                        <td className="px-4 py-4">{enrollment.degreeProgramId}</td>
+                        <td className="px-4 py-4">{enrollment.intakeName || enrollment.intakeId}</td>
+                        <td className="px-4 py-4">{enrollment.currentTerm || "-"}</td>
+                        <td className="px-4 py-4">{enrollment.stream}</td>
+                        <td className="px-4 py-4">{enrollment.subgroup || "-"}</td>
+                        <td className="px-4 py-4"><Badge variant={statusVariant(enrollment.status)}>{enrollment.status}</Badge></td>
+                        <td className="px-4 py-4">{formatDate(enrollment.updatedAt)}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              aria-label="Edit enrollment"
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                              onClick={() => openEditEnrollmentModal(enrollment)}
+                              type="button"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              aria-label="Delete enrollment"
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                              onClick={() => setDeleteTarget(enrollment)}
+                              type="button"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={9}>
                         No enrollments added yet.
                       </td>
                     </tr>
-                  ) : null}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -789,6 +1145,55 @@ export default function StudentProfilePage() {
           </div>
         </div>
       ) : null}
+
+      <EditEnrollmentModal
+        form={editForm}
+        formError={editFormError}
+        intakeOptions={editIntakeOptions}
+        loadingIntakes={isLoadingEditIntakes}
+        loadingTerm={isLoadingEditTerm}
+        onChange={(patch) =>
+          setEditForm((previous) => ({
+            ...previous,
+            ...patch,
+          }))
+        }
+        onClose={closeEditEnrollmentModal}
+        onIntakeChange={(intakeId) => {
+          void loadEditIntakeTerm(intakeId);
+        }}
+        onSave={() => {
+          void saveEditedEnrollment();
+        }}
+        open={Boolean(editTarget)}
+        saving={isUpdatingEnrollment}
+        selectedIntakeTerm={selectedEditIntakeTerm}
+      />
+
+      <ConfirmDeleteEnrollmentModal
+        deleting={isDeletingEnrollment}
+        onClose={() => {
+          if (isDeletingEnrollment) {
+            return;
+          }
+
+          setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          void confirmDeleteEnrollment();
+        }}
+        open={Boolean(deleteTarget)}
+        target={
+          deleteTarget
+            ? {
+                facultyId: deleteTarget.facultyId,
+                degreeProgramId: deleteTarget.degreeProgramId,
+                intakeId: deleteTarget.intakeId,
+                intakeName: deleteTarget.intakeName,
+              }
+            : null
+        }
+      />
     </div>
   );
 }
