@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
     MessageSquare,
-    Heart,
     Share2,
     Filter,
     Plus,
@@ -19,6 +18,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import communityBackground from "@/app/images/community/community2.jpg";
+import { readStoredUser } from "@/lib/rbac";
 
 type Reply = {
     id: string;
@@ -32,7 +32,7 @@ type Post = {
     title: string;
     content: string;
     author: string;
-    category: string;
+    category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
     likes: number;
     replies: Reply[];
@@ -47,7 +47,39 @@ type ApiPost = {
     author?: string | { name?: string };
 };
 
-const CATEGORIES = ["All", "Questions", "Discussions", "Events", "Resources"];
+type ApiReply = {
+    _id: string;
+    postId: string;
+    author?: string | { name?: string };
+    message: string;
+    createdAt?: string;
+};
+
+const toTimeAgo = (createdAt?: string): string => {
+    if (!createdAt) return "Just now";
+    const createdMs = new Date(createdAt).getTime();
+    if (Number.isNaN(createdMs)) return "Just now";
+
+    const diffMs = Date.now() - createdMs;
+    const minutes = Math.max(1, Math.floor(diffMs / 60000));
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+};
+
+const mapApiReply = (reply: ApiReply): Reply => ({
+    id: reply._id,
+    author:
+        typeof reply.author === "object" && reply.author?.name
+            ? reply.author.name
+            : "Current User",
+    content: reply.message,
+    createdAt: toTimeAgo(reply.createdAt),
+});
+
+const CATEGORIES = ["all", "lost_item", "study_material", "academic_question"] as const;
 
 const INITIAL_POSTS: Post[] = [
     {
@@ -55,7 +87,7 @@ const INITIAL_POSTS: Post[] = [
         title: "Best resources for learning Next.js 14?",
         content: "Hey everyone! I'm starting to learn Next.js 14 App Router. Does anyone have good recommendations for courses or reading material?",
         author: "Alex Johnson",
-        category: "Questions",
+        category: "academic_question",
         createdAt: "2 hours ago",
         likes: 12,
         replies: [
@@ -72,7 +104,7 @@ const INITIAL_POSTS: Post[] = [
         title: "Campus Hackathon this Weekend!",
         content: "Don't forget that the annual campus hackathon is happening this weekend at the main library. Registration is still open until Friday. Free pizza!",
         author: "Tech Club",
-        category: "Events",
+        category: "study_material",
         createdAt: "5 hours ago",
         likes: 45,
         replies: []
@@ -82,7 +114,7 @@ const INITIAL_POSTS: Post[] = [
         title: "Study group for Data Structures",
         content: "Looking for 2-3 people to join our study group for the upcoming Data Structures midterm. We meet Tuesdays and Thursdays.",
         author: "Michael Lee",
-        category: "Discussions",
+        category: "lost_item",
         createdAt: "1 day ago",
         likes: 8,
         replies: [
@@ -98,36 +130,39 @@ const INITIAL_POSTS: Post[] = [
 
 export default function CommunityPage() {
     const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-    const [activeCategory, setActiveCategory] = useState("All");
+    const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("all");
 
     // State to track which post has its reply section expanded
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
     const [newReplyContent, setNewReplyContent] = useState("");
 
     const filteredPosts = posts.filter(post =>
-        activeCategory === "All" || post.category === activeCategory
+        activeCategory === "all" || post.category === activeCategory
     );
 
+    const loadRepliesForPost = async (postId: string) => {
+        try {
+            const res = await fetch(`/api/community-replies?postId=${encodeURIComponent(postId)}`);
+            if (!res.ok) return;
+
+            const data = (await res.json()) as ApiReply[];
+            const mappedReplies = data.map(mapApiReply);
+
+            setPosts((prevPosts) =>
+                prevPosts.map((post) =>
+                    post.id === postId ? { ...post, replies: mappedReplies } : post
+                )
+            );
+        } catch {
+            // Keep existing replies if DB read fails.
+        }
+    };
+
     useEffect(() => {
-        const mapCategory = (category: ApiPost["category"]): string => {
-            if (category === "academic_question") return "Questions";
-            if (category === "study_material") return "Resources";
-            if (category === "lost_item") return "Discussions";
-            return "Discussions";
-        };
-
-        const toTimeAgo = (createdAt?: string): string => {
-            if (!createdAt) return "Just now";
-            const createdMs = new Date(createdAt).getTime();
-            if (Number.isNaN(createdMs)) return "Just now";
-
-            const diffMs = Date.now() - createdMs;
-            const minutes = Math.max(1, Math.floor(diffMs / 60000));
-            if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-            const hours = Math.floor(minutes / 60);
-            if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-            const days = Math.floor(hours / 24);
-            return `${days} day${days === 1 ? "" : "s"} ago`;
+        const mapCategory = (category: ApiPost["category"]): Post["category"] => {
+            if (category === "academic_question") return "academic_question";
+            if (category === "study_material") return "study_material";
+            return "lost_item";
         };
 
         const fetchPosts = async () => {
@@ -151,6 +186,29 @@ export default function CommunityPage() {
                 }));
 
                 setPosts(mapped);
+
+                const repliesPerPost = await Promise.all(
+                    mapped.map(async (post) => {
+                        try {
+                            const replyRes = await fetch(
+                                `/api/community-replies?postId=${encodeURIComponent(post.id)}`
+                            );
+                            if (!replyRes.ok) return [post.id, [] as Reply[]] as const;
+                            const replyData = (await replyRes.json()) as ApiReply[];
+                            return [post.id, replyData.map(mapApiReply)] as const;
+                        } catch {
+                            return [post.id, [] as Reply[]] as const;
+                        }
+                    })
+                );
+
+                const repliesByPostId = new Map<string, Reply[]>(repliesPerPost);
+                setPosts((prevPosts) =>
+                    prevPosts.map((post) => ({
+                        ...post,
+                        replies: repliesByPostId.get(post.id) ?? post.replies,
+                    }))
+                );
             } catch {
                 // Keep fallback mock posts if DB read fails.
             }
@@ -168,25 +226,42 @@ export default function CommunityPage() {
         }));
     };
 
-    const handleReplySubmit = (e: React.FormEvent, postId: string) => {
+    const handleReplySubmit = async (e: React.FormEvent, postId: string) => {
         e.preventDefault();
         if (!newReplyContent.trim()) return;
 
-        const newReply: Reply = {
-            id: Date.now().toString(),
-            author: "Current User", // Mock user
-            content: newReplyContent,
-            createdAt: "Just now"
-        };
+        const storedUser = readStoredUser();
+        const message = newReplyContent.trim();
 
-        setPosts(posts.map(post => {
-            if (post.id === postId) {
-                return { ...post, replies: [...post.replies, newReply] };
+        try {
+            const res = await fetch("/api/community-replies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    postId,
+                    message,
+                    author: storedUser?.id,
+                    authorName: storedUser?.name ?? "Current User",
+                }),
+            });
+
+            if (!res.ok) {
+                return;
             }
-            return post;
-        }));
 
-        setNewReplyContent("");
+            const createdReply = (await res.json()) as ApiReply;
+            const mappedReply = mapApiReply(createdReply);
+
+            setPosts((prevPosts) =>
+                prevPosts.map((post) =>
+                    post.id === postId ? { ...post, replies: [mappedReply, ...post.replies] } : post
+                )
+            );
+
+            setNewReplyContent("");
+        } catch {
+            // No-op for now; retain current input on network errors.
+        }
     };
 
     const toggleReplySection = (postId: string) => {
@@ -195,6 +270,7 @@ export default function CommunityPage() {
         } else {
             setExpandedPostId(postId);
             setNewReplyContent(""); // Reset reply input when opening a new one
+            void loadRepliesForPost(postId);
         }
     };
 
@@ -261,7 +337,7 @@ export default function CommunityPage() {
                             <Button
                                 variant="ghost"
                                 className="mt-4"
-                                onClick={() => setActiveCategory("All")}
+                                onClick={() => setActiveCategory("all")}
                             >
                                 View all posts
                             </Button>
@@ -355,7 +431,7 @@ export default function CommunityPage() {
                                                 <div className="flex justify-end">
                                                     <Button
                                                         type="submit"
-                                                        variant="primary"
+                                                        variant="dark"
                                                         className="py-1.5 gap-2"
                                                         disabled={!newReplyContent.trim()}
                                                     >
