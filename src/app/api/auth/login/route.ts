@@ -1,9 +1,13 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
+import "@/models/LabAssistant";
+import "@/models/Lecturer";
 import "@/models/Student";
 import "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
 import { toAppRoleFromUserRole } from "@/lib/rbac";
+import { LabAssistantModel } from "@/models/LabAssistant";
+import { LecturerModel } from "@/models/Lecturer";
 import { StudentModel } from "@/models/Student";
 import { UserModel } from "@/models/User";
 
@@ -82,6 +86,36 @@ export async function POST(request: Request) {
       const lastName = String(student?.lastName ?? "").trim();
       if (firstName || lastName) {
         displayName = `${firstName} ${lastName}`.trim();
+      }
+    }
+
+    if (!studentRef) {
+      const lecturerRef = String(user.lecturerRef ?? "").trim();
+      if (lecturerRef) {
+        const lecturerRow = await LecturerModel.findById(lecturerRef)
+          .select({ fullName: 1 })
+          .lean()
+          .exec()
+          .catch(() => null);
+        const lecturer = asObject(lecturerRow);
+        const fullName = String(lecturer?.fullName ?? "").trim();
+        if (fullName) {
+          displayName = fullName;
+        }
+      }
+
+      const labAssistantRef = String(user.labAssistantRef ?? "").trim();
+      if (labAssistantRef) {
+        const labAssistantRow = await LabAssistantModel.findById(labAssistantRef)
+          .select({ fullName: 1 })
+          .lean()
+          .exec()
+          .catch(() => null);
+        const labAssistant = asObject(labAssistantRow);
+        const fullName = String(labAssistant?.fullName ?? "").trim();
+        if (fullName) {
+          displayName = fullName;
+        }
       }
     }
 

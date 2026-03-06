@@ -1,34 +1,34 @@
 import { NextResponse } from "next/server";
-import "@/models/Lecturer";
+import "@/models/LabAssistant";
 import "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
 import {
-  buildLecturerEmailLocalPart,
-  createLecturerInMemory,
-  getLecturerEmailDomain,
-  listLecturersInMemory,
+  buildLabAssistantEmailLocalPart,
+  createLabAssistantInMemory,
+  getLabAssistantEmailDomain,
+  listLabAssistantsInMemory,
   sanitizeAcademicCodeList,
-  sanitizeLecturerName,
-  sanitizeLecturerNicStaffId,
-  sanitizeLecturerPhone,
-  sanitizeLecturerStatus,
+  sanitizeLabAssistantName,
+  sanitizeLabAssistantNicStaffId,
+  sanitizeLabAssistantPhone,
+  sanitizeLabAssistantStatus,
   sanitizeModuleIdList,
-  toLecturerPersistedRecordFromUnknown,
-  validateLecturerEligibility,
-  type LecturerPersistedRecord,
-  type LecturerSort,
-  type LecturerStatus,
-} from "@/lib/lecturer-store";
+  toLabAssistantPersistedRecordFromUnknown,
+  validateLabAssistantEligibility,
+  type LabAssistantPersistedRecord,
+  type LabAssistantSort,
+  type LabAssistantStatus,
+} from "@/lib/lab-assistant-store";
 import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/lib/student-registration";
-import { LecturerModel } from "@/models/Lecturer";
-import { UserModel } from "@/models/User";
 import { hashStaffPassword, resolveDefaultStaffPassword } from "@/lib/staff-auth";
+import { LabAssistantModel } from "@/models/LabAssistant";
+import { UserModel } from "@/models/User";
 
-interface LecturerWriteInput {
+interface LabAssistantWriteInput {
   fullName: string;
   phone: string;
   nicStaffId: string | null;
-  status: LecturerStatus;
+  status: LabAssistantStatus;
   facultyIds: string[];
   degreeProgramIds: string[];
   moduleIds: string[];
@@ -39,7 +39,6 @@ function parsePageParam(value: string | null, fallback: number) {
   if (!Number.isFinite(parsed) || parsed < 1) {
     return fallback;
   }
-
   return Math.floor(parsed);
 }
 
@@ -57,7 +56,7 @@ function parsePageSizeParam(value: string | null, fallback: number) {
   return nextValue;
 }
 
-function sanitizeSort(value: string | null): LecturerSort {
+function sanitizeSort(value: string | null): LabAssistantSort {
   if (value === "az" || value === "za" || value === "created") {
     return value;
   }
@@ -65,7 +64,7 @@ function sanitizeSort(value: string | null): LecturerSort {
   return "updated";
 }
 
-function sanitizeStatus(value: string | null): "" | LecturerStatus {
+function sanitizeStatus(value: string | null): "" | LabAssistantStatus {
   if (value === "ACTIVE" || value === "INACTIVE") {
     return value;
   }
@@ -73,24 +72,24 @@ function sanitizeStatus(value: string | null): "" | LecturerStatus {
   return "";
 }
 
-function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInput | null {
-  const fullName = sanitizeLecturerName(body.fullName);
+function toWriteInput(body: Partial<Record<string, unknown>>): LabAssistantWriteInput | null {
+  const fullName = sanitizeLabAssistantName(body.fullName);
   if (!fullName) {
     return null;
   }
 
   return {
     fullName,
-    phone: sanitizeLecturerPhone(body.phone),
-    nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
-    status: sanitizeLecturerStatus(body.status),
+    phone: sanitizeLabAssistantPhone(body.phone),
+    nicStaffId: sanitizeLabAssistantNicStaffId(body.nicStaffId),
+    status: sanitizeLabAssistantStatus(body.status),
     facultyIds: sanitizeAcademicCodeList(body.facultyIds),
     degreeProgramIds: sanitizeAcademicCodeList(body.degreeProgramIds),
     moduleIds: sanitizeModuleIdList(body.moduleIds),
   };
 }
 
-function toApiLecturer(row: LecturerPersistedRecord) {
+function toApiLabAssistant(row: LabAssistantPersistedRecord) {
   return {
     ...row,
     eligibilityCounts: {
@@ -101,12 +100,12 @@ function toApiLecturer(row: LecturerPersistedRecord) {
   };
 }
 
-async function reserveUniqueLecturerEmailInDb(
+async function reserveUniqueLabAssistantEmailInDb(
   fullName: string,
   options?: { excludeId?: string }
 ) {
-  const baseLocalPart = buildLecturerEmailLocalPart(fullName);
-  const domain = getLecturerEmailDomain();
+  const baseLocalPart = buildLabAssistantEmailLocalPart(fullName);
+  const domain = getLabAssistantEmailDomain();
   const excludeId = String(options?.excludeId ?? "").trim();
 
   for (let index = 1; index <= 999; index += 1) {
@@ -117,13 +116,13 @@ async function reserveUniqueLecturerEmailInDb(
     const query = excludeId
       ? { email: candidateEmail, _id: { $ne: excludeId } }
       : { email: candidateEmail };
-    const exists = await LecturerModel.exists(query).catch(() => null);
+    const exists = await LabAssistantModel.exists(query).catch(() => null);
     if (!exists) {
       return candidateEmail;
     }
   }
 
-  throw new Error("Failed to allocate lecturer email");
+  throw new Error("Failed to allocate lab assistant email");
 }
 
 export async function GET(request: Request) {
@@ -136,14 +135,14 @@ export async function GET(request: Request) {
   const page = parsePageParam(searchParams.get("page"), 1);
 
   if (!mongooseConnection) {
-    const allItems = listLecturersInMemory({ search, status, sort });
+    const allItems = listLabAssistantsInMemory({ search, status, sort });
     const total = allItems.length;
     const pageCount = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, pageCount);
     const start = (safePage - 1) * pageSize;
 
     return NextResponse.json({
-      items: allItems.slice(start, start + pageSize).map((item) => toApiLecturer(item)),
+      items: allItems.slice(start, start + pageSize).map((item) => toApiLabAssistant(item)),
       total,
       page: safePage,
       pageSize,
@@ -166,11 +165,10 @@ export async function GET(request: Request) {
     ];
   }
 
-  const total = await LecturerModel.countDocuments(query).catch(() => 0);
+  const total = await LabAssistantModel.countDocuments(query).catch(() => 0);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pageCount);
   const skip = (safePage - 1) * pageSize;
-
   const sortQuery: Record<string, 1 | -1> =
     sort === "az"
       ? { fullName: 1 }
@@ -180,7 +178,7 @@ export async function GET(request: Request) {
           ? { createdAt: -1 }
           : { updatedAt: -1 };
 
-  const rows = (await LecturerModel.find(query)
+  const rows = (await LabAssistantModel.find(query)
     .sort(sortQuery)
     .skip(skip)
     .limit(pageSize)
@@ -189,9 +187,9 @@ export async function GET(request: Request) {
     .catch(() => [])) as unknown[];
 
   const items = rows
-    .map((row) => toLecturerPersistedRecordFromUnknown(row))
-    .filter((row): row is LecturerPersistedRecord => Boolean(row))
-    .map((row) => toApiLecturer(row));
+    .map((row) => toLabAssistantPersistedRecordFromUnknown(row))
+    .filter((row): row is LabAssistantPersistedRecord => Boolean(row))
+    .map((row) => toApiLabAssistant(row));
 
   return NextResponse.json({
     items,
@@ -223,29 +221,28 @@ export async function POST(request: Request) {
       moduleIds: string[];
     };
     try {
-      validated = validateLecturerEligibility({
+      validated = validateLabAssistantEligibility({
         facultyIds: input.facultyIds,
         degreeProgramIds: input.degreeProgramIds,
         moduleIds: input.moduleIds,
       });
     } catch (error) {
       return NextResponse.json(
-        { message: error instanceof Error ? error.message : "Invalid teaching scope" },
+        { message: error instanceof Error ? error.message : "Invalid support scope" },
         { status: 400 }
       );
     }
 
     if (!mongooseConnection) {
       try {
-        const created = createLecturerInMemory({
+        const created = createLabAssistantInMemory({
           ...input,
           ...validated,
         });
-
-        return NextResponse.json(toApiLecturer(created), { status: 201 });
+        return NextResponse.json(toApiLabAssistant(created), { status: 201 });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Failed to create lecturer";
+          error instanceof Error ? error.message : "Failed to create lab assistant";
         if (message === "NIC/Staff ID already exists") {
           return NextResponse.json({ message }, { status: 409 });
         }
@@ -256,9 +253,10 @@ export async function POST(request: Request) {
 
     const maxAttempts = 10;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const generatedEmail = await reserveUniqueLecturerEmailInDb(input.fullName);
+      const generatedEmail = await reserveUniqueLabAssistantEmailInDb(input.fullName);
+
       try {
-        const created = await LecturerModel.create({
+        const created = await LabAssistantModel.create({
           fullName: input.fullName,
           email: generatedEmail,
           phone: input.phone,
@@ -271,7 +269,7 @@ export async function POST(request: Request) {
 
         try {
           const defaultPassword = resolveDefaultStaffPassword({
-            role: "LECTURER",
+            role: "LAB_ASSISTANT",
             nicStaffId: input.nicStaffId,
           });
           const passwordHash = await hashStaffPassword(defaultPassword);
@@ -279,21 +277,22 @@ export async function POST(request: Request) {
           await UserModel.create({
             username: generatedEmail,
             email: generatedEmail,
-            role: "LECTURER",
+            role: "LAB_ASSISTANT",
             passwordHash,
             mustChangePassword: true,
             status: input.status,
-            lecturerRef: created._id,
+            labAssistantRef: created._id,
           });
         } catch (userCreateError) {
-          await LecturerModel.deleteOne({ _id: created._id }).catch(() => null);
+          await LabAssistantModel.deleteOne({ _id: created._id }).catch(() => null);
           const duplicateField = getMongoDuplicateField(userCreateError);
           if (duplicateField === "email" || duplicateField === "username") {
             if (attempt < maxAttempts - 1) {
               continue;
             }
+
             return NextResponse.json(
-              { message: "Generated lecturer login already exists. Please retry." },
+              { message: "Generated lab assistant login already exists. Please retry." },
               { status: 409 }
             );
           }
@@ -301,12 +300,12 @@ export async function POST(request: Request) {
           throw userCreateError;
         }
 
-        const parsed = toLecturerPersistedRecordFromUnknown(created.toObject());
+        const parsed = toLabAssistantPersistedRecordFromUnknown(created.toObject());
         if (!parsed) {
-          throw new Error("Failed to map lecturer");
+          throw new Error("Failed to map lab assistant");
         }
 
-        return NextResponse.json(toApiLecturer(parsed), { status: 201 });
+        return NextResponse.json(toApiLabAssistant(parsed), { status: 201 });
       } catch (error) {
         const duplicateField = getMongoDuplicateField(error);
         if (duplicateField === "nicStaffId") {
@@ -329,14 +328,14 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { message: "Failed to allocate lecturer email. Please retry." },
+      { message: "Failed to allocate lab assistant email. Please retry." },
       { status: 409 }
     );
   } catch (error) {
     return NextResponse.json(
       {
         message:
-          error instanceof Error ? error.message : "Failed to create lecturer",
+          error instanceof Error ? error.message : "Failed to create lab assistant",
       },
       { status: 500 }
     );

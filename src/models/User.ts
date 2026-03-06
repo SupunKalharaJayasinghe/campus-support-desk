@@ -18,7 +18,7 @@ const UserSchema = new Schema(
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LECTURER", "STUDENT"],
+      enum: ["ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },
@@ -32,6 +32,18 @@ const UserSchema = new Schema(
     studentRef: {
       type: Schema.Types.ObjectId,
       ref: "Student",
+      default: null,
+      index: true,
+    },
+    lecturerRef: {
+      type: Schema.Types.ObjectId,
+      ref: "Lecturer",
+      default: null,
+      index: true,
+    },
+    labAssistantRef: {
+      type: Schema.Types.ObjectId,
+      ref: "LabAssistant",
       default: null,
       index: true,
     },

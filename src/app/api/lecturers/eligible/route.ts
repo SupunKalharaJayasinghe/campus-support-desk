@@ -8,6 +8,10 @@ import {
   type LecturerPersistedRecord,
 } from "@/lib/lecturer-store";
 import { LecturerModel } from "@/models/Lecturer";
+import {
+  isStaffEligibleForOffering,
+  staffEligibilityMongoFilter,
+} from "@/lib/staff-eligibility";
 
 function toApiItem(row: LecturerPersistedRecord) {
   return {
@@ -23,22 +27,15 @@ function isEligible(
   row: Pick<LecturerPersistedRecord, "facultyIds" | "degreeProgramIds" | "moduleIds">,
   input: { facultyId: string; degreeId: string; moduleId: string }
 ) {
-  const checks: boolean[] = [];
-  if (input.moduleId) {
-    checks.push(row.moduleIds.includes(input.moduleId));
-  }
-  if (input.degreeId) {
-    checks.push(row.degreeProgramIds.includes(input.degreeId));
-  }
-  if (input.facultyId) {
-    checks.push(row.facultyIds.includes(input.facultyId));
+  if (!input.facultyId || !input.degreeId || !input.moduleId) {
+    return false;
   }
 
-  if (checks.length === 0) {
-    return true;
-  }
-
-  return checks.some(Boolean);
+  return isStaffEligibleForOffering(row, {
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeId,
+    moduleId: input.moduleId,
+  });
 }
 
 export async function GET(request: Request) {
@@ -48,6 +45,9 @@ export async function GET(request: Request) {
     searchParams.get("degreeId") ?? searchParams.get("degreeProgramId")
   );
   const moduleId = String(searchParams.get("moduleId") ?? "").trim();
+  if (!facultyId || !degreeId || !moduleId) {
+    return NextResponse.json({ items: [], total: 0 });
+  }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
 
@@ -62,20 +62,11 @@ export async function GET(request: Request) {
     });
   }
 
-  const query: Record<string, unknown> = { status: "ACTIVE" };
-  const orFilters: Record<string, unknown>[] = [];
-  if (moduleId) {
-    orFilters.push({ moduleIds: moduleId });
-  }
-  if (degreeId) {
-    orFilters.push({ degreeProgramIds: degreeId });
-  }
-  if (facultyId) {
-    orFilters.push({ facultyIds: facultyId });
-  }
-  if (orFilters.length > 0) {
-    query.$or = orFilters;
-  }
+  const query = staffEligibilityMongoFilter({
+    facultyId,
+    degreeProgramId: degreeId,
+    moduleId,
+  });
 
   const rows = (await LecturerModel.find(query)
     .sort({ fullName: 1 })

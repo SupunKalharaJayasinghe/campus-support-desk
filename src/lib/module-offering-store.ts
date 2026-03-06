@@ -414,6 +414,28 @@ export function listModuleOfferingsByModuleId(moduleId: string) {
   return listModuleOfferings().filter((offering) => offering.moduleId === targetModuleId);
 }
 
+export function listModuleOfferingsByLecturerId(lecturerId: string) {
+  const targetLecturerId = String(lecturerId ?? "").trim();
+  if (!targetLecturerId) {
+    return [] as ModuleOfferingRecord[];
+  }
+
+  return listModuleOfferings().filter((offering) =>
+    offering.assignedLecturerIds.includes(targetLecturerId)
+  );
+}
+
+export function listModuleOfferingsByLabAssistantId(labAssistantId: string) {
+  const targetLabAssistantId = String(labAssistantId ?? "").trim();
+  if (!targetLabAssistantId) {
+    return [] as ModuleOfferingRecord[];
+  }
+
+  return listModuleOfferings().filter((offering) =>
+    offering.assignedLabAssistantIds.includes(targetLabAssistantId)
+  );
+}
+
 export function findModuleOfferingById(id: string) {
   const targetId = String(id ?? "").trim();
   return offeringStore().find((offering) => offering.id === targetId && !offering.isDeleted) ?? null;

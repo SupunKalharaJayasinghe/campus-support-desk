@@ -1,58 +1,58 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
-import "@/models/Lecturer";
+import "@/models/LabAssistant";
 import "@/models/ModuleOffering";
 import "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
 import {
-  deleteLecturerInMemory,
-  findLecturerInMemoryById,
+  deleteLabAssistantInMemory,
+  findLabAssistantInMemoryById,
   sanitizeAcademicCodeList,
-  sanitizeLecturerName,
-  sanitizeLecturerNicStaffId,
-  sanitizeLecturerPhone,
-  sanitizeLecturerStatus,
+  sanitizeLabAssistantName,
+  sanitizeLabAssistantNicStaffId,
+  sanitizeLabAssistantPhone,
+  sanitizeLabAssistantStatus,
   sanitizeModuleIdList,
-  toLecturerPersistedRecordFromUnknown,
-  updateLecturerInMemory,
-  validateLecturerEligibility,
-  type LecturerPersistedRecord,
-  type LecturerStatus,
-} from "@/lib/lecturer-store";
-import { listModuleOfferingsByLecturerId } from "@/lib/module-offering-store";
+  toLabAssistantPersistedRecordFromUnknown,
+  updateLabAssistantInMemory,
+  validateLabAssistantEligibility,
+  type LabAssistantPersistedRecord,
+  type LabAssistantStatus,
+} from "@/lib/lab-assistant-store";
+import { listModuleOfferingsByLabAssistantId } from "@/lib/module-offering-store";
 import { getMongoDuplicateField } from "@/lib/student-registration";
-import { LecturerModel } from "@/models/Lecturer";
+import { LabAssistantModel } from "@/models/LabAssistant";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
 
-interface LecturerWriteInput {
+interface LabAssistantWriteInput {
   fullName: string;
   phone: string;
   nicStaffId: string | null;
-  status: LecturerStatus;
+  status: LabAssistantStatus;
   facultyIds: string[];
   degreeProgramIds: string[];
   moduleIds: string[];
 }
 
-function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInput | null {
-  const fullName = sanitizeLecturerName(body.fullName);
+function toWriteInput(body: Partial<Record<string, unknown>>): LabAssistantWriteInput | null {
+  const fullName = sanitizeLabAssistantName(body.fullName);
   if (!fullName) {
     return null;
   }
 
   return {
     fullName,
-    phone: sanitizeLecturerPhone(body.phone),
-    nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
-    status: sanitizeLecturerStatus(body.status),
+    phone: sanitizeLabAssistantPhone(body.phone),
+    nicStaffId: sanitizeLabAssistantNicStaffId(body.nicStaffId),
+    status: sanitizeLabAssistantStatus(body.status),
     facultyIds: sanitizeAcademicCodeList(body.facultyIds),
     degreeProgramIds: sanitizeAcademicCodeList(body.degreeProgramIds),
     moduleIds: sanitizeModuleIdList(body.moduleIds),
   };
 }
 
-function toApiLecturer(row: LecturerPersistedRecord) {
+function toApiLabAssistant(row: LabAssistantPersistedRecord) {
   return {
     ...row,
     eligibilityCounts: {
@@ -67,32 +67,32 @@ export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const lecturerId = String(params.id ?? "").trim();
-  if (!lecturerId) {
-    return NextResponse.json({ message: "Lecturer id is required" }, { status: 400 });
+  const labAssistantId = String(params.id ?? "").trim();
+  if (!labAssistantId) {
+    return NextResponse.json({ message: "Lab assistant id is required" }, { status: 400 });
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
   if (!mongooseConnection) {
-    const row = findLecturerInMemoryById(lecturerId);
+    const row = findLabAssistantInMemoryById(labAssistantId);
     if (!row) {
-      return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
     }
 
-    return NextResponse.json(toApiLecturer(row));
+    return NextResponse.json(toApiLabAssistant(row));
   }
 
-  const row = await LecturerModel.findById(lecturerId).lean().exec().catch(() => null);
+  const row = await LabAssistantModel.findById(labAssistantId).lean().exec().catch(() => null);
   if (!row) {
-    return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+    return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
   }
 
-  const parsed = toLecturerPersistedRecordFromUnknown(row);
+  const parsed = toLabAssistantPersistedRecordFromUnknown(row);
   if (!parsed) {
-    return NextResponse.json({ message: "Failed to map lecturer" }, { status: 500 });
+    return NextResponse.json({ message: "Failed to map lab assistant" }, { status: 500 });
   }
 
-  return NextResponse.json(toApiLecturer(parsed));
+  return NextResponse.json(toApiLabAssistant(parsed));
 }
 
 export async function PUT(
@@ -100,9 +100,9 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const lecturerId = String(params.id ?? "").trim();
-    if (!lecturerId) {
-      return NextResponse.json({ message: "Lecturer id is required" }, { status: 400 });
+    const labAssistantId = String(params.id ?? "").trim();
+    if (!labAssistantId) {
+      return NextResponse.json({ message: "Lab assistant id is required" }, { status: 400 });
     }
 
     const rawBody = (await request.json().catch(() => null)) as
@@ -124,14 +124,14 @@ export async function PUT(
       moduleIds: string[];
     };
     try {
-      validated = validateLecturerEligibility({
+      validated = validateLabAssistantEligibility({
         facultyIds: input.facultyIds,
         degreeProgramIds: input.degreeProgramIds,
         moduleIds: input.moduleIds,
       });
     } catch (error) {
       return NextResponse.json(
-        { message: error instanceof Error ? error.message : "Invalid teaching scope" },
+        { message: error instanceof Error ? error.message : "Invalid support scope" },
         { status: 400 }
       );
     }
@@ -139,19 +139,19 @@ export async function PUT(
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       try {
-        const updated = updateLecturerInMemory({
-          id: lecturerId,
+        const updated = updateLabAssistantInMemory({
+          id: labAssistantId,
           ...input,
           ...validated,
         });
         if (!updated) {
-          return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+          return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
         }
 
-        return NextResponse.json(toApiLecturer(updated));
+        return NextResponse.json(toApiLabAssistant(updated));
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Failed to update lecturer";
+          error instanceof Error ? error.message : "Failed to update lab assistant";
         if (message === "NIC/Staff ID already exists") {
           return NextResponse.json({ message }, { status: 409 });
         }
@@ -160,9 +160,9 @@ export async function PUT(
       }
     }
 
-    const row = await LecturerModel.findById(lecturerId).exec();
+    const row = await LabAssistantModel.findById(labAssistantId).exec();
     if (!row) {
-      return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
     }
 
     row.fullName = input.fullName;
@@ -189,27 +189,30 @@ export async function PUT(
 
     await UserModel.updateMany(
       {
-        $or: [{ lecturerRef: row._id }, { email: String(row.email ?? "").trim().toLowerCase() }],
+        $or: [
+          { labAssistantRef: row._id },
+          { email: String(row.email ?? "").trim().toLowerCase() },
+        ],
       },
       {
         $set: {
           status: row.status,
-          lecturerRef: row._id,
+          labAssistantRef: row._id,
         },
       }
     ).catch(() => null);
 
-    const parsed = toLecturerPersistedRecordFromUnknown(row.toObject());
+    const parsed = toLabAssistantPersistedRecordFromUnknown(row.toObject());
     if (!parsed) {
-      return NextResponse.json({ message: "Failed to map lecturer" }, { status: 500 });
+      return NextResponse.json({ message: "Failed to map lab assistant" }, { status: 500 });
     }
 
-    return NextResponse.json(toApiLecturer(parsed));
+    return NextResponse.json(toApiLabAssistant(parsed));
   } catch (error) {
     return NextResponse.json(
       {
         message:
-          error instanceof Error ? error.message : "Failed to update lecturer",
+          error instanceof Error ? error.message : "Failed to update lab assistant",
       },
       { status: 500 }
     );
@@ -221,24 +224,24 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const lecturerId = String(params.id ?? "").trim();
-    if (!lecturerId) {
-      return NextResponse.json({ message: "Lecturer id is required" }, { status: 400 });
+    const labAssistantId = String(params.id ?? "").trim();
+    if (!labAssistantId) {
+      return NextResponse.json({ message: "Lab assistant id is required" }, { status: 400 });
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
-      const assignedOfferings = listModuleOfferingsByLecturerId(lecturerId);
+      const assignedOfferings = listModuleOfferingsByLabAssistantId(labAssistantId);
       if (assignedOfferings.length > 0) {
         return NextResponse.json(
-          { message: "Lecturer is assigned to module offerings" },
+          { message: "Lab assistant is assigned to module offerings" },
           { status: 409 }
         );
       }
 
-      const deleted = deleteLecturerInMemory(lecturerId);
+      const deleted = deleteLabAssistantInMemory(labAssistantId);
       if (!deleted) {
-        return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+        return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
       }
 
       return NextResponse.json({ ok: true });
@@ -246,27 +249,27 @@ export async function DELETE(
 
     const assignedOfferingExists = Boolean(
       await ModuleOfferingModel.exists({
-        assignedLecturerIds: lecturerId,
+        assignedLabAssistantIds: labAssistantId,
       }).catch(() => null)
     );
     if (assignedOfferingExists) {
       return NextResponse.json(
-        { message: "Lecturer is assigned to module offerings" },
+        { message: "Lab assistant is assigned to module offerings" },
         { status: 409 }
       );
     }
 
-    const deletedRow = await LecturerModel.findByIdAndDelete(lecturerId).exec();
+    const deletedRow = await LabAssistantModel.findByIdAndDelete(labAssistantId).exec();
     if (!deletedRow) {
-      return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
     }
 
-    const lecturerObjectId = mongoose.Types.ObjectId.isValid(lecturerId)
-      ? new mongoose.Types.ObjectId(lecturerId)
+    const labAssistantObjectId = mongoose.Types.ObjectId.isValid(labAssistantId)
+      ? new mongoose.Types.ObjectId(labAssistantId)
       : null;
     await UserModel.updateMany(
-      lecturerObjectId
-        ? { $or: [{ lecturerRef: lecturerObjectId }, { email: deletedRow.email }] }
+      labAssistantObjectId
+        ? { $or: [{ labAssistantRef: labAssistantObjectId }, { email: deletedRow.email }] }
         : { email: deletedRow.email },
       {
         $set: {
@@ -281,7 +284,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         message:
-          error instanceof Error ? error.message : "Failed to delete lecturer",
+          error instanceof Error ? error.message : "Failed to delete lab assistant",
       },
       { status: 500 }
     );

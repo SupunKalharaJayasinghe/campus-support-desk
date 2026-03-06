@@ -27,6 +27,7 @@ import {
   type SyllabusVersion,
 } from "@/lib/module-offering-store";
 import { findModuleById } from "@/lib/module-store";
+import { isStaffEligibleForOffering } from "@/lib/staff-eligibility";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -300,11 +301,11 @@ function isEligibleByScope(
   },
   scope: OfferingScope
 ) {
-  return (
-    row.moduleIds.includes(scope.moduleId) ||
-    row.degreeProgramIds.includes(scope.degreeProgramId) ||
-    row.facultyIds.includes(scope.facultyId)
-  );
+  return isStaffEligibleForOffering(row, {
+    facultyId: scope.facultyId,
+    degreeProgramId: scope.degreeProgramId,
+    moduleId: scope.moduleId,
+  });
 }
 
 async function validateLecturerAssignments(

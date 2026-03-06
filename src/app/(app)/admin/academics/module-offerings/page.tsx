@@ -453,14 +453,12 @@ export default function ModuleOfferingsPage() {
   const loadEligibleLecturers = useCallback(async (offering: OfferingRecord) => {
     setIsLoadingLecturers(true);
     try {
-      const params = new URLSearchParams({
-        facultyId: offering.facultyId,
-        degreeId: offering.degreeProgramId,
-        moduleId: offering.moduleId,
-      });
-      const response = await fetch(`/api/lecturers/eligible?${params.toString()}`, {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/module-offerings/${encodeURIComponent(
+          offering.id
+        )}/eligible-lecturers`,
+        { cache: "no-store" }
+      );
       const payload = await readJson<unknown>(response);
       setEligibleLecturers(parseEligibleStaff(payload));
     } catch {
@@ -473,13 +471,10 @@ export default function ModuleOfferingsPage() {
   const loadEligibleLabAssistants = useCallback(async (offering: OfferingRecord) => {
     setIsLoadingLabAssistants(true);
     try {
-      const params = new URLSearchParams({
-        facultyId: offering.facultyId,
-        degreeId: offering.degreeProgramId,
-        moduleId: offering.moduleId,
-      });
       const response = await fetch(
-        `/api/lab-assistants/eligible?${params.toString()}`,
+        `/api/module-offerings/${encodeURIComponent(
+          offering.id
+        )}/eligible-lab-assistants`,
         {
           cache: "no-store",
         }
@@ -579,19 +574,41 @@ export default function ModuleOfferingsPage() {
   };
 
   const toggleLecturer = (lecturerId: string) => {
-    setFormLecturerIds((previous) =>
-      previous.includes(lecturerId)
+    setFormLecturerIds((previous) => {
+      const removing = previous.includes(lecturerId);
+      const next = removing
         ? previous.filter((item) => item !== lecturerId)
-        : [...previous, lecturerId]
-    );
+        : [...previous, lecturerId];
+      const name =
+        eligibleLecturers.find((row) => row.id === lecturerId)?.fullName ??
+        editTarget?.lecturers.find((row) => row.id === lecturerId)?.fullName ??
+        "Lecturer";
+      toast({
+        title: removing ? "Lecturer unassigned" : "Lecturer assigned",
+        message: name,
+        variant: "info",
+      });
+      return next;
+    });
   };
 
   const toggleLabAssistant = (labAssistantId: string) => {
-    setFormLabAssistantIds((previous) =>
-      previous.includes(labAssistantId)
+    setFormLabAssistantIds((previous) => {
+      const removing = previous.includes(labAssistantId);
+      const next = removing
         ? previous.filter((item) => item !== labAssistantId)
-        : [...previous, labAssistantId]
-    );
+        : [...previous, labAssistantId];
+      const name =
+        eligibleLabAssistants.find((row) => row.id === labAssistantId)?.fullName ??
+        editTarget?.labAssistants.find((row) => row.id === labAssistantId)?.fullName ??
+        "Lab assistant";
+      toast({
+        title: removing ? "Lab assistant unassigned" : "Lab assistant assigned",
+        message: name,
+        variant: "info",
+      });
+      return next;
+    });
   };
 
   const saveOffering = async () => {
