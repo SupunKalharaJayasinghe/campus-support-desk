@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
     MessageSquare,
@@ -17,7 +17,6 @@ import {
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import communityBackground from "@/app/images/community/community2.jpg";
 
@@ -37,6 +36,15 @@ type Post = {
     createdAt: string;
     likes: number;
     replies: Reply[];
+};
+
+type ApiPost = {
+    _id: string;
+    title: string;
+    description: string;
+    category: "lost_item" | "study_material" | "academic_question";
+    createdAt?: string;
+    author?: string | { name?: string };
 };
 
 const CATEGORIES = ["All", "Questions", "Discussions", "Events", "Resources"];
@@ -91,10 +99,6 @@ const INITIAL_POSTS: Post[] = [
 export default function CommunityPage() {
     const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
     const [activeCategory, setActiveCategory] = useState("All");
-    const [isCreatingPost, setIsCreatingPost] = useState(false);
-    const [newPostTitle, setNewPostTitle] = useState("");
-    const [newPostContent, setNewPostContent] = useState("");
-    const [newPostCategory, setNewPostCategory] = useState("Discussions");
 
     // State to track which post has its reply section expanded
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -104,26 +108,56 @@ export default function CommunityPage() {
         activeCategory === "All" || post.category === activeCategory
     );
 
-    const handleCreatePost = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newPostTitle.trim() || !newPostContent.trim()) return;
-
-        const newPost: Post = {
-            id: Date.now().toString(),
-            title: newPostTitle,
-            content: newPostContent,
-            author: "Current User", // Mock user
-            category: newPostCategory,
-            createdAt: "Just now",
-            likes: 0,
-            replies: []
+    useEffect(() => {
+        const mapCategory = (category: ApiPost["category"]): string => {
+            if (category === "academic_question") return "Questions";
+            if (category === "study_material") return "Resources";
+            if (category === "lost_item") return "Discussions";
+            return "Discussions";
         };
 
-        setPosts([newPost, ...posts]);
-        setNewPostTitle("");
-        setNewPostContent("");
-        setIsCreatingPost(false);
-    };
+        const toTimeAgo = (createdAt?: string): string => {
+            if (!createdAt) return "Just now";
+            const createdMs = new Date(createdAt).getTime();
+            if (Number.isNaN(createdMs)) return "Just now";
+
+            const diffMs = Date.now() - createdMs;
+            const minutes = Math.max(1, Math.floor(diffMs / 60000));
+            if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+            const days = Math.floor(hours / 24);
+            return `${days} day${days === 1 ? "" : "s"} ago`;
+        };
+
+        const fetchPosts = async () => {
+            try {
+                const res = await fetch("/api/community-posts");
+                if (!res.ok) return;
+
+                const data = (await res.json()) as ApiPost[];
+                const mapped: Post[] = data.map((post) => ({
+                    id: post._id,
+                    title: post.title,
+                    content: post.description,
+                    author:
+                        typeof post.author === "object" && post.author?.name
+                            ? post.author.name
+                            : "Current User",
+                    category: mapCategory(post.category),
+                    createdAt: toTimeAgo(post.createdAt),
+                    likes: 0,
+                    replies: [],
+                }));
+
+                setPosts(mapped);
+            } catch {
+                // Keep fallback mock posts if DB read fails.
+            }
+        };
+
+        fetchPosts();
+    }, []);
 
     const handleLikePost = (postId: string) => {
         setPosts(posts.map(post => {
@@ -190,55 +224,14 @@ export default function CommunityPage() {
                             Connect with your peers, share resources, and ask questions.
                         </p>
                     </div>
-                    <Button
-                        onClick={() => setIsCreatingPost(!isCreatingPost)}
-                        className="flex items-center gap-2 rounded-full px-6 py-3"
+                    <Link
+                        href="/community-help/post/create"
+                        className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                     >
-                        {isCreatingPost ? "Cancel" : <><Plus size={18} /> Create Post</>}
-                    </Button>
+                        <Plus size={18} />
+                        Create Post
+                    </Link>
                 </div>
-
-                {/* Create Post Form */}
-                {isCreatingPost && (
-                    <Card className="mb-10 overflow-hidden border-2 border-primary/20 p-6 shadow-sm transition-all animate-in fade-in slide-in-from-top-4">
-                        <h2 className="mb-4 text-xl font-semibold text-heading">Create a New Post</h2>
-                        <form onSubmit={handleCreatePost} className="space-y-4">
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">Title</label>
-                                <Input
-                                    placeholder="What's on your mind?"
-                                    value={newPostTitle}
-                                    onChange={(e) => setNewPostTitle(e.target.value)}
-                                    autoFocus
-                                />
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">Category</label>
-                                <select
-                                    className="w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors placeholder:text-text/55 focus:border-primary focus:outline-none focus:ring-2 focus:ring-focus"
-                                    value={newPostCategory}
-                                    onChange={(e) => setNewPostCategory(e.target.value)}
-                                >
-                                    {CATEGORIES.filter(c => c !== "All").map(category => (
-                                        <option key={category} value={category}>{category}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">Details</label>
-                                <Textarea
-                                    placeholder="Share the details here..."
-                                    rows={4}
-                                    value={newPostContent}
-                                    onChange={(e) => setNewPostContent(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex justify-end pt-2">
-                                <Button type="submit" variant="primary">Post to Community</Button>
-                            </div>
-                        </form>
-                    </Card>
-                )}
 
                 {/* Filters */}
                 <div className="mb-8 flex flex-wrap items-center gap-3">
@@ -379,6 +372,7 @@ export default function CommunityPage() {
                 </div>
                 </div>
             </Container>
+
         </main>
     );
 }
