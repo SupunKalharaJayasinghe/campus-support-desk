@@ -12,24 +12,47 @@ function normalizeCode(value: string | null | undefined) {
     .slice(0, 6);
 }
 
+function normalizeCodeList(value: string | null | undefined) {
+  return Array.from(
+    new Set(
+      String(value ?? "")
+        .split(",")
+        .map((item) => normalizeCode(item))
+        .filter(Boolean)
+    )
+  );
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const facultyCode = normalizeCode(
+  const singleFacultyCode = normalizeCode(
     searchParams.get("facultyId") ??
       searchParams.get("facultyCode") ??
       searchParams.get("faculty")
   );
+  const facultyCodeList = normalizeCodeList(searchParams.get("facultyIds"));
+  const facultyFilters =
+    facultyCodeList.length > 0
+      ? facultyCodeList
+      : singleFacultyCode
+        ? [singleFacultyCode]
+        : [];
   const status = String(searchParams.get("status") ?? "").trim().toUpperCase();
   const degreeStatus: "" | DegreeProgramStatus =
     status === "ACTIVE" || status === "INACTIVE" || status === "DRAFT"
       ? (status as DegreeProgramStatus)
       : "";
 
-  const items = listDegreePrograms({
-    faculty: facultyCode,
+  const rows = listDegreePrograms({
+    faculty: facultyFilters.length === 1 ? facultyFilters[0] : "",
     status: degreeStatus,
     sort: "az",
-  }).map((item) => ({
+  });
+  const filteredRows =
+    facultyFilters.length <= 1
+      ? rows
+      : rows.filter((item) => facultyFilters.includes(item.facultyCode));
+  const items = filteredRows.map((item) => ({
     id: item.code,
     code: item.code,
     name: item.name,

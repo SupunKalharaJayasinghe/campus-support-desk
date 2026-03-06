@@ -4,6 +4,9 @@ export interface DemoUser {
   id: string;
   name: string;
   role: AppRole;
+  username?: string;
+  email?: string;
+  mustChangePassword?: boolean;
 }
 
 export const ROLE_STORAGE_KEY = "unihub_role";
@@ -88,11 +91,26 @@ export function readStoredUser(): DemoUser | null {
   }
 
   try {
-    const parsed = JSON.parse(rawUser) as DemoUser;
-    if (!parsed || typeof parsed !== "object" || !isRole(parsed.role)) {
+    const parsed = JSON.parse(rawUser) as Partial<DemoUser>;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !isRole(String(parsed.role ?? "")) ||
+      typeof parsed.id !== "string"
+    ) {
       return null;
     }
-    return parsed;
+    return {
+      id: parsed.id,
+      name: typeof parsed.name === "string" ? parsed.name : "User",
+      role: parsed.role as AppRole,
+      username: typeof parsed.username === "string" ? parsed.username : undefined,
+      email: typeof parsed.email === "string" ? parsed.email : undefined,
+      mustChangePassword:
+        typeof parsed.mustChangePassword === "boolean"
+          ? parsed.mustChangePassword
+          : false,
+    };
   } catch {
     return null;
   }
@@ -101,6 +119,55 @@ export function readStoredUser(): DemoUser | null {
 export function persistDemoSession(user: DemoUser) {
   window.localStorage.setItem(ROLE_STORAGE_KEY, user.role);
   window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+export function updateStoredUser(patch: Partial<DemoUser>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const current = readStoredUser();
+  if (!current) {
+    return;
+  }
+
+  const next: DemoUser = {
+    ...current,
+    ...patch,
+    role: isRole(String((patch.role ?? current.role) || "")) ? (patch.role ?? current.role)! : current.role,
+  };
+
+  persistDemoSession(next);
+}
+
+export function isPasswordChangeRequired() {
+  const user = readStoredUser();
+  return Boolean(user?.mustChangePassword);
+}
+
+export function authHeaders() {
+  const user = readStoredUser();
+  if (!user) {
+    return {} as Record<string, string>;
+  }
+
+  return {
+    "x-user-id": user.id,
+  } as Record<string, string>;
+}
+
+export function toAppRoleFromUserRole(value: unknown): AppRole {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "ADMIN" || normalized === "SUPER_ADMIN") {
+    return "SUPER_ADMIN";
+  }
+  if (normalized === "LECTURER") {
+    return "LECTURER";
+  }
+  if (normalized === "STUDENT") {
+    return "STUDENT";
+  }
+  return "LOST_ITEM_STAFF";
 }
 
 export function clearDemoSession() {

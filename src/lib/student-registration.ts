@@ -636,6 +636,104 @@ export function addEnrollmentToStudentInMemory(
   return decorateEnrollmentRecord(enrollment);
 }
 
+export function listStudentEnrollmentsInMemory(studentRecordId: string) {
+  const targetStudentId = String(studentRecordId ?? "").trim();
+  if (!targetStudentId) {
+    return [];
+  }
+
+  const rows = enrollmentMemoryStore()
+    .filter((item) => item.studentId === targetStudentId)
+    .map((item) => decorateEnrollmentRecord(item));
+
+  return sortEnrollmentsByLatest(rows);
+}
+
+export function findEnrollmentInMemoryById(enrollmentId: string) {
+  const targetEnrollmentId = String(enrollmentId ?? "").trim();
+  if (!targetEnrollmentId) {
+    return null;
+  }
+
+  const row = enrollmentMemoryStore().find((item) => item.id === targetEnrollmentId);
+  if (!row) {
+    return null;
+  }
+
+  return decorateEnrollmentRecord(row);
+}
+
+export function updateEnrollmentInMemory(
+  enrollmentId: string,
+  input: {
+    intakeId: string;
+    stream: StudentStream;
+    subgroup?: string | null;
+    status: StudentStatus;
+  }
+) {
+  const targetEnrollmentId = String(enrollmentId ?? "").trim();
+  const store = enrollmentMemoryStore();
+  const index = store.findIndex((item) => item.id === targetEnrollmentId);
+  if (index < 0) {
+    return null;
+  }
+
+  const current = store[index];
+  const duplicate = store.find(
+    (item) =>
+      item.id !== current.id &&
+      item.studentId === current.studentId &&
+      item.degreeProgramId === current.degreeProgramId &&
+      item.intakeId === input.intakeId
+  );
+  if (duplicate) {
+    throw new Error("Student already enrolled in this intake");
+  }
+
+  const updated: EnrollmentPersistedRecord = {
+    ...current,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    subgroup: input.subgroup ?? null,
+    status: input.status,
+    updatedAt: new Date().toISOString(),
+  };
+  store[index] = updated;
+
+  const students = studentMemoryStore();
+  const studentIndex = students.findIndex((item) => item.id === current.studentId);
+  if (studentIndex >= 0) {
+    students[studentIndex] = {
+      ...students[studentIndex],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return decorateEnrollmentRecord(updated);
+}
+
+export function deleteEnrollmentInMemory(enrollmentId: string) {
+  const targetEnrollmentId = String(enrollmentId ?? "").trim();
+  const store = enrollmentMemoryStore();
+  const index = store.findIndex((item) => item.id === targetEnrollmentId);
+  if (index < 0) {
+    return null;
+  }
+
+  const [removed] = store.splice(index, 1);
+  const students = studentMemoryStore();
+  const studentIndex = students.findIndex((item) => item.id === removed.studentId);
+  if (studentIndex >= 0) {
+    students[studentIndex] = {
+      ...students[studentIndex],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return decorateEnrollmentRecord(removed);
+}
+
 export function updateStudentInMemory(
   id: string,
   input: StudentProfileWriteInput

@@ -48,6 +48,23 @@ function sanitizeSort(value: string | null): ModuleSort {
   return "updated";
 }
 
+function sanitizeCodeList(value: string | null) {
+  return Array.from(
+    new Set(
+      String(value ?? "")
+        .split(",")
+        .map((item) =>
+          String(item ?? "")
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z]/g, "")
+            .slice(0, 6)
+        )
+        .filter(Boolean)
+    )
+  );
+}
+
 export async function GET(request: Request) {
   await connectMongoose().catch(() => null);
   const { searchParams } = new URL(request.url);
@@ -58,12 +75,33 @@ export async function GET(request: Request) {
   const degreeId = String(searchParams.get("degreeId") ?? "")
     .trim()
     .toUpperCase();
+  const facultyIds = sanitizeCodeList(searchParams.get("facultyIds"));
+  const degreeIds = sanitizeCodeList(searchParams.get("degreeIds"));
   const termCode = String(searchParams.get("term") ?? "")
     .trim()
     .toUpperCase() as ApplicableTermCode;
   const sort = sanitizeSort(searchParams.get("sort"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 25);
-  const allItems = listModules({ search, sort, facultyCode, degreeId, termCode });
+  const allItems = listModules({
+    search,
+    sort,
+    facultyCode: facultyIds.length === 1 ? facultyIds[0] : facultyCode,
+    degreeId: degreeIds.length === 1 ? degreeIds[0] : degreeId,
+    termCode,
+  }).filter((item) => {
+    if (facultyIds.length > 0 && !facultyIds.includes(item.facultyCode)) {
+      return false;
+    }
+
+    if (
+      degreeIds.length > 0 &&
+      !degreeIds.some((degreeItem) => item.applicableDegrees.includes(degreeItem))
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 
   const total = allItems.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));

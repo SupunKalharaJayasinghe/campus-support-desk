@@ -5,29 +5,102 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import campusBackground from "@/app/images/Services/lecturer.png";
-import { HOME_BY_ROLE, persistDemoSession } from "@/lib/rbac";
+import { HOME_BY_ROLE, isDemoModeEnabled, persistDemoSession } from "@/lib/rbac";
 import type { AppRole } from "@/lib/rbac";
 
 export default function LoginPage() {
   const router = useRouter();
+  const isDemoMode = isDemoModeEnabled();
   const [campusIdOrEmail, setCampusIdOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [role, setRole] = useState<AppRole>("SUPER_ADMIN");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError("");
+
+    if (isSubmitting) {
+      return;
+    }
 
     const trimmedId = campusIdOrEmail.trim();
-    const displayName = trimmedId || (role === "SUPER_ADMIN" ? "Demo Admin" : "Demo User");
+    if (!trimmedId || !password) {
+      setError("Campus ID/email and password are required");
+      return;
+    }
 
-    persistDemoSession({
-      id: trimmedId || `demo-${role.toLowerCase()}-${Date.now()}`,
-      name: displayName,
-      role,
-    });
+    if (isDemoMode) {
+      const displayName =
+        trimmedId || (role === "SUPER_ADMIN" ? "Demo Admin" : "Demo User");
 
-    router.push(HOME_BY_ROLE[role]);
+      persistDemoSession({
+        id: trimmedId || `demo-${role.toLowerCase()}-${Date.now()}`,
+        name: displayName,
+        role,
+        mustChangePassword: false,
+      });
+
+      router.push(HOME_BY_ROLE[role]);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: trimmedId,
+          password,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            message?: string;
+            user?: {
+              id: string;
+              role: AppRole;
+              name: string;
+              username?: string;
+              email?: string;
+              mustChangePassword?: boolean;
+            };
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.message || "Login failed");
+      }
+
+      const user = payload?.user;
+      if (!user?.id || !user?.role) {
+        throw new Error("Invalid login response");
+      }
+
+      persistDemoSession({
+        id: String(user.id),
+        name: String(user.name || user.username || "User"),
+        role: user.role,
+        username: user.username,
+        email: user.email,
+        mustChangePassword: Boolean(user.mustChangePassword),
+      });
+
+      if (user.mustChangePassword) {
+        router.push("/change-password");
+        return;
+      }
+
+      router.push(HOME_BY_ROLE[user.role]);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Login failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -105,26 +178,28 @@ export default function LoginPage() {
                   />
                 </div>
 
-                <div>
-                  <label
-                    className="text-sm font-medium text-[#26150F]"
-                    htmlFor="role"
-                  >
-                    Login as
-                  </label>
-                  <select
-                    className="mt-2 w-full rounded-xl border border-black/15 bg-white px-4 py-3 text-[#26150F] outline-none transition focus:border-[#034AA6] focus:ring-4 focus:ring-[#034AA6]/30"
-                    id="role"
-                    name="role"
-                    onChange={(event) => setRole(event.target.value as AppRole)}
-                    value={role}
-                  >
-                    <option value="SUPER_ADMIN">Administrator</option>
-                    <option value="LECTURER">Lecturer</option>
-                    <option value="LOST_ITEM_STAFF">Lost Item Officer</option>
-                    <option value="STUDENT">Student</option>
-                  </select>
-                </div>
+                {isDemoMode ? (
+                  <div>
+                    <label
+                      className="text-sm font-medium text-[#26150F]"
+                      htmlFor="role"
+                    >
+                      Login as
+                    </label>
+                    <select
+                      className="mt-2 w-full rounded-xl border border-black/15 bg-white px-4 py-3 text-[#26150F] outline-none transition focus:border-[#034AA6] focus:ring-4 focus:ring-[#034AA6]/30"
+                      id="role"
+                      name="role"
+                      onChange={(event) => setRole(event.target.value as AppRole)}
+                      value={role}
+                    >
+                      <option value="SUPER_ADMIN">Administrator</option>
+                      <option value="LECTURER">Lecturer</option>
+                      <option value="LOST_ITEM_STAFF">Lost Item Officer</option>
+                      <option value="STUDENT">Student</option>
+                    </select>
+                  </div>
+                ) : null}
 
                 <div className="flex items-center justify-between gap-4">
                   <label
@@ -152,10 +227,17 @@ export default function LoginPage() {
 
                 <button
                   className="w-full rounded-2xl bg-[#034AA6] px-6 py-3 font-semibold text-[#D9D9D9] transition-colors duration-200 hover:bg-[#0339A6] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#034AA6]/30"
+                  disabled={isSubmitting}
                   type="submit"
                 >
-                  Login
+                  {isSubmitting ? "Signing in..." : "Login"}
                 </button>
+
+                {error ? (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {error}
+                  </p>
+                ) : null}
 
                 <p className="text-sm text-[#26150F]/68">
                   Need access? Contact Campus IT Services.

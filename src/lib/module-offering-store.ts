@@ -11,6 +11,8 @@ import {
 } from "@/lib/module-store";
 
 export type SyllabusVersion = "OLD" | "NEW";
+export type ModuleOfferingStatus = "ACTIVE" | "INACTIVE";
+export type ModuleOfferingSort = "updated" | "module" | "term";
 
 export interface ModuleOutlineWeekRecord {
   weekNo: number;
@@ -23,12 +25,18 @@ export interface ModuleOutlineWeekRecord {
 
 export interface ModuleOfferingRecord {
   id: string;
+  facultyId: string;
+  degreeProgramId: string;
   intakeId: string;
   termCode: TermCode;
   moduleId: string;
   moduleCode: string;
   moduleName: string;
   syllabusVersion: SyllabusVersion;
+  assignedLecturerIds: string[];
+  assignedLabAssistantIds: string[];
+  status: ModuleOfferingStatus;
+  // Backward-compatible alias used by existing dependencies flow.
   assignedLecturers: string[];
   outlineWeeks: ModuleOutlineWeekRecord[];
   outlinePending: boolean;
@@ -44,12 +52,159 @@ const globalForModuleOfferingStore = globalThis as typeof globalThis & {
   __moduleOfferingStore?: ModuleOfferingRecord[];
 };
 
+const TERM_SORT_ORDER: TermCode[] = [
+  "Y1S1",
+  "Y1S2",
+  "Y2S1",
+  "Y2S2",
+  "Y3S1",
+  "Y3S2",
+  "Y4S1",
+  "Y4S2",
+];
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function normalizeAcademicCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
+}
+
+function toIsoTimestamp(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString();
+}
+
+function sanitizeAssignmentIds(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function sanitizeOfferingStatus(value: unknown): ModuleOfferingStatus {
+  return value === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+}
+
+function sanitizeOutlineWeeks(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as ModuleOutlineWeekRecord[];
+  }
+
+  const rows = value
+    .map((item) => asObject(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const weekNo = sanitizeWeekNo(item.weekNo);
+      return {
+        weekNo,
+        title: String(item.title ?? "").trim() || `Week ${weekNo}`,
+        type: String(item.type ?? "").trim() || undefined,
+        plannedStartDate: String(item.plannedStartDate ?? "").trim(),
+        plannedEndDate: String(item.plannedEndDate ?? "").trim(),
+        manuallyEdited: item.manuallyEdited === true,
+      } satisfies ModuleOutlineWeekRecord;
+    });
+
+  const byWeek = new Map<number, ModuleOutlineWeekRecord>();
+  rows.forEach((row) => {
+    byWeek.set(row.weekNo, row);
+  });
+
+  return Array.from(byWeek.values()).sort((left, right) => left.weekNo - right.weekNo);
+}
+
+function normalizeModuleOfferingRecord(value: unknown): ModuleOfferingRecord | null {
+  const row = asObject(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = String(row.id ?? row._id ?? "").trim();
+  const intakeId = String(row.intakeId ?? "").trim();
+  const moduleId = String(row.moduleId ?? "").trim();
+
+  if (!id || !intakeId || !moduleId) {
+    return null;
+  }
+
+  const intake = findIntakeById(intakeId);
+  const moduleRecord = findModuleById(moduleId);
+  const assignedLecturerIds = sanitizeAssignmentIds(
+    row.assignedLecturerIds ?? row.assignedLecturers
+  );
+  const createdAt = toIsoTimestamp(row.createdAt);
+  const updatedAt = toIsoTimestamp(row.updatedAt);
+  const now = new Date().toISOString();
+
+  return {
+    id,
+    facultyId: normalizeAcademicCode(row.facultyId ?? intake?.facultyCode),
+    degreeProgramId: normalizeAcademicCode(
+      row.degreeProgramId ?? intake?.degreeCode
+    ),
+    intakeId,
+    termCode: sanitizeTermCode(row.termCode),
+    moduleId,
+    moduleCode:
+      String(row.moduleCode ?? moduleRecord?.code ?? "")
+        .trim()
+        .toUpperCase() || moduleId.toUpperCase(),
+    moduleName:
+      String(row.moduleName ?? moduleRecord?.name ?? "").trim() ||
+      String(moduleRecord?.code ?? moduleId).trim(),
+    syllabusVersion: sanitizeSyllabusVersion(row.syllabusVersion),
+    assignedLecturerIds,
+    assignedLabAssistantIds: sanitizeAssignmentIds(row.assignedLabAssistantIds),
+    status: sanitizeOfferingStatus(row.status),
+    assignedLecturers: assignedLecturerIds,
+    outlineWeeks: sanitizeOutlineWeeks(row.outlineWeeks),
+    outlinePending: row.outlinePending === true,
+    hasGrades: row.hasGrades === true,
+    hasAttendance: row.hasAttendance === true,
+    hasContent: row.hasContent === true,
+    createdAt: createdAt || updatedAt || now,
+    updatedAt: updatedAt || createdAt || now,
+    isDeleted: row.isDeleted === true,
+  };
+}
+
 function offeringStore() {
   if (!globalForModuleOfferingStore.__moduleOfferingStore) {
     globalForModuleOfferingStore.__moduleOfferingStore = [];
   }
 
-  return globalForModuleOfferingStore.__moduleOfferingStore;
+  const store = globalForModuleOfferingStore.__moduleOfferingStore
+    .map((row) => normalizeModuleOfferingRecord(row))
+    .filter((row): row is ModuleOfferingRecord => Boolean(row));
+
+  globalForModuleOfferingStore.__moduleOfferingStore = store;
+  return store;
 }
 
 function asDate(value: string) {
@@ -74,20 +229,6 @@ function addDaysToDateOnly(value: string, days: number) {
 
 function sanitizeSyllabusVersion(value: unknown): SyllabusVersion {
   return value === "OLD" ? "OLD" : "NEW";
-}
-
-function sanitizeAssignedLecturers(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      value
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-    )
-  );
 }
 
 function sanitizeModuleIdList(value: unknown) {
@@ -197,26 +338,71 @@ function mergeOutlineWeeks(
 }
 
 export function listModuleOfferings(options?: {
+  facultyId?: string;
+  degreeProgramId?: string;
   intakeId?: string;
   termCode?: TermCode;
+  moduleId?: string;
+  status?: "" | ModuleOfferingStatus;
+  sort?: ModuleOfferingSort;
   search?: string;
 }) {
+  const facultyId = normalizeAcademicCode(options?.facultyId);
+  const degreeProgramId = normalizeAcademicCode(options?.degreeProgramId);
   const intakeId = String(options?.intakeId ?? "").trim();
   const termCode = options?.termCode ? sanitizeTermCode(options.termCode) : null;
+  const moduleId = String(options?.moduleId ?? "").trim();
+  const status = options?.status ?? "";
+  const sort = options?.sort ?? "updated";
   const search = String(options?.search ?? "").trim().toLowerCase();
 
-  return offeringStore()
+  const filtered = offeringStore()
     .filter((offering) => !offering.isDeleted)
+    .filter((offering) => (facultyId ? offering.facultyId === facultyId : true))
+    .filter((offering) =>
+      degreeProgramId ? offering.degreeProgramId === degreeProgramId : true
+    )
     .filter((offering) => (intakeId ? offering.intakeId === intakeId : true))
     .filter((offering) => (termCode ? offering.termCode === termCode : true))
+    .filter((offering) => (moduleId ? offering.moduleId === moduleId : true))
+    .filter((offering) => (status ? offering.status === status : true))
     .filter((offering) => {
       if (!search) {
         return true;
       }
 
       return `${offering.moduleCode} ${offering.moduleName}`.toLowerCase().includes(search);
-    })
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    });
+
+  return filtered.sort((left, right) => {
+    if (sort === "module") {
+      const codeCompare = left.moduleCode.localeCompare(right.moduleCode);
+      if (codeCompare !== 0) {
+        return codeCompare;
+      }
+
+      const termCompare =
+        TERM_SORT_ORDER.indexOf(left.termCode) - TERM_SORT_ORDER.indexOf(right.termCode);
+      if (termCompare !== 0) {
+        return termCompare;
+      }
+    }
+
+    if (sort === "term") {
+      const termCompare =
+        TERM_SORT_ORDER.indexOf(left.termCode) - TERM_SORT_ORDER.indexOf(right.termCode);
+      if (termCompare !== 0) {
+        return termCompare;
+      }
+
+      const codeCompare = left.moduleCode.localeCompare(right.moduleCode);
+      if (codeCompare !== 0) {
+        return codeCompare;
+      }
+    }
+
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
 }
 
 export function listModuleOfferingsByModuleId(moduleId: string) {
@@ -234,16 +420,24 @@ export function findModuleOfferingById(id: string) {
 }
 
 export function createModuleOffering(input: {
+  facultyId?: string;
+  degreeProgramId?: string;
   intakeId: string;
   termCode: TermCode;
   moduleId: string;
   syllabusVersion?: SyllabusVersion;
+  assignedLecturerIds?: string[];
+  assignedLabAssistantIds?: string[];
+  status?: ModuleOfferingStatus;
   assignedLecturers?: string[];
 }) {
   const intakeId = String(input.intakeId ?? "").trim();
   const termCode = sanitizeTermCode(input.termCode);
   const moduleId = String(input.moduleId ?? "").trim();
-  const assignedLecturers = sanitizeAssignedLecturers(input.assignedLecturers);
+  const assignedLecturerIds = sanitizeAssignmentIds(
+    input.assignedLecturerIds ?? input.assignedLecturers
+  );
+  const assignedLabAssistantIds = sanitizeAssignmentIds(input.assignedLabAssistantIds);
 
   if (!intakeId) {
     throw new Error("Intake is required");
@@ -270,6 +464,7 @@ export function createModuleOffering(input: {
   const syllabusVersion = sanitizeSyllabusVersion(
     input.syllabusVersion ?? moduleRecord.defaultSyllabusVersion
   );
+  const status = sanitizeOfferingStatus(input.status);
 
   const termStartDate = getIntakeTermStartDate(intake, termCode);
 
@@ -291,13 +486,20 @@ export function createModuleOffering(input: {
 
   const next: ModuleOfferingRecord = {
     id: `off-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    facultyId: normalizeAcademicCode(input.facultyId ?? intake.facultyCode),
+    degreeProgramId: normalizeAcademicCode(
+      input.degreeProgramId ?? intake.degreeCode
+    ),
     intakeId,
     termCode,
     moduleId,
     moduleCode: moduleRecord.code,
     moduleName: moduleRecord.name,
     syllabusVersion,
-    assignedLecturers,
+    assignedLecturerIds,
+    assignedLabAssistantIds,
+    status,
+    assignedLecturers: assignedLecturerIds,
     outlineWeeks,
     outlinePending: !termStartDate,
     hasGrades: false,
@@ -316,6 +518,9 @@ export function updateModuleOffering(
   id: string,
   input: {
     syllabusVersion?: SyllabusVersion;
+    assignedLecturerIds?: string[];
+    assignedLabAssistantIds?: string[];
+    status?: ModuleOfferingStatus;
     assignedLecturers?: string[];
   }
 ) {
@@ -332,12 +537,21 @@ export function updateModuleOffering(
       input.syllabusVersion === undefined
         ? store[index].syllabusVersion
         : sanitizeSyllabusVersion(input.syllabusVersion),
-    assignedLecturers:
-      input.assignedLecturers === undefined
-        ? store[index].assignedLecturers
-        : sanitizeAssignedLecturers(input.assignedLecturers),
+    assignedLecturerIds:
+      input.assignedLecturerIds !== undefined || input.assignedLecturers !== undefined
+        ? sanitizeAssignmentIds(input.assignedLecturerIds ?? input.assignedLecturers)
+        : store[index].assignedLecturerIds,
+    assignedLabAssistantIds:
+      input.assignedLabAssistantIds === undefined
+        ? store[index].assignedLabAssistantIds
+        : sanitizeAssignmentIds(input.assignedLabAssistantIds),
+    status:
+      input.status === undefined
+        ? store[index].status
+        : sanitizeOfferingStatus(input.status),
     updatedAt: new Date().toISOString(),
   };
+  updated.assignedLecturers = [...updated.assignedLecturerIds];
 
   store[index] = updated;
   return updated;
