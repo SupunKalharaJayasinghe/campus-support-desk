@@ -45,6 +45,11 @@ const LabAssistantSchema = new Schema(
       type: [String],
       default: [],
     },
+    // Optional denormalized cache. Actual assignment source of truth is ModuleOffering.
+    assignedOfferingIds: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

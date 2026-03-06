@@ -15,6 +15,7 @@ export interface LecturerPersistedRecord {
   facultyIds: string[];
   degreeProgramIds: string[];
   moduleIds: string[];
+  assignedOfferingIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -44,6 +45,7 @@ const INITIAL_LECTURERS: LecturerPersistedRecord[] = [
     facultyIds: ["FOC"],
     degreeProgramIds: ["SE", "CS"],
     moduleIds: ["mod-se101", "mod-se201"],
+    assignedOfferingIds: [],
     createdAt: "2025-12-10T09:00:00.000Z",
     updatedAt: "2026-02-28T09:00:00.000Z",
   },
@@ -57,6 +59,7 @@ const INITIAL_LECTURERS: LecturerPersistedRecord[] = [
     facultyIds: ["FOC", "FOE"],
     degreeProgramIds: ["IT", "EE"],
     moduleIds: ["mod-cs105"],
+    assignedOfferingIds: [],
     createdAt: "2025-12-18T09:00:00.000Z",
     updatedAt: "2026-02-20T09:00:00.000Z",
   },
@@ -73,6 +76,7 @@ function lecturerStore() {
       facultyIds: [...item.facultyIds],
       degreeProgramIds: [...item.degreeProgramIds],
       moduleIds: [...item.moduleIds],
+      assignedOfferingIds: [...item.assignedOfferingIds],
     }));
   }
 
@@ -125,6 +129,20 @@ export function sanitizeAcademicCodeList(value: unknown) {
 }
 
 export function sanitizeModuleIdList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => String(item ?? "").trim())
+        .filter((item) => Boolean(item))
+    )
+  );
+}
+
+export function sanitizeOfferingIdList(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -361,6 +379,7 @@ function toPersistedRecord(input: LecturerCreateInput): LecturerPersistedRecord 
     facultyIds: [...input.facultyIds],
     degreeProgramIds: [...input.degreeProgramIds],
     moduleIds: [...input.moduleIds],
+    assignedOfferingIds: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -411,6 +430,7 @@ export function updateLecturerInMemory(input: LecturerUpdateInput) {
     facultyIds: [...input.facultyIds],
     degreeProgramIds: [...input.degreeProgramIds],
     moduleIds: [...input.moduleIds],
+    assignedOfferingIds: [...current.assignedOfferingIds],
     updatedAt: new Date().toISOString(),
   };
   store[index] = updated;
@@ -456,6 +476,7 @@ export function toLecturerPersistedRecordFromUnknown(
     facultyIds: sanitizeAcademicCodeList(row.facultyIds),
     degreeProgramIds: sanitizeAcademicCodeList(row.degreeProgramIds),
     moduleIds: sanitizeModuleIdList(row.moduleIds),
+    assignedOfferingIds: sanitizeOfferingIdList(row.assignedOfferingIds),
     createdAt: toIsoDate(row.createdAt),
     updatedAt: toIsoDate(row.updatedAt),
   };

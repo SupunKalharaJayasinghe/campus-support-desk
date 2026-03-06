@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import PageHeader from "@/components/admin/PageHeader";
@@ -411,7 +412,7 @@ export default function LecturersPage() {
             <tbody>
               {loading ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>Loading lecturers...</td></tr> : lecturers.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>No lecturers match the current filters.</td></tr> : lecturers.map((row) => (
                 <tr className="border-b border-border/70 hover:bg-tint" key={row.id}>
-                  <td className="px-4 py-4"><p className="font-semibold text-heading">{row.fullName}</p>{row.nicStaffId ? <p className="text-xs text-text/62">{row.nicStaffId}</p> : null}</td>
+                  <td className="px-4 py-4"><p className="font-semibold text-heading"><Link className="text-[#034aa6] hover:text-[#0339a6]" href={`/admin/users/lecturers/${encodeURIComponent(row.id)}`}>{row.fullName}</Link></p>{row.nicStaffId ? <p className="text-xs text-text/62">{row.nicStaffId}</p> : null}</td>
                   <td className="px-4 py-4 text-text/78">{row.email}</td>
                   <td className="px-4 py-4 text-text/78">{row.phone || "—"}</td>
                   <td className="px-4 py-4"><Badge variant={row.status === "ACTIVE" ? "success" : "neutral"}>{row.status}</Badge></td>

@@ -164,6 +164,9 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   if (normalized === "LECTURER") {
     return "LECTURER";
   }
+  if (normalized === "LAB_ASSISTANT") {
+    return "LECTURER";
+  }
   if (normalized === "STUDENT") {
     return "STUDENT";
   }

@@ -156,7 +156,7 @@ export default function EditOfferingModal({
             </button>
           </div>
 
-          <div className="mt-6 grid gap-4 rounded-2xl border border-border bg-tint/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-6 grid gap-4 rounded-2xl border border-border bg-tint/60 p-4 sm:grid-cols-2 lg:grid-cols-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Faculty</p>
               <p className="mt-1 text-sm font-semibold text-heading">
@@ -187,6 +187,10 @@ export default function EditOfferingModal({
                 {offering.moduleCode} - {offering.moduleName}
               </p>
             </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Syllabus</p>
+              <p className="mt-1 text-sm font-semibold text-heading">{syllabusVersion}</p>
+            </div>
           </div>
 
           <div className="mt-6 max-w-xs">
@@ -214,6 +218,9 @@ export default function EditOfferingModal({
                 <p className="text-sm font-semibold text-heading">Lecturers</p>
                 <Badge variant="primary">{assignedLecturerIds.length}</Badge>
               </div>
+              <p className="mt-1 text-xs text-text/62">
+                Eligibility based on selected Faculty, Degree, and Module mappings.
+              </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {assignedLecturerIds.length === 0 ? (
@@ -283,6 +290,9 @@ export default function EditOfferingModal({
                 <p className="text-sm font-semibold text-heading">Lab Assistants</p>
                 <Badge variant="primary">{assignedLabAssistantIds.length}</Badge>
               </div>
+              <p className="mt-1 text-xs text-text/62">
+                Eligibility based on selected Faculty, Degree, and Module mappings.
+              </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {assignedLabAssistantIds.length === 0 ? (
@@ -347,6 +357,56 @@ export default function EditOfferingModal({
               </div>
             </section>
           </div>
+
+          <section className="mt-5 rounded-2xl border border-border bg-white p-4">
+            <p className="text-sm font-semibold text-heading">Current Assignment Summary</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Assigned Lecturers
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {assignedLecturerIds.length === 0 ? (
+                    <p className="text-sm text-text/65">No lecturers assigned.</p>
+                  ) : (
+                    assignedLecturerIds.map((lecturerId) => {
+                      const row = lecturerLookup.get(lecturerId);
+                      return (
+                        <span
+                          className="inline-flex items-center rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading"
+                          key={lecturerId}
+                        >
+                          {row?.fullName ?? lecturerId}
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Assigned Lab Assistants
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {assignedLabAssistantIds.length === 0 ? (
+                    <p className="text-sm text-text/65">No lab assistants assigned.</p>
+                  ) : (
+                    assignedLabAssistantIds.map((labAssistantId) => {
+                      const row = labAssistantLookup.get(labAssistantId);
+                      return (
+                        <span
+                          className="inline-flex items-center rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading"
+                          key={labAssistantId}
+                        >
+                          {row?.fullName ?? labAssistantId}
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
 
         <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
