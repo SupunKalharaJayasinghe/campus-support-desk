@@ -14,9 +14,13 @@ import {
   Users,
   X,
 } from "lucide-react";
+import TablePagination from "@/components/admin/TablePagination";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import { useToast } from "@/components/ui/ToastProvider";
+
+type PageSize = 10 | 25 | 50 | 100;
 
 const ROLE_OPTIONS = [
   "Student",
@@ -371,12 +375,15 @@ function statusBadgeClass(status: UserStatus) {
 }
 
 export default function AdminUsersPage() {
+  const { toast } = useToast();
   const [users, setUsers] = useState<UserRecord[]>(SAMPLE_USERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [facultyFilter, setFacultyFilter] = useState("");
   const [programFilter, setProgramFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(1);
   const [activePrimaryTab, setActivePrimaryTab] = useState<PrimaryRoleTab>(
     "administrator"
   );
@@ -433,12 +440,6 @@ export default function AdminUsersPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [modal]);
-
-  useEffect(() => {
-    if (activePrimaryTab !== "lecturer") {
-      setActiveLecturerTab("lecturer");
-    }
-  }, [activePrimaryTab]);
 
   useEffect(() => {
     const debounceTimer = window.setTimeout(() => {
@@ -585,6 +586,9 @@ export default function AdminUsersPage() {
     noUsersForSelectedRole && activePrimaryTab === "lecturer"
       ? "You can add a new user or adjust filters."
       : "Try adjusting filters or add a new user.";
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const validateForm = () => {
     const nextErrors: Partial<Record<FormField, string>> = {};
@@ -618,7 +622,17 @@ export default function AdminUsersPage() {
     }
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const isValid = Object.keys(nextErrors).length === 0;
+
+    if (!isValid) {
+      toast({
+        title: "Failed",
+        message: "Please complete the required user fields before saving.",
+        variant: "error",
+      });
+    }
+
+    return isValid;
   };
 
   const openAddModal = () => {
@@ -674,9 +688,19 @@ export default function AdminUsersPage() {
           user.id === modal.userId ? toUserRecord(form, modal.userId) : user
         )
       );
+      toast({
+        title: "Saved",
+        message: "User updated successfully.",
+        variant: "success",
+      });
     } else {
       const nextId = `USR-${String(users.length + 1).padStart(3, "0")}`;
       setUsers((prev) => [...prev, toUserRecord(form, nextId)]);
+      toast({
+        title: "Saved",
+        message: "User added successfully.",
+        variant: "success",
+      });
     }
 
     closeModal();
@@ -694,6 +718,11 @@ export default function AdminUsersPage() {
     }
     if (action === "reset") {
       console.log("Reset password", user.id);
+      toast({
+        title: "Info",
+        message: "Password reset has been queued.",
+        variant: "info",
+      });
     }
     if (action === "toggle") {
       setUsers((prev) =>
@@ -706,9 +735,19 @@ export default function AdminUsersPage() {
             : entry
         )
       );
+      toast({
+        title: "Saved",
+        message: `${fullName(user)} status updated.`,
+        variant: "success",
+      });
     }
     if (action === "delete") {
       setUsers((prev) => prev.filter((entry) => entry.id !== user.id));
+      toast({
+        title: "Deleted",
+        message: `${fullName(user)} was removed.`,
+        variant: "success",
+      });
     }
     setActionMenuUserId(null);
   };
@@ -731,7 +770,10 @@ export default function AdminUsersPage() {
           <div className="w-full lg:flex-1">
             <Input
               className="h-11 rounded-xl"
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search by name, campus ID, or email…"
               value={searchQuery}
             />
@@ -744,6 +786,7 @@ export default function AdminUsersPage() {
                 onChange={(event) => {
                   setFacultyFilter(event.target.value);
                   setProgramFilter("");
+                  setPage(1);
                 }}
                 value={facultyFilter}
               >
@@ -759,7 +802,10 @@ export default function AdminUsersPage() {
             {supportsAcademicFilters ? (
               <Select
                 className="h-11 w-full rounded-xl sm:w-48"
-                onChange={(event) => setProgramFilter(event.target.value)}
+                onChange={(event) => {
+                  setProgramFilter(event.target.value);
+                  setPage(1);
+                }}
                 value={programFilter}
               >
                 <option value="">All Degree Programs</option>
@@ -773,7 +819,10 @@ export default function AdminUsersPage() {
 
             <Select
               className="h-11 w-full rounded-xl sm:w-40"
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setPage(1);
+              }}
               value={statusFilter}
             >
               <option value="">All Statuses</option>
@@ -787,6 +836,7 @@ export default function AdminUsersPage() {
             <Button
               className="h-11 w-full gap-2 rounded-xl border-black/20 bg-white px-3 text-[#26150F] hover:border-[#0339A6]/60 hover:bg-[#034AA6]/5 hover:text-[#0339A6] sm:w-auto"
               onClick={() => {
+                setPage(1);
                 setSearchQuery("");
                 setFacultyFilter("");
                 setProgramFilter("");
@@ -831,6 +881,10 @@ export default function AdminUsersPage() {
                     key={tab.key}
                     onClick={() => {
                       if (tab.key !== activePrimaryTab) {
+                        if (tab.key !== "lecturer") {
+                          setActiveLecturerTab("lecturer");
+                        }
+                        setPage(1);
                         setActivePrimaryTab(tab.key);
                         setSearchQuery("");
                         setFacultyFilter("");
@@ -884,7 +938,10 @@ export default function AdminUsersPage() {
                           : "border-transparent bg-transparent text-[#26150F]/78 hover:border-black/15 hover:bg-white/70 hover:text-[#0339A6]",
                       ].join(" ")}
                       key={tab.key}
-                      onClick={() => setActiveLecturerTab(tab.key)}
+                      onClick={() => {
+                        setPage(1);
+                        setActiveLecturerTab(tab.key);
+                      }}
                       role="tab"
                       tabIndex={activePrimaryTab === "lecturer" ? 0 : -1}
                       type="button"
@@ -942,7 +999,7 @@ export default function AdminUsersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                pagedUsers.map((user) => (
                   <tr className="border-b border-black/8 text-sm text-[#26150F] transition-colors hover:bg-[#034AA6]/4" key={user.id}>
                     <td className="px-5 py-4">
                       <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/15 bg-[#034AA6]/12 text-xs font-semibold text-[#034AA6]">
@@ -1013,14 +1070,19 @@ export default function AdminUsersPage() {
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-black/10 px-6 py-4">
-          <span className="text-sm text-[#26150F]/72">Page 1 of 5</span>
-          <Button className="border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/60 hover:bg-[#034AA6]/5 hover:text-[#0339A6]" type="button" variant="secondary">
-            Previous
-          </Button>
-          <Button className="border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/60 hover:bg-[#034AA6]/5 hover:text-[#0339A6]" type="button" variant="secondary">
-            Next
-          </Button>
+        <div className="px-6 py-4">
+          <TablePagination
+            className="mt-0 border-t-0 pt-0"
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setPageSize(value as PageSize);
+              setPage(1);
+            }}
+            page={safePage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalItems={filteredUsers.length}
+          />
         </div>
       </section>
 

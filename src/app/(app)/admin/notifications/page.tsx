@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Copy,
@@ -14,12 +14,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import TablePagination from "@/components/admin/TablePagination";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 
 type MainTab = "sent" | "inbox";
+type PageSize = 10 | 25 | 50 | 100;
 type AnnouncementStatus = "Draft" | "Scheduled" | "Sent";
 type AudienceType = "All" | "Role" | "Faculty" | "Degree Program";
 type ChannelType = "In-app" | "Email" | "Both";
@@ -229,6 +231,7 @@ function currentTimestamp() {
 }
 
 export default function AdminNotificationsPage() {
+  const idCounter = useRef(INITIAL_SENT_ANNOUNCEMENTS.length);
   const [activeTab, setActiveTab] = useState<MainTab>("sent");
   const [sentAnnouncements, setSentAnnouncements] = useState<Announcement[]>(
     INITIAL_SENT_ANNOUNCEMENTS
@@ -239,6 +242,8 @@ export default function AdminNotificationsPage() {
   const [sentSearch, setSentSearch] = useState("");
   const [sentStatusFilter, setSentStatusFilter] = useState("");
   const [sentAudienceFilter, setSentAudienceFilter] = useState("");
+  const [sentPageSize, setSentPageSize] = useState<PageSize>(10);
+  const [sentPage, setSentPage] = useState(1);
   const [inboxSearch, setInboxSearch] = useState("");
   const [inboxTypeFilter, setInboxTypeFilter] = useState("");
   const [inboxReadFilter, setInboxReadFilter] = useState("");
@@ -299,6 +304,12 @@ export default function AdminNotificationsPage() {
       return true;
     });
   }, [sentAnnouncements, sentSearch, sentStatusFilter, sentAudienceFilter]);
+  const sentPageCount = Math.max(1, Math.ceil(filteredSentAnnouncements.length / sentPageSize));
+  const safeSentPage = Math.min(sentPage, sentPageCount);
+  const pagedSentAnnouncements = filteredSentAnnouncements.slice(
+    (safeSentPage - 1) * sentPageSize,
+    safeSentPage * sentPageSize
+  );
 
   const filteredInboxNotifications = useMemo(() => {
     const query = inboxSearch.trim().toLowerCase();
@@ -373,9 +384,17 @@ export default function AdminNotificationsPage() {
     setComposeOpen(true);
   };
 
+  const nextAnnouncementId = () => {
+    idCounter.current += 1;
+    return `ann-${String(idCounter.current).padStart(3, "0")}`;
+  };
+
   const upsertAnnouncement = (status: AnnouncementStatus) => {
     const announcement: Announcement = {
-      id: composeMode === "edit" && editingAnnouncementId ? editingAnnouncementId : `ann-${Date.now()}`,
+      id:
+        composeMode === "edit" && editingAnnouncementId
+          ? editingAnnouncementId
+          : nextAnnouncementId(),
       title: composeForm.title.trim() || "Untitled Draft",
       message: composeForm.message.trim(),
       audienceType: composeForm.audienceType,
@@ -421,9 +440,10 @@ export default function AdminNotificationsPage() {
     if (action === "view") setPreviewAnnouncementId(announcement.id);
     if (action === "edit") openEditCompose(announcement);
     if (action === "duplicate") {
+      idCounter.current += 1;
       const duplicated: Announcement = {
         ...announcement,
-        id: `ann-${Date.now()}`,
+        id: `${announcement.id}-copy-${idCounter.current}`,
         title: `${announcement.title} (Copy)`,
         status: "Draft",
         deliveryAt: "Not scheduled",
@@ -468,7 +488,10 @@ export default function AdminNotificationsPage() {
                 ? "border-[#034AA6]/40 bg-[#034AA6]/12 text-[#034AA6]"
                 : "border-transparent bg-white/80 text-[#26150F]/82 hover:border-black/15 hover:text-[#0339A6]"
             )}
-            onClick={() => setActiveTab("sent")}
+            onClick={() => {
+              setSentPage(1);
+              setActiveTab("sent");
+            }}
             role="tab"
             type="button"
           >
@@ -487,7 +510,10 @@ export default function AdminNotificationsPage() {
                 ? "border-[#034AA6]/40 bg-[#034AA6]/12 text-[#034AA6]"
                 : "border-transparent bg-white/80 text-[#26150F]/82 hover:border-black/15 hover:text-[#0339A6]"
             )}
-            onClick={() => setActiveTab("inbox")}
+            onClick={() => {
+              setSentPage(1);
+              setActiveTab("inbox");
+            }}
             role="tab"
             type="button"
           >
@@ -506,7 +532,10 @@ export default function AdminNotificationsPage() {
               <div className="w-full lg:flex-1">
                 <Input
                   className="h-11 rounded-xl"
-                  onChange={(event) => setSentSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSentSearch(event.target.value);
+                    setSentPage(1);
+                  }}
                   placeholder="Search by title, content, or target…"
                   value={sentSearch}
                 />
@@ -514,7 +543,10 @@ export default function AdminNotificationsPage() {
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:ml-auto lg:w-auto lg:flex-nowrap">
                 <Select
                   className="h-11 w-full rounded-xl sm:w-40"
-                  onChange={(event) => setSentStatusFilter(event.target.value)}
+                  onChange={(event) => {
+                    setSentStatusFilter(event.target.value);
+                    setSentPage(1);
+                  }}
                   value={sentStatusFilter}
                 >
                   <option value="">All Statuses</option>
@@ -524,7 +556,10 @@ export default function AdminNotificationsPage() {
                 </Select>
                 <Select
                   className="h-11 w-full rounded-xl sm:w-48"
-                  onChange={(event) => setSentAudienceFilter(event.target.value)}
+                  onChange={(event) => {
+                    setSentAudienceFilter(event.target.value);
+                    setSentPage(1);
+                  }}
                   value={sentAudienceFilter}
                 >
                   <option value="">All Audiences</option>
@@ -559,7 +594,7 @@ export default function AdminNotificationsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSentAnnouncements.length === 0 ? (
+                  {pagedSentAnnouncements.length === 0 ? (
                     <tr>
                       <td className="px-5 py-12" colSpan={6}>
                         <div className="mx-auto flex max-w-md flex-col items-center text-center">
@@ -584,7 +619,7 @@ export default function AdminNotificationsPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredSentAnnouncements.map((announcement) => (
+                    pagedSentAnnouncements.map((announcement) => (
                       <tr
                         className="border-b border-black/8 text-sm text-[#26150F] transition-colors hover:bg-[#034AA6]/4"
                         key={announcement.id}
@@ -690,6 +725,20 @@ export default function AdminNotificationsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="px-5 py-4">
+              <TablePagination
+                className="mt-0 border-t-0 pt-0"
+                onPageChange={setSentPage}
+                onPageSizeChange={(value) => {
+                  setSentPageSize(value as PageSize);
+                  setSentPage(1);
+                }}
+                page={safeSentPage}
+                pageCount={sentPageCount}
+                pageSize={sentPageSize}
+                totalItems={filteredSentAnnouncements.length}
+              />
             </div>
           </div>
         </section>

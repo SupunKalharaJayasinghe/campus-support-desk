@@ -1,423 +1,422 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   BookOpen,
   Building2,
+  CalendarDays,
   Clock3,
   GraduationCap,
-  RefreshCw,
-  ShieldCheck,
-  Ticket,
-  TrendingDown,
+  Layers3,
+  Megaphone,
   TrendingUp,
   UserCheck,
-  UserCog,
-  UserPlus2,
   Users,
 } from "lucide-react";
+import PageHeader from "@/components/admin/PageHeader";
+import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import Select from "@/components/ui/Select";
+import Card from "@/components/ui/Card";
 
-type TrendDirection = "up" | "down";
+type StatIcon = ComponentType<{ size?: number }>;
 
-interface KpiMetric {
-  id: string;
+interface StatisticCard {
   label: string;
   value: string;
-  trend: string;
-  context: string;
-  direction: TrendDirection;
+  growth: string;
+  growthLabel: string;
+  icon: StatIcon;
 }
 
-interface SectionCardProps {
+interface DistributionItem {
+  label: string;
+  value: number;
+  meta: string;
+}
+
+interface AnnouncementItem {
+  id: string;
   title: string;
-  description?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  target: string;
+  date: string;
+  preview: string;
 }
 
-const DATE_RANGES = [
-  { label: "Last 7 days", value: "last_7_days" },
-  { label: "Last 30 days", value: "last_30_days" },
-  { label: "This Semester", value: "this_semester" },
-];
+interface ActivityItem {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+}
 
-const KPI_METRICS: KpiMetric[] = [
+interface AlertItem {
+  id: string;
+  title: string;
+  detail: string;
+  level: "High" | "Medium";
+}
+
+const STATISTICS: StatisticCard[] = [
   {
-    id: "kpi-total-users",
-    label: "Total Users",
-    value: "2,486",
-    trend: "+3.2%",
-    context: "vs last month",
-    direction: "up",
-  },
-  {
-    id: "kpi-active-users",
-    label: "Active Users",
-    value: "2,148",
-    trend: "+4.5%",
-    context: "vs last month",
-    direction: "up",
-  },
-  {
-    id: "kpi-total-students",
     label: "Total Students",
-    value: "1,932",
-    trend: "+2.8%",
-    context: "vs last month",
-    direction: "up",
+    value: "1,284",
+    growth: "+4.8%",
+    growthLabel: "vs last intake",
+    icon: Users,
   },
   {
-    id: "kpi-open-tickets",
-    label: "Open Support Tickets",
-    value: "73",
-    trend: "-1.1%",
-    context: "vs last month",
-    direction: "down",
-  },
-];
-
-const ACADEMIC_SUMMARY = [
-  { label: "Total Faculties", value: "8", icon: Building2 },
-  { label: "Degree Programs", value: "26", icon: GraduationCap },
-  { label: "Total Modules", value: "412", icon: BookOpen },
-  { label: "Active Cohorts", value: "38", icon: Users },
-];
-
-const FACULTY_STUDENT_DISTRIBUTION = [
-  { faculty: "Computing", count: 640 },
-  { faculty: "Engineering", count: 520 },
-  { faculty: "Business", count: 410 },
-  { faculty: "Science", count: 362 },
-];
-
-const USER_DISTRIBUTION = [
-  { role: "Students", count: 1932, icon: Users },
-  { role: "Lecturers", count: 284, icon: UserCheck },
-  { role: "Lost Item Officers", count: 34, icon: ShieldCheck },
-  { role: "Administrators", count: 18, icon: UserCog },
-];
-
-const RECENT_ACTIVITY = [
-  {
-    id: "activity-1",
-    icon: UserPlus2,
-    description: "New user registered: Kalum Perera (Student)",
-    time: "12 minutes ago",
-  },
-  {
-    id: "activity-2",
+    label: "Total Faculties",
+    value: "5",
+    growth: "+1",
+    growthLabel: "new school added",
     icon: Building2,
-    description: "Faculty profile updated: Faculty of Engineering",
-    time: "1 hour ago",
   },
   {
-    id: "activity-3",
-    icon: GraduationCap,
-    description: "Degree program updated: BSc Software Engineering",
-    time: "3 hours ago",
-  },
-  {
-    id: "activity-4",
-    icon: UserCheck,
-    description: "User status changed: Lecturer account reactivated",
-    time: "5 hours ago",
-  },
-  {
-    id: "activity-5",
-    icon: Ticket,
-    description: "Support ticket assigned to Campus IT Services",
-    time: "8 hours ago",
-  },
-];
-
-const ATTENTION_ITEMS = [
-  {
-    id: "alert-1",
-    title: "Suspended Users",
+    label: "Degree Programs",
     value: "12",
-    detail: "Requires verification review",
+    growth: "+2",
+    growthLabel: "curriculum refreshes",
+    icon: GraduationCap,
   },
   {
-    id: "alert-2",
-    title: "Pending Approvals",
-    value: "9",
-    detail: "User and role requests awaiting action",
+    label: "Lecturers / Instructors",
+    value: "86",
+    growth: "+6.2%",
+    growthLabel: "staff capacity",
+    icon: UserCheck,
   },
   {
-    id: "alert-3",
-    title: "System Warnings",
-    value: "2",
-    detail: "Notification service delay detected",
+    label: "Total Modules",
+    value: "94",
+    growth: "+5",
+    growthLabel: "new offerings",
+    icon: BookOpen,
+  },
+  {
+    label: "Active Intakes",
+    value: "6",
+    growth: "+1",
+    growthLabel: "upcoming cycle",
+    icon: CalendarDays,
   },
 ];
 
-function cn(...classes: Array<string | undefined | false>) {
-  return classes.filter(Boolean).join(" ");
-}
+const STUDENTS_PER_FACULTY: DistributionItem[] = [
+  { label: "Faculty of Computing", value: 412, meta: "FOC" },
+  { label: "Faculty of Engineering", value: 286, meta: "FOE" },
+  { label: "Faculty of Business", value: 228, meta: "FOB" },
+  { label: "Faculty of Science", value: 204, meta: "FOS" },
+  { label: "Faculty of Design", value: 154, meta: "FOD" },
+];
 
-function StatCard({ metric }: { metric: KpiMetric }) {
-  const TrendIcon = metric.direction === "up" ? TrendingUp : TrendingDown;
+const STUDENTS_PER_DEGREE: DistributionItem[] = [
+  { label: "Software Engineering", value: 286, meta: "SE" },
+  { label: "Computer Science", value: 248, meta: "CS" },
+  { label: "Information Technology", value: 198, meta: "IT" },
+  { label: "Civil Engineering", value: 142, meta: "CE" },
+  { label: "Business Analytics", value: 118, meta: "BA" },
+];
 
+const ANNOUNCEMENTS: AnnouncementItem[] = [
+  {
+    id: "ann-01",
+    title: "Y1S1 Orientation Timetable Published",
+    target: "FOC / SE / Y1S1 / All Subgroups",
+    date: "Mar 03, 2026",
+    preview:
+      "The first semester orientation timetable is now visible for all Year 1 weekday and weekend subgroups.",
+  },
+  {
+    id: "ann-02",
+    title: "LMS Maintenance Window",
+    target: "All Faculties / All Degrees",
+    date: "Mar 02, 2026",
+    preview:
+      "A scheduled infrastructure patch will be applied on Friday night. Services may be briefly unavailable during the maintenance window.",
+  },
+  {
+    id: "ann-03",
+    title: "Assessment Policy Update",
+    target: "FOE / CE / Y2S1",
+    date: "Mar 01, 2026",
+    preview:
+      "Updated moderation and grading deadlines are now active for current engineering coursework assessments.",
+  },
+];
+
+const RECENT_ACTIVITY: ActivityItem[] = [
+  {
+    id: "act-01",
+    title: "34 new student registrations approved",
+    detail: "FOC / SE / 2026 June intake enrollment sync completed",
+    time: "12 mins ago",
+  },
+  {
+    id: "act-02",
+    title: "Module offering created for SE304",
+    detail: "Advanced Software Project Management opened for Weekday stream",
+    time: "46 mins ago",
+  },
+  {
+    id: "act-03",
+    title: "Lecturer assignment updated",
+    detail: "Dr. A. Fernando assigned as LIC for CS202",
+    time: "1 hr ago",
+  },
+  {
+    id: "act-04",
+    title: "Assignment deadline published",
+    detail: "Database Systems lab submission deadline pushed to subgroup 2.2",
+    time: "2 hrs ago",
+  },
+];
+
+const ALERTS: AlertItem[] = [
+  {
+    id: "alert-01",
+    title: "7 upcoming assignment deadlines",
+    detail: "Deadlines across SE201, CS105, and IT118 close within the next 48 hours.",
+    level: "High",
+  },
+  {
+    id: "alert-02",
+    title: "3 modules without assigned lecturers",
+    detail: "Module offerings in the Faculty of Business still require teaching allocations.",
+    level: "High",
+  },
+  {
+    id: "alert-03",
+    title: "2 subgroups without timetable sessions",
+    detail: "Weekend subgroup scheduling remains incomplete for the active Y1S1 intake.",
+    level: "Medium",
+  },
+];
+
+const QUICK_ACTIONS = [
+  "Add Faculty",
+  "Create Degree Program",
+  "Create Intake",
+  "Add Lecturer",
+  "Publish Announcement",
+];
+
+function StatOverviewCard({ growth, growthLabel, icon: Icon, label, value }: StatisticCard) {
   return (
-    <article className="rounded-3xl border border-black/15 bg-white p-6 shadow-[0_8px_24px_rgba(38,21,15,0.08)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#26150F]/62">
-        {metric.label}
-      </p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-[#0A0A0A]">
-        {metric.value}
-      </p>
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
-            metric.direction === "up"
-              ? "border-[#034AA6]/25 bg-[#034AA6]/10 text-[#034AA6]"
-              : "border-black/15 bg-black/5 text-[#26150F]/75"
-          )}
-        >
-          <TrendIcon size={12} />
-          {metric.trend}
+    <Card accent className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">{label}</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Icon size={18} />
         </span>
-        <span className="text-xs text-[#26150F]/62">{metric.context}</span>
       </div>
-    </article>
+      <div className="mt-4 flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/8 px-2.5 py-1 text-xs font-semibold text-primary">
+          <TrendingUp size={12} />
+          {growth}
+        </span>
+        <span className="text-xs text-text/60">{growthLabel}</span>
+      </div>
+    </Card>
   );
 }
 
-function SectionCard({ title, description, action, children }: SectionCardProps) {
+function DistributionList({ items }: { items: DistributionItem[] }) {
+  const maxValue = Math.max(...items.map((item) => item.value));
+
   return (
-    <section className="rounded-3xl border border-black/15 bg-white p-6 shadow-[0_8px_24px_rgba(38,21,15,0.08)] lg:p-7">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-[#0A0A0A]">{title}</h2>
-          {description ? (
-            <p className="mt-1 text-sm text-[#26150F]/70">{description}</p>
-          ) : null}
+    <div className="space-y-4">
+      {items.map((item) => (
+        <div key={item.label}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-heading">{item.label}</p>
+              <p className="mt-0.5 text-xs text-text/60">{item.meta}</p>
+            </div>
+            <p className="text-sm font-semibold text-heading">{item.value}</p>
+          </div>
+          <div className="mt-2 h-2 rounded-full bg-slate-200/70">
+            <div
+              className="h-2 rounded-full bg-primary"
+              style={{ width: `${Math.max(12, Math.round((item.value / maxValue) * 100))}%` }}
+            />
+          </div>
         </div>
-        {action ? <div>{action}</div> : null}
-      </div>
-      <div className="mt-5">{children}</div>
-    </section>
+      ))}
+    </div>
   );
 }
 
 export default function AdminDashboardPage() {
-  const [dateRange, setDateRange] = useState(DATE_RANGES[0].value);
-
-  const maxFacultyCount = useMemo(
-    () =>
-      Math.max(...FACULTY_STUDENT_DISTRIBUTION.map((item) => item.count)),
-    []
-  );
-
-  const totalUsers = useMemo(
-    () => USER_DISTRIBUTION.reduce((total, item) => total + item.count, 0),
-    []
-  );
-
   return (
-    <div className="space-y-8 lg:space-y-10">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-[#0A0A0A]">
-            Overview
-          </h1>
-          <p className="mt-1 text-sm text-[#26150F]/72">
-            Platform insights and system summary
-          </p>
-        </div>
+    <div className="space-y-6 lg:space-y-8">
+      <PageHeader
+        description="Centralized oversight for academic structure, enrollments, teaching operations, and system-wide alerts."
+        title="Dashboard"
+      />
 
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-          <label className="sr-only" htmlFor="overview-date-range">
-            Date range
-          </label>
-          <Select
-            className="h-11 w-full rounded-xl sm:w-52"
-            id="overview-date-range"
-            onChange={(event) => setDateRange(event.target.value)}
-            value={dateRange}
-          >
-            {DATE_RANGES.map((range) => (
-              <option key={range.value} value={range.value}>
-                {range.label}
-              </option>
-            ))}
-          </Select>
-
-          <Button
-            aria-label="Refresh overview data"
-            className="h-11 rounded-xl border-black/20 bg-white px-3 text-[#26150F] hover:border-[#0339A6]/60 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
-            onClick={() => {
-              console.log("Refresh overview requested");
-            }}
-            type="button"
-            variant="secondary"
-          >
-            <RefreshCw size={16} />
-          </Button>
-        </div>
-      </section>
-
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {KPI_METRICS.map((metric) => (
-          <StatCard key={metric.id} metric={metric} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        {STATISTICS.map((item) => (
+          <StatOverviewCard key={item.label} {...item} />
         ))}
       </section>
 
-      <SectionCard
-        description="Core academic structure metrics and student footprint by faculty."
-        title="Academic Overview"
-      >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {ACADEMIC_SUMMARY.map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <article
-                  className="rounded-2xl border border-black/12 bg-white p-4"
-                  key={metric.label}
-                >
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
-                    <Icon size={16} />
-                  </span>
-                  <p className="mt-3 text-xs uppercase tracking-[0.1em] text-[#26150F]/62">
-                    {metric.label}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-[#0A0A0A]">
-                    {metric.value}
-                  </p>
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="rounded-2xl border border-black/12 bg-[#D9D9D9]/25 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-[#0A0A0A]">
-                Students per Faculty
-              </p>
-              <p className="text-xs text-[#26150F]/62">Current semester</p>
+      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+        <Card
+          accent
+          description="Operational academic metrics across faculties, degrees, and active delivery groups."
+          title="Academic Overview"
+        >
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="rounded-3xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-heading">Students per Faculty</p>
+                <Badge variant="neutral">Current intake</Badge>
+              </div>
+              <div className="mt-5">
+                <DistributionList items={STUDENTS_PER_FACULTY} />
+              </div>
             </div>
-            <div className="mt-4 space-y-3">
-              {FACULTY_STUDENT_DISTRIBUTION.map((item) => (
-                <div key={item.faculty}>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-[#26150F]/78">{item.faculty}</span>
-                    <span className="font-medium text-[#0A0A0A]">{item.count}</span>
+
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-border bg-card p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-heading">Students per Degree</p>
+                  <Badge variant="neutral">Top programs</Badge>
+                </div>
+                <div className="mt-5">
+                  <DistributionList items={STUDENTS_PER_DEGREE} />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-border bg-card p-5">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <CalendarDays size={18} />
+                  </span>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Current Active Term
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-heading">Y1S1</p>
+                  <p className="mt-1 text-sm text-text/60">2026 June Intake</p>
+                </div>
+
+                <div className="rounded-3xl border border-border bg-card p-5">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Layers3 size={18} />
+                  </span>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Total Subgroups
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-heading">38</p>
+                  <p className="mt-1 text-sm text-text/60">Across weekday and weekend streams</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          description="Latest communication posted by the super admin team."
+          title="Announcement Preview"
+        >
+          <div className="space-y-4">
+            {ANNOUNCEMENTS.map((item) => (
+              <div className="rounded-3xl border border-border bg-card p-5" key={item.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-heading">{item.title}</p>
+                    <p className="mt-1 text-xs text-text/60">{item.target}</p>
                   </div>
-                  <div className="mt-1 h-2 rounded-full bg-black/10">
-                    <div
-                      className="h-2 rounded-full bg-[#034AA6]/80"
-                      style={{
-                        width: `${(item.count / maxFacultyCount) * 100}%`,
-                      }}
-                    />
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Megaphone size={16} />
+                  </span>
+                </div>
+                <p className="mt-3 text-xs font-medium text-text/55">{item.date}</p>
+                <p className="mt-3 text-sm leading-6 text-text/72">{item.preview}</p>
+                <Button className="mt-4 gap-2" variant="secondary">
+                  View Full Announcement
+                  <ArrowRight size={14} />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card
+          description="Recent platform events across enrollments, teaching allocation, and coursework setup."
+          title="Recent Activity"
+        >
+          <div className="space-y-4">
+            {RECENT_ACTIVITY.map((item, index) => (
+              <div className="flex gap-4" key={item.id}>
+                <div className="flex flex-col items-center">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Clock3 size={16} />
+                  </span>
+                  {index === RECENT_ACTIVITY.length - 1 ? null : (
+                    <span className="mt-2 h-full w-px bg-border" />
+                  )}
+                </div>
+                <div className="min-w-0 rounded-3xl border border-border bg-card p-4">
+                  <p className="text-sm font-semibold text-heading">{item.title}</p>
+                  <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+                  <p className="mt-3 text-xs font-medium text-text/55">{item.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="space-y-6">
+          <Card
+            description="Fast access to common super admin workflows."
+            title="Quick Actions"
+          >
+            <div className="grid gap-3">
+              {QUICK_ACTIONS.map((item, index) => (
+                <Button
+                  className="justify-between"
+                  key={item}
+                  variant={index === QUICK_ACTIONS.length - 1 ? "primary" : "secondary"}
+                >
+                  {item}
+                  <ArrowRight size={14} />
+                </Button>
+              ))}
+            </div>
+          </Card>
+
+          <Card
+            description="Priority issues that need intervention from academic operations."
+            title="Important Alerts"
+          >
+            <div className="space-y-3">
+              {ALERTS.map((item) => (
+                <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                        <AlertTriangle size={16} />
+                      </span>
+                      <div>
+                        <p className="text-sm font-semibold text-heading">{item.title}</p>
+                        <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+                      </div>
+                    </div>
+                    <Badge variant={item.level === "High" ? "warning" : "neutral"}>{item.level}</Badge>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
-      </SectionCard>
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
-        <SectionCard
-          description="Current user composition across operational roles."
-          title="User Distribution"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            {USER_DISTRIBUTION.map((item) => {
-              const Icon = item.icon;
-              const percent = Math.round((item.count / totalUsers) * 100);
-              return (
-                <article
-                  className="rounded-2xl border border-black/12 bg-white p-4"
-                  key={item.role}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
-                      <Icon size={16} />
-                    </span>
-                    <span className="text-xs text-[#26150F]/62">{percent}%</span>
-                  </div>
-                  <p className="mt-3 text-sm text-[#26150F]/72">{item.role}</p>
-                  <p className="mt-1 text-2xl font-semibold text-[#0A0A0A]">
-                    {item.count}
-                  </p>
-                </article>
-              );
-            })}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          description="Items that require immediate administrative review."
-          title="Alerts & Attention"
-        >
-          <div className="space-y-3">
-            {ATTENTION_ITEMS.map((item) => (
-              <article
-                className="rounded-2xl border border-black/12 bg-[#D9D9D9]/25 p-4"
-                key={item.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
-                      <AlertTriangle size={14} />
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-[#0A0A0A]">{item.title}</p>
-                      <p className="mt-1 text-xs text-[#26150F]/68">{item.detail}</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full border border-black/12 bg-white px-2 py-0.5 text-xs font-medium text-[#26150F]/78">
-                    {item.value}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionCard>
       </section>
-
-      <SectionCard
-        action={
-          <button
-            className="text-sm font-medium text-[#034AA6] transition-colors duration-200 hover:text-[#0339A6]"
-            type="button"
-          >
-            View All
-          </button>
-        }
-        description="Latest platform events and administrative changes."
-        title="Recent Activity"
-      >
-        <div className="space-y-3">
-          {RECENT_ACTIVITY.map((item) => {
-            const Icon = item.icon;
-            return (
-              <article
-                className="flex items-start justify-between gap-3 rounded-2xl border border-black/12 bg-white p-4"
-                key={item.id}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#034AA6]/10 text-[#034AA6]">
-                    <Icon size={16} />
-                  </span>
-                  <p className="text-sm text-[#26150F]/82">{item.description}</p>
-                </div>
-                <span className="inline-flex items-center gap-1 text-xs text-[#26150F]/60">
-                  <Clock3 size={12} />
-                  {item.time}
-                </span>
-              </article>
-            );
-          })}
-        </div>
-      </SectionCard>
     </div>
   );
 }
+
