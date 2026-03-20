@@ -11,7 +11,14 @@ import {
     ArrowLeft,
     User,
     Clock,
-    ThumbsUp
+    ThumbsUp,
+    Users,
+    Shield,
+    Award,
+    CheckCircle,
+    Calendar,
+    Flag,
+    MessageCircle
 } from "lucide-react";
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
@@ -126,6 +133,27 @@ const INITIAL_POSTS: Post[] = [
             }
         ]
     }
+];
+
+const MOCK_MEMBERS = [
+    { id: "1", name: "Sam Jenkins", role: "Core Team", badgeColor: "bg-green-600 text-white", icon: Shield, avatarColor: "bg-teal-700" },
+    { id: "2", name: "Priya Singh", role: "Verified Mentor", badgeColor: "bg-blue-600 text-white", icon: CheckCircle, avatarColor: "bg-indigo-900" },
+    { id: "3", name: "IT23123456", role: "Contributor", badgeColor: "bg-amber-700 text-white", icon: Award, avatarColor: "bg-gray-300 text-gray-700" },
+    { id: "4", name: "Sam Jenkins", role: "Verified Mentor", badgeColor: "bg-blue-600 text-white", icon: CheckCircle, avatarColor: "bg-blue-400 text-blue-900" },
+    { id: "5", name: "Priya Singh", role: "Contributor", badgeColor: "bg-amber-700 text-white", icon: Award, avatarColor: "bg-purple-300 text-purple-900" },
+    { id: "6", name: "Sam Jenkins", role: "Contributor", badgeColor: "bg-amber-700 text-white", icon: Award, avatarColor: "bg-teal-300 text-teal-900" },
+];
+
+const STATS = {
+    totalMembers: "1,250+",
+    activePosts: "340",
+    topics: "22"
+};
+
+const RECENT_ACTIVITY = [
+    { id: "a1", type: "event", content: 'A new event, "Hackathon Prep," was posted', time: "14 days ago", icon: Calendar },
+    { id: "a2", type: "discussion", content: 'Discussion topic: "Career Pathways" created', time: "14 days ago", icon: Flag },
+    { id: "a3", type: "discussion", content: 'Discussion topic: "Career Pathways" created', time: "14 days ago", icon: Flag },
 ];
 
 export default function CommunityPage() {
@@ -279,176 +307,266 @@ export default function CommunityPage() {
             className="min-h-screen bg-cover bg-center bg-no-repeat py-10 lg:py-16"
             style={{ backgroundImage: `url(${communityBackground.src})` }}
         >
-            <Container size="6xl">
-                <div className="rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 shadow-shadow md:p-8">
-                <div className="mb-8">
-                    <Link
-                        className="inline-flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2 text-sm font-semibold text-text shadow-sm transition-all hover:bg-gray-50 hover:shadow-md"
-                        href="/community-help"
-                    >
-                        <ArrowLeft size={16} />
-                        Back to Support Space
-                    </Link>
-                </div>
-
-                <div className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-                    <div>
-                        <h1 className="text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
-                            Community Space
-                        </h1>
-                        <p className="mt-2 text-text/80">
-                            Connect with your peers, share resources, and ask questions.
-                        </p>
-                    </div>
-                    <Link
-                        href="/community-help/post/create"
-                        className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                    >
-                        <Plus size={18} />
-                        Create Post
-                    </Link>
-                </div>
-
-                {/* Filters */}
-                <div className="mb-8 flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2 text-text/60 mr-2">
-                        <Filter size={18} />
-                        <span className="text-sm font-medium">Filter by:</span>
-                    </div>
-                    {CATEGORIES.map(category => (
-                        <button
-                            key={category}
-                            onClick={() => setActiveCategory(category)}
-                            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${activeCategory === category
-                                ? "bg-primary text-white shadow-md"
-                                : "bg-gray-100 text-text/80 border border-gray-400/50 hover:bg-gray-50"
-                                }`}
-                        >
-                            {category}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Posts List */}
-                <div className="space-y-6">
-                    {filteredPosts.length === 0 ? (
-                        <div className="rounded-3xl border border-gray-500/40 border-dashed bg-gray-100/80 py-16 text-center">
-                            <p className="text-text/60">No posts found in this category.</p>
-                            <Button
-                                variant="ghost"
-                                className="mt-4"
-                                onClick={() => setActiveCategory("all")}
-                            >
-                                View all posts
-                            </Button>
-                        </div>
-                    ) : (
-                        filteredPosts.map(post => (
-                            <Card key={post.id} className="overflow-hidden transition-all hover:shadow-md">
-                                <div className="p-6">
-                                    {/* Post Header */}
-                                    <div className="mb-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                                <User size={20} />
-                                            </div>
-                                            <div>
-                                                <div className="font-medium text-heading">{post.author}</div>
-                                                <div className="flex items-center gap-2 text-xs text-text/60">
-                                                    <span className="flex items-center gap-1"><Clock size={12} /> {post.createdAt}</span>
-                                                </div>
+            <Container size="7xl">
+                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+                    {/* LEFT PANEL */}
+                    <div className="hidden lg:flex w-[260px] xl:w-[280px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-5 shadow-shadow sticky top-24 h-[calc(100vh-8rem)]">
+                        <h2 className="text-[15px] font-bold uppercase text-heading mb-4">Members</h2>
+                        <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
+                            {MOCK_MEMBERS.map(member => {
+                                const Icon = member.icon;
+                                return (
+                                    <div key={member.id} className="flex gap-3 items-center p-3 rounded-2xl bg-gray-100/90 border border-gray-400/40 shadow-sm transition-all hover:shadow-md">
+                                        <div className={`h-11 w-11 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden ${member.avatarColor}`}>
+                                            <User className={member.avatarColor.includes('text') ? "" : "text-white"} size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-[13px] font-semibold text-heading leading-tight">{member.name}</h3>
+                                            <div className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider ${member.badgeColor}`}>
+                                                <Icon size={10} />
+                                                {member.role}
                                             </div>
                                         </div>
-                                        <span className="rounded-full bg-tint px-3 py-1 text-xs font-medium text-text/80 border border-border">
-                                            {post.category}
-                                        </span>
                                     </div>
+                                );
+                            })}
+                        </div>
+                    </div>
 
-                                    {/* Post Content */}
-                                    <h3 className="mb-2 text-xl font-semibold text-heading">{post.title}</h3>
-                                    <p className="text-text/80 leading-relaxed">{post.content}</p>
+                    {/* MIDDLE PANEL */}
+                    <div className="w-full flex-1 rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow min-w-0">
+                        <div className="mb-8">
+                            <Link
+                                className="inline-flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2 text-sm font-semibold text-text shadow-sm transition-all hover:bg-gray-50 hover:shadow-md"
+                                href="/community-help"
+                            >
+                                <ArrowLeft size={16} />
+                                Back to Support Space
+                            </Link>
+                        </div>
 
-                                    {/* Post Actions */}
-                                    <div className="mt-6 flex items-center gap-4 border-t border-border pt-4">
-                                        <button
-                                            onClick={() => handleLikePost(post.id)}
-                                            className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary"
-                                        >
-                                            <ThumbsUp size={18} />
-                                            {post.likes > 0 && <span>{post.likes}</span>}
-                                        </button>
-                                        <button
-                                            onClick={() => toggleReplySection(post.id)}
-                                            className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary"
-                                        >
-                                            <MessageSquare size={18} />
-                                            <span>{post.replies.length} Replies</span>
-                                        </button>
-                                        <button className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary ml-auto">
-                                            <Share2 size={18} />
-                                        </button>
-                                    </div>
+                        <div className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+                            <div>
+                                <h1 className="text-3xl font-semibold tracking-tight text-heading sm:text-4xl">
+                                    Community Space
+                                </h1>
+                                <p className="mt-2 text-text/80">
+                                    Connect with your peers, share resources, and ask questions.
+                                </p>
+                            </div>
+                            <Link
+                                href="/community-help/post/create"
+                                className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                            >
+                                <Plus size={18} />
+                                Create Post
+                            </Link>
+                        </div>
+
+                        {/* Filters */}
+                        <div className="mb-8 flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-2 text-text/60 mr-2">
+                                <Filter size={18} />
+                                <span className="text-sm font-medium">Filter by:</span>
+                            </div>
+                            {CATEGORIES.map(category => (
+                                <button
+                                    key={category}
+                                    onClick={() => setActiveCategory(category)}
+                                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${activeCategory === category
+                                        ? "bg-primary text-white shadow-md"
+                                        : "bg-gray-100 text-text/80 border border-gray-400/50 hover:bg-gray-50"
+                                        }`}
+                                >
+                                    {category}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Posts List */}
+                        <div className="space-y-6">
+                            {filteredPosts.length === 0 ? (
+                                <div className="rounded-3xl border border-gray-500/40 border-dashed bg-gray-100/80 py-16 text-center">
+                                    <p className="text-text/60">No posts found in this category.</p>
+                                    <Button
+                                        variant="ghost"
+                                        className="mt-4"
+                                        onClick={() => setActiveCategory("all")}
+                                    >
+                                        View all posts
+                                    </Button>
                                 </div>
-
-                                {/* Replies Section Area */}
-                                {expandedPostId === post.id && (
-                                    <div className="bg-gray-100/80 border-t border-gray-400/50 p-6 animate-in fade-in slide-in-from-top-2">
-                                        {/* Reply List */}
-                                        <div className="mb-6 space-y-4">
-                                            {post.replies.length === 0 ? (
-                                                <p className="text-center text-sm text-text/60 py-4">No replies yet. Be the first to reply!</p>
-                                            ) : (
-                                                post.replies.map(reply => (
-                                                    <div key={reply.id} className="flex gap-3">
-                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 border border-gray-400/50 text-text/60">
-                                                            <User size={14} />
-                                                        </div>
-                                                        <div className="flex-1 rounded-2xl rounded-tl-none bg-gray-50 p-4 shadow-sm border border-gray-400/50">
-                                                            <div className="mb-1 flex items-center justify-between">
-                                                                <span className="text-sm font-semibold text-heading">{reply.author}</span>
-                                                                <span className="text-xs text-text/50">{reply.createdAt}</span>
-                                                            </div>
-                                                            <p className="text-sm text-text/80">{reply.content}</p>
+                            ) : (
+                                filteredPosts.map(post => (
+                                    <Card key={post.id} className="overflow-hidden transition-all hover:shadow-md">
+                                        <div className="p-6">
+                                            {/* Post Header */}
+                                            <div className="mb-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                                        <User size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium text-heading">{post.author}</div>
+                                                        <div className="flex items-center gap-2 text-xs text-text/60">
+                                                            <span className="flex items-center gap-1"><Clock size={12} /> {post.createdAt}</span>
                                                         </div>
                                                     </div>
-                                                ))
-                                            )}
+                                                </div>
+                                                <span className="rounded-full bg-tint px-3 py-1 text-xs font-medium text-text/80 border border-border">
+                                                    {post.category}
+                                                </span>
+                                            </div>
+
+                                            {/* Post Content */}
+                                            <h3 className="mb-2 text-xl font-semibold text-heading">{post.title}</h3>
+                                            <p className="text-text/80 leading-relaxed">{post.content}</p>
+
+                                            {/* Post Actions */}
+                                            <div className="mt-6 flex items-center gap-4 border-t border-border pt-4">
+                                                <button
+                                                    onClick={() => handleLikePost(post.id)}
+                                                    className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary"
+                                                >
+                                                    <ThumbsUp size={18} />
+                                                    {post.likes > 0 && <span>{post.likes}</span>}
+                                                </button>
+                                                <button
+                                                    onClick={() => toggleReplySection(post.id)}
+                                                    className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary"
+                                                >
+                                                    <MessageSquare size={18} />
+                                                    <span>{post.replies.length} Replies</span>
+                                                </button>
+                                                <button className="flex items-center gap-1.5 text-sm font-medium text-text/60 transition-colors hover:text-primary ml-auto">
+                                                    <Share2 size={18} />
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {/* Reply Input Form */}
-                                        <form onSubmit={(e) => handleReplySubmit(e, post.id)} className="flex items-start gap-3 mt-4">
-                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                                <User size={14} />
-                                            </div>
-                                            <div className="flex-1 space-y-3">
-                                                <Textarea
-                                                    placeholder="Write a reply..."
-                                                    className="min-h-[80px] bg-gray-50 text-sm resize-y"
-                                                    value={newReplyContent}
-                                                    onChange={(e) => setNewReplyContent(e.target.value)}
-                                                    autoFocus
-                                                />
-                                                <div className="flex justify-end">
-                                                    <Button
-                                                        type="submit"
-                                                        variant="dark"
-                                                        className="py-1.5 gap-2"
-                                                        disabled={!newReplyContent.trim()}
-                                                    >
-                                                        <Send size={14} /> Reply
-                                                    </Button>
+                                        {/* Replies Section Area */}
+                                        {expandedPostId === post.id && (
+                                            <div className="bg-gray-100/80 border-t border-gray-400/50 p-6 animate-in fade-in slide-in-from-top-2">
+                                                {/* Reply List */}
+                                                <div className="mb-6 space-y-4">
+                                                    {post.replies.length === 0 ? (
+                                                        <p className="text-center text-sm text-text/60 py-4">No replies yet. Be the first to reply!</p>
+                                                    ) : (
+                                                        post.replies.map(reply => (
+                                                            <div key={reply.id} className="flex gap-3">
+                                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 border border-gray-400/50 text-text/60">
+                                                                    <User size={14} />
+                                                                </div>
+                                                                <div className="flex-1 rounded-2xl rounded-tl-none bg-gray-50 p-4 shadow-sm border border-gray-400/50">
+                                                                    <div className="mb-1 flex items-center justify-between">
+                                                                        <span className="text-sm font-semibold text-heading">{reply.author}</span>
+                                                                        <span className="text-xs text-text/50">{reply.createdAt}</span>
+                                                                    </div>
+                                                                    <p className="text-sm text-text/80">{reply.content}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
                                                 </div>
+
+                                                {/* Reply Input Form */}
+                                                <form onSubmit={(e) => handleReplySubmit(e, post.id)} className="flex items-start gap-3 mt-4">
+                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                                        <User size={14} />
+                                                    </div>
+                                                    <div className="flex-1 space-y-3">
+                                                        <Textarea
+                                                            placeholder="Write a reply..."
+                                                            className="min-h-[80px] bg-gray-50 text-sm resize-y"
+                                                            value={newReplyContent}
+                                                            onChange={(e) => setNewReplyContent(e.target.value)}
+                                                            autoFocus
+                                                        />
+                                                        <div className="flex justify-end">
+                                                            <Button
+                                                                type="submit"
+                                                                variant="dark"
+                                                                className="py-1.5 gap-2"
+                                                                disabled={!newReplyContent.trim()}
+                                                            >
+                                                                <Send size={14} /> Reply
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </form>
                                             </div>
-                                        </form>
+                                        )}
+                                    </Card>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT PANEL */}
+                    <div className="hidden lg:flex w-[260px] xl:w-[300px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-5 xl:p-6 shadow-shadow sticky top-24 h-[calc(100vh-8rem)]">
+                        <h2 className="text-[15px] font-bold uppercase text-heading mb-5">Community Stats & Recent</h2>
+
+                        <div className="mb-6">
+                            <h3 className="text-base font-bold text-heading mb-4">Stats</h3>
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-11 w-11 rounded-full bg-gray-300/60 flex items-center justify-center text-text/80 shadow-sm border border-gray-400/30">
+                                        <Users size={18} />
                                     </div>
-                                )}
-                            </Card>
-                        ))
-                    )}
-                </div>
+                                    <div>
+                                        <div className="text-xs text-text/60 font-medium">Total Members</div>
+                                        <div className="text-lg font-bold text-heading leading-tight">{STATS.totalMembers}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="h-11 w-11 rounded-full bg-gray-300/60 flex items-center justify-center text-text/80 shadow-sm border border-gray-400/30">
+                                        <MessageSquare size={18} />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-text/60 font-medium">Active Posts</div>
+                                        <div className="text-lg font-bold text-heading leading-tight">{STATS.activePosts}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="h-11 w-11 rounded-full bg-gray-300/60 flex items-center justify-center text-text/80 shadow-sm border border-gray-400/30">
+                                        <MessageCircle size={18} />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-text/60 font-medium">Topics</div>
+                                        <div className="text-lg font-bold text-heading leading-tight">{STATS.topics}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-2 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
+                            <h3 className="text-base font-bold text-heading mb-4 mt-2">Recent Activity</h3>
+                            <div className="space-y-5">
+                                {RECENT_ACTIVITY.map(activity => {
+                                    const ActIcon = activity.icon;
+                                    return (
+                                        <div key={activity.id} className="flex gap-3 relative before:absolute before:left-[11px] before:top-[26px] before:bottom-[-20px] before:w-[2px] before:bg-gray-400/40 last:before:hidden">
+                                            <div className="h-6 w-6 flex-shrink-0 bg-transparent flex items-start justify-center pt-0.5 z-10 relative">
+                                                <div className="absolute inset-0 bg-gray-200/90 -z-10 rounded-full"></div>
+                                                <ActIcon size={16} className="text-text/70" />
+                                            </div>
+                                            <div className="pb-2">
+                                                <p className="text-[13px] text-heading font-medium leading-snug">
+                                                    {activity.content}
+                                                </p>
+                                                <span className="text-xs text-text/50 flex items-center gap-1 mt-1 font-medium">
+                                                    <Clock size={10} /> {activity.time}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </Container>
 
-        </main>
+        </main >
     );
 }
