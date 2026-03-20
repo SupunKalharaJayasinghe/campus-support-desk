@@ -330,7 +330,7 @@ export default function CommunityPage() {
                         {/* Dropdown Menu */}
                         <div className="absolute right-0 mt-3 w-56 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl animate-in fade-in slide-in-from-top-2 z-50">
                             <Link
-                                href="/profile"
+                                href="/community/profile"
                                 className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-heading transition-colors hover:bg-gray-100"
                                 onClick={() => setIsProfileMenuOpen(false)}
                             >
