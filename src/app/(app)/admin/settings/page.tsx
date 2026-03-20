@@ -9,9 +9,9 @@ import {
   RefreshCw,
   Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   University,
 } from "lucide-react";
+import TablePagination from "@/components/admin/TablePagination";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -27,6 +27,7 @@ const SETTINGS_SECTIONS = [
 ] as const;
 
 type SettingSection = (typeof SETTINGS_SECTIONS)[number]["id"];
+type PageSize = 10 | 25 | 50 | 100;
 
 const GENERAL_DEFAULTS = {
   campusName: "UniHub University",
@@ -208,6 +209,8 @@ export default function AdminSettingsPage() {
   const [auditActionType, setAuditActionType] = useState("");
   const [auditDateFrom, setAuditDateFrom] = useState("");
   const [auditDateTo, setAuditDateTo] = useState("");
+  const [auditPageSize, setAuditPageSize] = useState<PageSize>(10);
+  const [auditPage, setAuditPage] = useState(1);
 
   const activeSectionMeta = SETTINGS_SECTIONS.find(
     (section) => section.id === activeSection
@@ -242,6 +245,7 @@ export default function AdminSettingsPage() {
     toast({
       title: "Reset complete",
       message: "Settings were restored to demo defaults.",
+      variant: "info",
     });
   };
 
@@ -250,7 +254,11 @@ export default function AdminSettingsPage() {
     setIsSaving(true);
     window.setTimeout(() => {
       setIsSaving(false);
-      toast({ title: "Saved (UI demo)" });
+      toast({
+        title: "Saved",
+        message: "Settings updated successfully.",
+        variant: "success",
+      });
     }, 600);
   };
 
@@ -264,6 +272,13 @@ export default function AdminSettingsPage() {
   };
 
   const renderSectionContent = () => {
+    const auditPageCount = Math.max(1, Math.ceil(filteredAuditLogs.length / auditPageSize));
+    const safeAuditPage = Math.min(auditPage, auditPageCount);
+    const visibleAuditLogs = filteredAuditLogs.slice(
+      (safeAuditPage - 1) * auditPageSize,
+      safeAuditPage * auditPageSize
+    );
+
     if (activeSection === "general") {
       return (
         <div className="space-y-4">
@@ -734,7 +749,13 @@ export default function AdminSettingsPage() {
               />
               <Button
                 className="h-11 rounded-xl border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
-                onClick={() => toast({ title: "Export queued (UI demo)" })}
+                onClick={() =>
+                  toast({
+                    title: "Export queued",
+                    message: "The audit log CSV export has been queued.",
+                    variant: "info",
+                  })
+                }
                 type="button"
                 variant="secondary"
               >
@@ -758,7 +779,7 @@ export default function AdminSettingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredAuditLogs.map((log) => (
+                {visibleAuditLogs.map((log) => (
                   <tr
                     className="border-b border-black/8 text-sm text-[#26150F] transition-colors hover:bg-[#034AA6]/4"
                     key={log.id}
@@ -781,7 +802,7 @@ export default function AdminSettingsPage() {
                     </td>
                   </tr>
                 ))}
-                {filteredAuditLogs.length === 0 ? (
+                {visibleAuditLogs.length === 0 ? (
                   <tr>
                     <td className="px-4 py-10 text-center text-sm text-[#26150F]/70" colSpan={5}>
                       No logs match the selected filters.
@@ -792,6 +813,17 @@ export default function AdminSettingsPage() {
             </table>
           </div>
         </div>
+        <TablePagination
+          onPageChange={setAuditPage}
+          onPageSizeChange={(value) => {
+            setAuditPageSize(value as PageSize);
+            setAuditPage(1);
+          }}
+          page={safeAuditPage}
+          pageCount={auditPageCount}
+          pageSize={auditPageSize}
+          totalItems={filteredAuditLogs.length}
+        />
       </div>
     );
   };

@@ -7,6 +7,7 @@ import {
   getExpectedRoleForPath,
   isDemoModeEnabled,
   readStoredRole,
+  readStoredUser,
 } from "@/lib/rbac";
 import type { AppRole } from "@/lib/rbac";
 
@@ -22,13 +23,16 @@ export default function RoleGuard({
   const isDemoMode = isDemoModeEnabled();
 
   const currentRole = isDemoMode ? null : readStoredRole();
+  const currentUser = isDemoMode ? null : readStoredUser();
   const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);
 
   let redirectTarget: string | null = null;
 
   if (!isDemoMode) {
-    if (!currentRole) {
+    if (!currentRole || !currentUser) {
       redirectTarget = "/login";
+    } else if (currentUser.mustChangePassword) {
+      redirectTarget = "/change-password";
     } else if (allowedRole && currentRole !== allowedRole) {
       redirectTarget = HOME_BY_ROLE[currentRole];
     } else if (expectedRole && currentRole !== expectedRole) {

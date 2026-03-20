@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -10,6 +11,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useGrouping } from "./GroupingContext";
 
 type TabTrack = "weekday" | "weekend";
+type PageSize = 10 | 25 | 50 | 100;
 
 function isTabTrack(value: string | null): value is TabTrack {
   return value === "weekday" || value === "weekend";
@@ -25,6 +27,8 @@ function StudentGroupingContent() {
   const { toast } = useToast();
   const { students, groupOptions, assignStudentToGroup } = useGrouping();
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
+  const [pageSize, setPageSize] = useState<PageSize>(10);
+  const [page, setPage] = useState(1);
 
   const tabParam = searchParams.get("tab");
   const activeTab: TabTrack = isTabTrack(tabParam) ? tabParam : "weekday";
@@ -36,8 +40,12 @@ function StudentGroupingContent() {
     () => students.filter((student) => student.track === activeTab),
     [activeTab, students]
   );
+  const pageCount = Math.max(1, Math.ceil(tabStudents.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pagedStudents = tabStudents.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const setTab = (nextTab: TabTrack) => {
+    setPage(1);
     router.replace(`/admin/groups?tab=${nextTab}`);
   };
 
@@ -59,8 +67,9 @@ function StudentGroupingContent() {
     });
 
     toast({
-      title: `${studentName} assigned to ${nextGroup ?? "Unassigned"}`,
+      title: "Saved",
       message: "Group assignment updated.",
+      variant: "success",
     });
   };
 
@@ -140,7 +149,7 @@ function StudentGroupingContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tabStudents.slice(0, 12).map((student) => {
+                  {pagedStudents.map((student) => {
                     const currentValue = student.group ?? "unassigned";
                     const draftValue = groupDrafts[student.id] ?? currentValue;
                     const isUnchanged = draftValue === currentValue;
@@ -199,6 +208,17 @@ function StudentGroupingContent() {
               ) : null}
             </div>
           </div>
+          <TablePagination
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setPageSize(value as PageSize);
+              setPage(1);
+            }}
+            page={safePage}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalItems={tabStudents.length}
+          />
         </Card>
       </div>
     </div>
