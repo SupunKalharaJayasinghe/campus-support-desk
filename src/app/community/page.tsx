@@ -18,7 +18,9 @@ import {
     CheckCircle,
     Calendar,
     Flag,
-    MessageCircle
+    MessageCircle,
+    Settings,
+    Home
 } from "lucide-react";
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
@@ -159,6 +161,7 @@ const RECENT_ACTIVITY = [
 export default function CommunityPage() {
     const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
     const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("all");
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
     // State to track which post has its reply section expanded
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -304,13 +307,62 @@ export default function CommunityPage() {
 
     return (
         <main
-            className="min-h-screen bg-cover bg-center bg-no-repeat py-10 lg:py-16"
+            className="min-h-screen bg-cover bg-center bg-no-repeat pt-24 lg:pt-28 pb-10 lg:pb-16 relative"
             style={{ backgroundImage: `url(${communityBackground.src})` }}
         >
+            {/* Go to Profile Icon & Dropdown */}
+            <div className="fixed top-6 right-6 lg:top-8 lg:right-10 z-[60]">
+                <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-primary shadow-lg transition-all hover:scale-105 hover:bg-white hover:text-blue-700 border border-gray-200"
+                    title="Profile Menu"
+                >
+                    <User size={24} />
+                </button>
+
+                {isProfileMenuOpen && (
+                    <>
+                        {/* Invisible backdrop to close menu when clicking outside */}
+                        <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setIsProfileMenuOpen(false)}
+                        />
+                        {/* Dropdown Menu */}
+                        <div className="absolute right-0 mt-3 w-56 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl animate-in fade-in slide-in-from-top-2 z-50">
+                            <Link
+                                href="/profile"
+                                className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-heading transition-colors hover:bg-gray-100"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                            >
+                                <User size={18} className="text-primary" />
+                                Profile
+                            </Link>
+                            <Link
+                                href="/settings"
+                                className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-heading transition-colors hover:bg-gray-100"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                            >
+                                <Settings size={18} className="text-gray-500" />
+                                Settings
+                            </Link>
+                            <div className="my-1 h-px w-full bg-gray-100" />
+                            <Link
+                                href="/"
+                                className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-heading transition-colors hover:bg-gray-100"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                            >
+                                <Home size={18} className="text-gray-500" />
+                                Go to Home Page
+                            </Link>
+                        </div>
+                    </>
+                )}
+            </div>
+
             <Container size="7xl">
                 <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
                     {/* LEFT PANEL */}
-                    <div className="hidden lg:flex w-[260px] xl:w-[280px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-5 shadow-shadow sticky top-24 h-[calc(100vh-8rem)]">
+                    <div className="hidden lg:flex w-[260px] xl:w-[280px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow sticky top-24 lg:top-28 h-[calc(100vh-8rem)]">
                         <h2 className="text-[15px] font-bold uppercase text-heading mb-4">Members</h2>
                         <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
                             {MOCK_MEMBERS.map(member => {
@@ -335,15 +387,7 @@ export default function CommunityPage() {
 
                     {/* MIDDLE PANEL */}
                     <div className="w-full flex-1 rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow min-w-0">
-                        <div className="mb-8">
-                            <Link
-                                className="inline-flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2 text-sm font-semibold text-text shadow-sm transition-all hover:bg-gray-50 hover:shadow-md"
-                                href="/community-help"
-                            >
-                                <ArrowLeft size={16} />
-                                Back to Support Space
-                            </Link>
-                        </div>
+
 
                         <div className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
                             <div>
@@ -503,7 +547,7 @@ export default function CommunityPage() {
                     </div>
 
                     {/* RIGHT PANEL */}
-                    <div className="hidden lg:flex w-[260px] xl:w-[300px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-5 xl:p-6 shadow-shadow sticky top-24 h-[calc(100vh-8rem)]">
+                    <div className="hidden lg:flex w-[260px] xl:w-[300px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow sticky top-24 lg:top-28 h-[calc(100vh-8rem)]">
                         <h2 className="text-[15px] font-bold uppercase text-heading mb-5">Community Stats & Recent</h2>
 
                         <div className="mb-6">
