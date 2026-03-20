@@ -307,7 +307,7 @@ export default function CommunityPage() {
 
     return (
         <main
-            className="min-h-screen bg-cover bg-center bg-no-repeat pt-24 lg:pt-28 pb-10 lg:pb-16 relative"
+            className="h-screen bg-cover bg-center bg-no-repeat pt-24 lg:pt-28 pb-10 lg:pb-16 relative overflow-hidden flex flex-col"
             style={{ backgroundImage: `url(${communityBackground.src})` }}
         >
             {/* Go to Profile Icon & Dropdown */}
@@ -359,10 +359,10 @@ export default function CommunityPage() {
                 )}
             </div>
 
-            <Container size="7xl">
-                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+            <Container size="7xl" className="flex-1 overflow-hidden">
+                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start w-full h-full">
                     {/* LEFT PANEL */}
-                    <div className="hidden lg:flex w-[260px] xl:w-[280px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow sticky top-24 lg:top-28 h-[calc(100vh-8rem)]">
+                    <div className="hidden lg:flex w-[260px] xl:w-[280px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow h-full">
                         <h2 className="text-[15px] font-bold uppercase text-heading mb-4">Members</h2>
                         <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
                             {MOCK_MEMBERS.map(member => {
@@ -386,7 +386,7 @@ export default function CommunityPage() {
                     </div>
 
                     {/* MIDDLE PANEL */}
-                    <div className="w-full flex-1 rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow min-w-0">
+                    <div className="w-full flex-1 rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow min-w-0 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
 
 
                         <div className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
@@ -547,7 +547,7 @@ export default function CommunityPage() {
                     </div>
 
                     {/* RIGHT PANEL */}
-                    <div className="hidden lg:flex w-[260px] xl:w-[300px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow sticky top-24 lg:top-28 h-[calc(100vh-8rem)]">
+                    <div className="hidden lg:flex w-[260px] xl:w-[300px] shrink-0 flex-col rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 sm:p-8 shadow-shadow h-full">
                         <h2 className="text-[15px] font-bold uppercase text-heading mb-5">Community Stats & Recent</h2>
 
                         <div className="mb-6">
