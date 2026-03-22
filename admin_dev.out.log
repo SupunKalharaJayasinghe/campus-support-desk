@@ -1,0 +1,13 @@
+
+> campus-support-desk@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.8s
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 2.2s (638 modules)
+ GET /admin 200 in 2542ms
