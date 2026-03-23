@@ -1,5 +1,10 @@
 {
   "/page": "app/page.js",
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/(app)/admin/page": "app/(app)/admin/page.js"
+  "/login/page": "app/login/page.js",
+  "/(app)/admin/page": "app/(app)/admin/page.js",
+  "/(app)/admin/communication/targeted-notifications/page": "app/(app)/admin/communication/targeted-notifications/page.js",
+  "/(app)/admin/users/lecturers/page": "app/(app)/admin/users/lecturers/page.js",
+  "/(app)/lost-items/page": "app/(app)/lost-items/page.js",
+  "/(app)/lecturer/page": "app/(app)/lecturer/page.js",
+  "/(app)/lecturer/availability/page": "app/(app)/lecturer/availability/page.js"
 }

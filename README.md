@@ -37,13 +37,34 @@ NEXT_PUBLIC_DEMO_MODE=true
 
 When demo mode is enabled, route guarding is bypassed so you can open role pages directly.
 
+### MongoDB mode (real login/API persistence)
+
+If you want database-backed login and API persistence, use:
+
+```bash
+NEXT_PUBLIC_DEMO_MODE=false
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<db>?retryWrites=true&w=majority
+MONGODB_DB=campus_support_desk
+ADMIN_USERNAME=admin
+ADMIN_EMAIL=admin@campus.local
+ADMIN_PASSWORD=Admin@12345
+```
+
+Then seed an admin user:
+
+```bash
+npm run seed:admin
+```
+
+`seed:admin` creates or updates an active `ADMIN` account.
+
 ### Login (when demo mode is disabled)
 
 If you set `NEXT_PUBLIC_DEMO_MODE=false` (or remove it), role pages are guarded:
 
 1. Open `http://localhost:3000/login`
-2. Choose a role from **Login as** (pick **Administrator** for admin)
-3. Click **Login**
+2. Sign in with your MongoDB-backed user (for seeded admin: `admin` / `Admin@12345` by default)
+3. Open `http://localhost:3000/admin`
 
 The app stores a demo session in `localStorage` using:
 
@@ -67,6 +88,7 @@ Guard logic lives in `src/components/auth/RoleGuard.tsx`.
 ## Scripts
 
 - `npm run dev` start dev server
+- `npm run seed:admin` create/update MongoDB admin login user
 - `npm run build` production build
 - `npm run start` start production server (after build)
 - `npm run lint` run ESLint
