@@ -1,9 +1,19 @@
 {
   "pages": {
-    "/page": [
+    "/(app)/admin/academics/degree-programs/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/(app)/admin/academics/degree-programs/page.js"
+    ],
+    "/(app)/admin/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/layout.js"
+    ],
+    "/(app)/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/layout.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -16,60 +26,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/admin/page.js"
     ],
-    "/(app)/admin/layout": [
+    "/(app)/admin/administration/system-settings/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/layout.js"
-    ],
-    "/(app)/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/layout.js"
-    ],
-    "/(app)/admin/communication/targeted-notifications/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/communication/targeted-notifications/page.js"
-    ],
-    "/(app)/admin/users/lecturers/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/users/lecturers/page.js"
+      "static/chunks/app/(app)/admin/administration/system-settings/page.js"
     ],
     "/(app)/admin/users/lab-assistants/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/admin/users/lab-assistants/page.js"
     ],
-    "/login/page": [
+    "/(app)/admin/users/admins/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/login/page.js"
-    ],
-    "/(app)/lost-items/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/lost-items/page.js"
-    ],
-    "/(app)/lost-items/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/lost-items/layout.js"
-    ],
-    "/(app)/lecturer/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/lecturer/page.js"
-    ],
-    "/(app)/lecturer/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/lecturer/layout.js"
-    ],
-    "/(app)/lecturer/availability/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/lecturer/availability/page.js"
+      "static/chunks/app/(app)/admin/users/admins/page.js"
     ]
   }
 }

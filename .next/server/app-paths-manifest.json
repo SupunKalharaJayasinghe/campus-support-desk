@@ -1,10 +1,10 @@
 {
-  "/page": "app/page.js",
-  "/login/page": "app/login/page.js",
+  "/api/faculties/route": "app/api/faculties/route.js",
+  "/api/degree-programs/route": "app/api/degree-programs/route.js",
+  "/api/lab-assistants/route": "app/api/lab-assistants/route.js",
+  "/(app)/admin/academics/degree-programs/page": "app/(app)/admin/academics/degree-programs/page.js",
+  "/(app)/admin/users/lab-assistants/page": "app/(app)/admin/users/lab-assistants/page.js",
   "/(app)/admin/page": "app/(app)/admin/page.js",
-  "/(app)/admin/communication/targeted-notifications/page": "app/(app)/admin/communication/targeted-notifications/page.js",
-  "/(app)/admin/users/lecturers/page": "app/(app)/admin/users/lecturers/page.js",
-  "/(app)/lost-items/page": "app/(app)/lost-items/page.js",
-  "/(app)/lecturer/page": "app/(app)/lecturer/page.js",
-  "/(app)/lecturer/availability/page": "app/(app)/lecturer/availability/page.js"
+  "/(app)/admin/administration/system-settings/page": "app/(app)/admin/administration/system-settings/page.js",
+  "/(app)/admin/users/admins/page": "app/(app)/admin/users/admins/page.js"
 }
