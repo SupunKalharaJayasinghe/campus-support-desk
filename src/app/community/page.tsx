@@ -341,7 +341,7 @@ export default function CommunityPage() {
 
                     <div className="flex items-center gap-2 sm:gap-3">
                         <Link
-                            href="/community-help/post/create"
+                            href="/community/post/create"
                             className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
                         >
                             <CirclePlus size={18} />
@@ -377,7 +377,7 @@ export default function CommunityPage() {
                                             <User size={16} /> Profile
                                         </Link>
                                         <Link
-                                            href="/settings"
+                                            href="/community/Settings"
                                             onClick={() => setIsProfileMenuOpen(false)}
                                             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-blue-50"
                                         >

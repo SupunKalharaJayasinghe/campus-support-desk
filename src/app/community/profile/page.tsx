@@ -1,7 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, User, CheckCircle, Clock, FileText, MessageSquare, Star, ThumbsUp } from "lucide-react";
+import {
+    ArrowLeft,
+    Award,
+    BookMarked,
+    CalendarDays,
+    CheckCircle2,
+    Eye,
+    FileText,
+    Flame,
+    MessageSquare,
+    Star,
+    ThumbsUp,
+    User,
+    Users,
+} from "lucide-react";
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import communityBackground from "@/app/images/community/community2.jpg";
@@ -11,6 +25,10 @@ const PROFILE_DATA = {
     role: "Verified Mentor",
     reputation: 1250,
     joined: "Aug 2024",
+    about: "Passionate about helping classmates with coursework, project planning, and campus life tips.",
+    rank: 18,
+    profileViews: 532,
+    streakDays: 23,
     stats: {
         posts: 42,
         replies: 156,
@@ -28,129 +46,218 @@ const PROFILE_DATA = {
 export default function CommunityProfilePage() {
     return (
         <main
-            className="min-h-screen bg-cover bg-center bg-no-repeat py-10 lg:py-16"
-            style={{ backgroundImage: `url(${communityBackground.src})` }}
+            className="relative min-h-screen py-10 lg:py-14"
+            style={{
+                backgroundImage: `url(${communityBackground.src})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+            }}
         >
+            <div className="absolute inset-0 bg-slate-100/78" />
             <Container size="6xl">
-                <div className="rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 shadow-shadow md:p-8">
-                    <div className="mb-8">
+                <div className="relative z-10 rounded-3xl border border-blue-200 bg-slate-50/90 p-5 shadow-shadow md:p-8">
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                         <Link
-                            className="inline-flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2 text-sm font-semibold text-text shadow-sm transition-all hover:bg-gray-50 hover:shadow-md border border-gray-300/50"
+                            className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50"
                             href="/community"
                         >
                             <ArrowLeft size={16} />
-                            Back to Community Space
+                            Back to Community
+                        </Link>
+                        <Link
+                            href="/community/Settings"
+                            className="rounded-full bg-blue-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-800"
+                        >
+                            Edit Profile
                         </Link>
                     </div>
 
-                    {/* Profile Header Block */}
-                    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 mb-10 pb-8 border-b border-gray-400/40">
-                        <div className="flex-shrink-0 h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-inner border border-primary/20">
-                            <User size={48} />
-                        </div>
-                        <div className="flex-1 text-center md:text-left">
-                            <h1 className="text-3xl font-bold text-heading flex items-center justify-center md:justify-start gap-3">
-                                {PROFILE_DATA.name}
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-white tracking-wide shadow-sm">
-                                    <CheckCircle size={14} />
-                                    {PROFILE_DATA.role}
-                                </span>
-                            </h1>
-                            <p className="mt-2 text-text/70 font-medium flex items-center justify-center md:justify-start gap-2">
-                                <Clock size={16} /> Joined {PROFILE_DATA.joined}
-                            </p>
-
-                            <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-4">
-                                <div className="flex items-center gap-3 bg-white/70 px-4 py-2.5 rounded-2xl shadow-sm border border-gray-300/50">
-                                    <div className="p-1.5 bg-yellow-100 text-yellow-600 rounded-full">
-                                        <Star size={18} />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-text/60 font-semibold uppercase tracking-wider">Reputation</p>
-                                        <p className="text-lg font-bold text-heading leading-none">{PROFILE_DATA.reputation}</p>
-                                    </div>
+                    <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-white to-blue-50 p-6 md:p-7">
+                        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+                                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-100 text-blue-700 shadow-inner">
+                                    <User size={46} />
                                 </div>
-                                <div className="flex items-center gap-3 bg-white/70 px-4 py-2.5 rounded-2xl shadow-sm border border-gray-300/50">
-                                    <div className="p-1.5 bg-blue-100 text-blue-600 rounded-full">
-                                        <FileText size={18} />
+                                <div className="text-center sm:text-left">
+                                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                                        <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">{PROFILE_DATA.name}</h1>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-700 px-3 py-1 text-xs font-semibold text-white">
+                                            <CheckCircle2 size={13} />
+                                            {PROFILE_DATA.role}
+                                        </span>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-text/60 font-semibold uppercase tracking-wider">Total Posts</p>
-                                        <p className="text-lg font-bold text-heading leading-none">{PROFILE_DATA.stats.posts}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3 bg-white/70 px-4 py-2.5 rounded-2xl shadow-sm border border-gray-300/50">
-                                    <div className="p-1.5 bg-green-100 text-green-600 rounded-full">
-                                        <ThumbsUp size={18} />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-text/60 font-semibold uppercase tracking-wider">Helpful</p>
-                                        <p className="text-lg font-bold text-heading leading-none">{PROFILE_DATA.stats.helpful}</p>
-                                    </div>
+                                    <p className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-600 sm:justify-start">
+                                        <CalendarDays size={15} /> Joined {PROFILE_DATA.joined}
+                                    </p>
+                                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">{PROFILE_DATA.about}</p>
                                 </div>
                             </div>
-                        </div>
-                        <div className="flex-shrink-0 mt-4 md:mt-0">
-                            <button className="rounded-full bg-gray-100 hover:bg-gray-50 border border-gray-300 px-6 py-2.5 text-sm font-semibold text-text shadow-sm transition-all focus:ring-2 focus:ring-primary/20">
-                                Edit Profile
-                            </button>
+                            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-blue-100 bg-white/90 p-3">
+                                <div className="rounded-xl bg-blue-50 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</p>
+                                    <p className="mt-1 text-lg font-bold text-slate-800">#{PROFILE_DATA.rank}</p>
+                                </div>
+                                <div className="rounded-xl bg-blue-50 p-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Views</p>
+                                    <p className="mt-1 text-lg font-bold text-slate-800">{PROFILE_DATA.profileViews}</p>
+                                </div>
+                                <div className="col-span-2 rounded-xl bg-blue-700 p-3 text-white">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Current Streak</p>
+                                    <p className="mt-1 flex items-center gap-2 text-lg font-bold">
+                                        <Flame size={17} /> {PROFILE_DATA.streakDays} days active
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Left Column: Recent Posts */}
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                            <p className="mb-2 inline-flex rounded-lg bg-yellow-100 p-2 text-yellow-700">
+                                <Star size={16} />
+                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reputation</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.reputation}</p>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                            <p className="mb-2 inline-flex rounded-lg bg-blue-100 p-2 text-blue-700">
+                                <FileText size={16} />
+                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posts</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.posts}</p>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                            <p className="mb-2 inline-flex rounded-lg bg-cyan-100 p-2 text-cyan-700">
+                                <MessageSquare size={16} />
+                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Replies</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.replies}</p>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                            <p className="mb-2 inline-flex rounded-lg bg-green-100 p-2 text-green-700">
+                                <ThumbsUp size={16} />
+                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Helpful Votes</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.helpful}</p>
+                        </Card>
+                    </div>
+
+                    <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-3">
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
+                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+                                <Award size={18} className="text-blue-700" />
+                                Contribution Highlights
+                            </h2>
+                            <ul className="mt-4 space-y-3 text-sm text-slate-700">
+                                <li className="rounded-xl bg-blue-50 p-3">Top 5% helper in academic questions this month.</li>
+                                <li className="rounded-xl bg-blue-50 p-3">Recognized by 12 members as a study mentor.</li>
+                                <li className="rounded-xl bg-blue-50 p-3">Maintained active participation for over 3 weeks.</li>
+                            </ul>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
+                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+                                <Users size={18} className="text-blue-700" />
+                                Community Reach
+                            </h2>
+                            <div className="mt-4 space-y-3 text-sm">
+                                <div className="rounded-xl bg-slate-50 p-3">
+                                    <p className="text-slate-500">Followers</p>
+                                    <p className="mt-1 text-xl font-bold text-slate-800">214</p>
+                                </div>
+                                <div className="rounded-xl bg-slate-50 p-3">
+                                    <p className="text-slate-500">Mentions in Posts</p>
+                                    <p className="mt-1 text-xl font-bold text-slate-800">37</p>
+                                </div>
+                                <div className="rounded-xl bg-slate-50 p-3">
+                                    <p className="text-slate-500">Shared Resources</p>
+                                    <p className="mt-1 text-xl font-bold text-slate-800">19</p>
+                                </div>
+                            </div>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
+                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+                                <BookMarked size={18} className="text-blue-700" />
+                                Focus Areas
+                            </h2>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {["Exam Prep", "Web Development", "Study Group", "Campus Support", "Project Reviews"].map((tag) => (
+                                    <span
+                                        key={tag}
+                                        className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800"
+                                    >
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="mt-5 rounded-xl bg-blue-700 p-4 text-white">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Availability</p>
+                                <p className="mt-1 text-sm">Usually active between 6:00 PM and 10:00 PM.</p>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
                         <div>
-                            <h2 className="text-lg font-bold text-heading mb-4 flex items-center gap-2">
-                                <FileText className="text-primary" size={20} /> My Recent Posts
+                            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+                                <FileText size={20} className="text-blue-700" /> Recent Posts
                             </h2>
                             <div className="space-y-4">
-                                {PROFILE_DATA.recentPosts.map(post => (
-                                    <Card key={post.id} className="p-5 hover:shadow-md transition-shadow bg-gray-50 border border-gray-300/60">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="rounded-full bg-gray-200 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text/70">
-                                                {post.category}
+                                {PROFILE_DATA.recentPosts.map((post) => (
+                                    <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                                        <div className="mb-3 flex items-start justify-between gap-2">
+                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                                                {post.category.replace("_", " ")}
                                             </span>
-                                            <span className="text-xs text-text/50 font-medium">{post.time}</span>
+                                            <span className="text-xs text-slate-500">{post.time}</span>
                                         </div>
-                                        <h3 className="font-semibold text-heading text-base leading-snug mb-3 hover:text-primary cursor-pointer transition-colors">
-                                            {post.title}
-                                        </h3>
-                                        <div className="flex items-center gap-4 text-xs font-medium text-text/60 mt-auto">
-                                            <span className="flex items-center gap-1.5"><ThumbsUp size={14} /> {post.likes}</span>
-                                            <span className="flex items-center gap-1.5"><MessageSquare size={14} /> {post.replies}</span>
+                                        <h3 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
+                                        <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <ThumbsUp size={14} /> {post.likes}
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <MessageSquare size={14} /> {post.replies}
+                                            </span>
                                         </div>
                                     </Card>
                                 ))}
-                                <button className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-400/50 text-sm font-medium text-text/70 hover:bg-gray-200/50 hover:text-primary transition-colors">
-                                    View all posts
+                                <button className="w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100">
+                                    <span className="inline-flex items-center gap-2">
+                                        <Eye size={15} />
+                                        View all posts
+                                    </span>
                                 </button>
                             </div>
                         </div>
 
-                        {/* Right Column: Recent Replies */}
                         <div>
-                            <h2 className="text-lg font-bold text-heading mb-4 flex items-center gap-2">
-                                <MessageSquare className="text-primary" size={20} /> My Recent Replies
+                            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+                                <MessageSquare size={20} className="text-blue-700" /> Recent Replies
                             </h2>
                             <div className="space-y-4">
-                                {PROFILE_DATA.recentReplies.map(reply => (
-                                    <Card key={reply.id} className="p-5 hover:shadow-md transition-shadow bg-gray-50 border border-gray-300/60">
-                                        <p className="text-xs text-text/60 font-medium mb-1 line-clamp-1">
-                                            Replying to: <span className="font-semibold text-heading">{reply.postTitle}</span>
+                                {PROFILE_DATA.recentReplies.map((reply) => (
+                                    <Card key={reply.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                                        <p className="text-xs font-semibold text-slate-500">
+                                            Replying to <span className="text-slate-700">{reply.postTitle}</span>
                                         </p>
-                                        <p className="text-sm text-text/80 leading-relaxed mb-3">
-                                            "{reply.content}"
+                                        <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
+                                            {reply.content}
                                         </p>
-                                        <div className="text-xs text-text/50 font-medium">
-                                            {reply.time}
-                                        </div>
+                                        <p className="mt-2 text-xs text-slate-500">{reply.time}</p>
                                     </Card>
                                 ))}
-                                <button className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-400/50 text-sm font-medium text-text/70 hover:bg-gray-200/50 hover:text-primary transition-colors">
-                                    View all replies
+                                <button className="w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100">
+                                    <span className="inline-flex items-center gap-2">
+                                        <Eye size={15} />
+                                        View all replies
+                                    </span>
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-100/60 p-4 text-sm text-blue-900">
+                        Keep helping others, and your mentor badge progression will update automatically based on community contributions.
                     </div>
                 </div>
             </Container>
