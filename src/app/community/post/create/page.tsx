@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Tag, Paperclip, X, Plus } from "lucide-react";
-import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -141,221 +140,230 @@ export default function CreateCommunityPostPage() {
 
     return (
         <main
-            className="min-h-screen bg-cover bg-center bg-no-repeat py-10 lg:py-16"
-            style={{ backgroundImage: `url(${communityBackground.src})` }}
+            className="relative min-h-screen overflow-hidden text-[#0f0f0f]"
+            style={{ backgroundImage: `url(${communityBackground.src})`, backgroundSize: "cover", backgroundPosition: "center" }}
         >
-            <Container size="4xl">
-                <div className="rounded-3xl border border-gray-500/40 bg-gray-200/90 p-6 shadow-shadow md:p-8">
-                    {/* Back button */}
-                    <div className="mb-8">
-                        <Link
-                            className="inline-flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2 text-sm font-semibold text-text shadow-sm transition-all hover:bg-gray-50 hover:shadow-md"
-                            href="/community"
-                        >
-                            <ArrowLeft size={16} />
-                            Back to Community
-                        </Link>
+            <div className="absolute inset-0 bg-slate-100/70" />
+            <div className="relative z-10 mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
+                        <span className="text-lg font-bold tracking-tight text-slate-800">Create Post</span>
+                    </div>
+                    <Link
+                        className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-200"
+                        href="/community"
+                    >
+                        <ArrowLeft size={16} />
+                        Back to Community
+                    </Link>
+                </div>
+
+                <Card className="mx-auto w-full max-w-3xl rounded-2xl border border-blue-100 bg-white/95 p-5 shadow-none sm:p-6">
+                    <div className="mb-6 border-b border-blue-100 pb-4">
+                        <h2 className="text-xl font-semibold text-slate-800">Share with the Community</h2>
+                        <p className="mt-1 text-sm text-slate-600">Post a question, resource, or announcement for your peers.</p>
                     </div>
 
-                    <Card className="mx-auto w-full max-w-2xl overflow-hidden border-2 border-primary/20 bg-white p-6 shadow-lg">
-                        <h2 className="mb-6 text-xl font-semibold text-heading">Create a New Post</h2>
+                    <form onSubmit={handlePost} className="space-y-5">
+                        <div>
+                            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                                Title <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                                placeholder="What's on your mind?"
+                                value={title}
+                                onChange={(e) => {
+                                    setTitle(e.target.value);
+                                    setIsDraftSaved(false);
+                                }}
+                                autoFocus
+                                className="border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+                            />
+                        </div>
 
-                        <form onSubmit={handlePost} className="space-y-5">
+                        <div>
+                            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                                Category <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                className="w-full rounded-2xl border border-blue-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                value={category}
+                                onChange={(e) => {
+                                    setCategory(e.target.value);
+                                    setIsDraftSaved(false);
+                                }}
+                            >
+                                {CATEGORY_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                            {/* Title */}
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">
-                                    Title <span className="text-red-500">*</span>
-                                </label>
+                        <div>
+                            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                                Details <span className="text-red-500">*</span>
+                            </label>
+                            <Textarea
+                                placeholder="Share the details here..."
+                                rows={4}
+                                value={description}
+                                onChange={(e) => {
+                                    setDescription(e.target.value);
+                                    setIsDraftSaved(false);
+                                }}
+                                className="min-h-[120px] border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                                <Tag size={14} />
+                                Tags
+                            </label>
+                            <div className="flex gap-2">
                                 <Input
-                                    placeholder="What's on your mind?"
-                                    value={title}
-                                    onChange={(e) => { setTitle(e.target.value); setIsDraftSaved(false); }}
-                                    autoFocus
+                                    placeholder="Add a tag and press Enter"
+                                    value={tagInput}
+                                    onChange={(e) => setTagInput(e.target.value)}
+                                    onKeyDown={handleTagKeyDown}
+                                    className="flex-1 border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
                                 />
-                            </div>
-
-                            {/* Category */}
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">
-                                    Category <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    className="w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors placeholder:text-text/55 focus:border-primary focus:outline-none focus:ring-2 focus:ring-focus"
-                                    value={category}
-                                    onChange={(e) => { setCategory(e.target.value); setIsDraftSaved(false); }}
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    className="shrink-0 rounded-xl bg-blue-700 px-3 text-white hover:bg-blue-800"
+                                    onClick={addTag}
+                                    disabled={!tagInput.trim()}
                                 >
-                                    {CATEGORY_OPTIONS.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                        </option>
-                                    ))}
-                                </select>
+                                    <Plus size={16} />
+                                </Button>
                             </div>
-
-                            {/* Description */}
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">
-                                    Details <span className="text-red-500">*</span>
-                                </label>
-                                <Textarea
-                                    placeholder="Share the details here..."
-                                    rows={4}
-                                    value={description}
-                                    onChange={(e) => { setDescription(e.target.value); setIsDraftSaved(false); }}
-                                />
-                            </div>
-
-                            {/* Tags */}
-                            <div>
-                                <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text/80">
-                                    <Tag size={14} />
-                                    Tags
-                                </label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="Add a tag and press Enter"
-                                        value={tagInput}
-                                        onChange={(e) => setTagInput(e.target.value)}
-                                        onKeyDown={handleTagKeyDown}
-                                        className="flex-1"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="primary"
-                                        className="shrink-0 bg-blue-600 px-3 text-white hover:bg-blue-700"
-                                        onClick={addTag}
-                                        disabled={!tagInput.trim()}
-                                    >
-                                        <Plus size={16} />
-                                    </Button>
-                                </div>
-                                {tags.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                        {tags.map((tag) => (
-                                            <span
-                                                key={tag}
-                                                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                            {tags.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {tags.map((tag) => (
+                                        <span
+                                            key={tag}
+                                            className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                                        >
+                                            {tag}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeTag(tag)}
+                                                className="ml-0.5 rounded-full hover:text-blue-900"
                                             >
-                                                {tag}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeTag(tag)}
-                                                    className="ml-0.5 rounded-full hover:text-blue-900"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Attachments */}
-                            <div>
-                                <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text/80">
-                                    <Paperclip size={14} />
-                                    Attachments <span className="text-xs font-normal text-text/50">(URLs)</span>
-                                </label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="Paste a URL and press Enter"
-                                        value={attachmentInput}
-                                        onChange={(e) => setAttachmentInput(e.target.value)}
-                                        onKeyDown={handleAttachmentKeyDown}
-                                        className="flex-1"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="primary"
-                                        className="shrink-0 bg-blue-600 px-3 text-white hover:bg-blue-700"
-                                        onClick={addAttachment}
-                                        disabled={!attachmentInput.trim()}
-                                    >
-                                        <Plus size={16} />
-                                    </Button>
-                                </div>
-                                {attachments.length > 0 && (
-                                    <ul className="mt-2 space-y-1">
-                                        {attachments.map((url) => (
-                                            <li
-                                                key={url}
-                                                className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-text/70"
-                                            >
-                                                <span className="truncate max-w-[90%]">{url}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeAttachment(url)}
-                                                    className="ml-2 shrink-0 text-red-400 hover:text-red-600"
-                                                >
-                                                    <X size={13} />
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-
-                            {/* Status */}
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-text/80">Status</label>
-                                <div className="flex gap-4">
-                                    {(["open"] as const).map((s) => (
-                                        <label key={s} className="flex cursor-pointer items-center gap-2 text-sm text-text/80">
-                                            <input
-                                                type="radio"
-                                                name="status"
-                                                value={s}
-                                                checked={status === s}
-                                                onChange={() => { setStatus(s); setIsDraftSaved(false); }}
-                                                className="accent-primary"
-                                            />
-                                            <span className="capitalize">{s}</span>
-                                        </label>
+                                                <X size={12} />
+                                            </button>
+                                        </span>
                                     ))}
                                 </div>
-                            </div>
-
-                            {/* Action buttons */}
-                            <div className="flex justify-center gap-3 pt-2">
-                                {!isDraftSaved ? (
-                                    <Button
-                                        type="button"
-                                        variant="primary"
-                                        className="bg-blue-600 px-8 text-white hover:bg-blue-700"
-                                        onClick={handleSaveDraft}
-                                        disabled={!isFormValid}
-                                    >
-                                        Save Draft
-                                    </Button>
-                                ) : (
-                                    <>
-                                        <Button
-                                            type="button"
-                                            className="bg-red-600 px-6 text-white hover:bg-red-700"
-                                            onClick={handleDeleteDraft}
-                                            disabled={isSubmitting}
-                                        >
-                                            Delete
-                                        </Button>
-                                        <Button
-                                            type="submit"
-                                            className="bg-green-600 px-6 text-white hover:bg-green-700"
-                                            disabled={isSubmitting}
-                                        >
-                                            {isSubmitting ? "Posting..." : "Post"}
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
-
-                            {submitError && (
-                                <p className="text-center text-sm font-medium text-red-700">{submitError}</p>
                             )}
-                        </form>
-                    </Card>
-                </div>
-            </Container>
+                        </div>
+
+                        <div>
+                            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                                <Paperclip size={14} />
+                                Attachments <span className="text-xs font-normal text-slate-500">(URLs)</span>
+                            </label>
+                            <div className="flex gap-2">
+                                <Input
+                                    placeholder="Paste a URL and press Enter"
+                                    value={attachmentInput}
+                                    onChange={(e) => setAttachmentInput(e.target.value)}
+                                    onKeyDown={handleAttachmentKeyDown}
+                                    className="flex-1 border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    className="shrink-0 rounded-xl bg-blue-700 px-3 text-white hover:bg-blue-800"
+                                    onClick={addAttachment}
+                                    disabled={!attachmentInput.trim()}
+                                >
+                                    <Plus size={16} />
+                                </Button>
+                            </div>
+                            {attachments.length > 0 && (
+                                <ul className="mt-2 space-y-1">
+                                    {attachments.map((url) => (
+                                        <li
+                                            key={url}
+                                            className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-1.5 text-xs text-slate-700"
+                                        >
+                                            <span className="max-w-[90%] truncate">{url}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeAttachment(url)}
+                                                className="ml-2 shrink-0 text-red-500 hover:text-red-700"
+                                            >
+                                                <X size={13} />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
+                            <div className="flex gap-4">
+                                {(["open"] as const).map((s) => (
+                                    <label key={s} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                                        <input
+                                            type="radio"
+                                            name="status"
+                                            value={s}
+                                            checked={status === s}
+                                            onChange={() => {
+                                                setStatus(s);
+                                                setIsDraftSaved(false);
+                                            }}
+                                            className="accent-blue-700"
+                                        />
+                                        <span className="capitalize">{s}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 border-t border-blue-100 pt-4">
+                            {!isDraftSaved ? (
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
+                                    onClick={handleSaveDraft}
+                                    disabled={!isFormValid}
+                                >
+                                    Save Draft
+                                </Button>
+                            ) : (
+                                <>
+                                    <Button
+                                        type="button"
+                                        className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
+                                        onClick={handleDeleteDraft}
+                                        disabled={isSubmitting}
+                                    >
+                                        Delete
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? "Posting..." : "Post"}
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+
+                        {submitError && <p className="text-sm font-medium text-red-700">{submitError}</p>}
+                    </form>
+                </Card>
+            </div>
         </main>
     );
 }
