@@ -25,10 +25,11 @@ export default function RoleGuard({
   const currentRole = isDemoMode ? null : readStoredRole();
   const currentUser = isDemoMode ? null : readStoredUser();
   const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);
+  const isPublicStudentHome = pathname === "/student";
 
   let redirectTarget: string | null = null;
 
-  if (!isDemoMode) {
+  if (!isDemoMode && !isPublicStudentHome) {
     if (!currentRole || !currentUser) {
       redirectTarget = "/login";
     } else if (currentUser.mustChangePassword) {

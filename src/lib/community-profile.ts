@@ -1,0 +1,113 @@
+import { readStoredUser } from "@/lib/rbac";
+
+export type ProfileVisibility = "public" | "private";
+
+export type CommunityProfileSettings = {
+  displayName: string;
+  username: string;
+  email: string;
+  bio: string;
+  faculty: string;
+  studyYear: string;
+  visibility: ProfileVisibility;
+};
+
+const LEGACY_SETTINGS_STORAGE_KEY = "community_profile_settings";
+
+const DEFAULT_SETTINGS: CommunityProfileSettings = {
+  displayName: "Current User",
+  username: "",
+  email: "",
+  bio: "",
+  faculty: "Computing",
+  studyYear: "Year 2",
+  visibility: "public",
+};
+
+function normalizeSettings(
+  input: Partial<CommunityProfileSettings> | null | undefined
+): CommunityProfileSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...input,
+    displayName: String(input?.displayName ?? DEFAULT_SETTINGS.displayName).trim() || "Current User",
+    username: String(input?.username ?? "").trim(),
+    email: String(input?.email ?? "").trim(),
+    bio: String(input?.bio ?? "").trim(),
+    faculty: String(input?.faculty ?? DEFAULT_SETTINGS.faculty).trim() || DEFAULT_SETTINGS.faculty,
+    studyYear:
+      String(input?.studyYear ?? DEFAULT_SETTINGS.studyYear).trim() || DEFAULT_SETTINGS.studyYear,
+    visibility: input?.visibility === "private" ? "private" : "public",
+  };
+}
+
+function readSettingsFromStorageKey(
+  key: string
+): Partial<CommunityProfileSettings> | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<CommunityProfileSettings>;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function getCommunityProfileSettingsStorageKey(userId?: string | null) {
+  const id = String(userId ?? "").trim();
+  if (!id) {
+    return LEGACY_SETTINGS_STORAGE_KEY;
+  }
+  return `${LEGACY_SETTINGS_STORAGE_KEY}:${id}`;
+}
+
+export function readCommunityProfileSettings(): CommunityProfileSettings {
+  const storedUser = readStoredUser();
+  const base = normalizeSettings({
+    displayName: storedUser?.name ?? storedUser?.username ?? DEFAULT_SETTINGS.displayName,
+    username: storedUser?.username ?? "",
+    email: storedUser?.email ?? "",
+  });
+
+  if (typeof window === "undefined") {
+    return base;
+  }
+
+  const perUserKey = getCommunityProfileSettingsStorageKey(storedUser?.id);
+  const perUser = readSettingsFromStorageKey(perUserKey);
+  if (perUser) {
+    return normalizeSettings({ ...base, ...perUser });
+  }
+
+  const legacy = readSettingsFromStorageKey(LEGACY_SETTINGS_STORAGE_KEY);
+  if (legacy) {
+    return normalizeSettings({ ...base, ...legacy });
+  }
+
+  return base;
+}
+
+export function saveCommunityProfileSettings(
+  settings: CommunityProfileSettings
+): CommunityProfileSettings {
+  const sanitized = normalizeSettings(settings);
+  if (typeof window === "undefined") {
+    return sanitized;
+  }
+
+  const storedUser = readStoredUser();
+  const key = getCommunityProfileSettingsStorageKey(storedUser?.id);
+  window.localStorage.setItem(key, JSON.stringify(sanitized));
+  return sanitized;
+}
+

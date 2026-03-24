@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-    Bell,
     ChevronDown,
     ChevronUp,
     CirclePlus,
@@ -16,7 +15,6 @@ import {
     Search,
     Send,
     Settings,
-    Share2,
     ThumbsUp,
     User,
     Users,
@@ -33,6 +31,8 @@ type Reply = {
     author: string;
     content: string;
     createdAt: string;
+    likes: number;
+    likedByCurrentUser: boolean;
 };
 
 type Post = {
@@ -43,6 +43,8 @@ type Post = {
     category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
     likes: number;
+    likedByCurrentUser: boolean;
+    reportedByCurrentUser: boolean;
     replies: Reply[];
 };
 
@@ -52,15 +54,20 @@ type ApiPost = {
     description: string;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt?: string;
-    author?: string | { name?: string };
+    author?: string | { username?: string; name?: string };
+    likesCount?: number;
+    likedByCurrentUser?: boolean;
+    reportedByCurrentUser?: boolean;
 };
 
 type ApiReply = {
     _id: string;
     postId: string;
-    author?: string | { name?: string };
+    author?: string | { username?: string; name?: string };
     message: string;
     createdAt?: string;
+    likesCount?: number;
+    likedByCurrentUser?: boolean;
 };
 
 const toTimeAgo = (createdAt?: string): string => {
@@ -79,9 +86,14 @@ const toTimeAgo = (createdAt?: string): string => {
 
 const mapApiReply = (reply: ApiReply): Reply => ({
     id: reply._id,
-    author: typeof reply.author === "object" && reply.author?.name ? reply.author.name : "Current User",
+    author:
+        typeof reply.author === "object"
+            ? reply.author.username || reply.author.name || "Current User"
+            : "Current User",
     content: reply.message,
     createdAt: toTimeAgo(reply.createdAt),
+    likes: Number(reply.likesCount ?? 0),
+    likedByCurrentUser: Boolean(reply.likedByCurrentUser),
 });
 
 const CATEGORIES = ["all", "lost_item", "study_material", "academic_question"] as const;
@@ -96,12 +108,16 @@ const INITIAL_POSTS: Post[] = [
         category: "academic_question",
         createdAt: "2 hours ago",
         likes: 12,
+        likedByCurrentUser: false,
+        reportedByCurrentUser: false,
         replies: [
             {
                 id: "r1",
                 author: "Sarah Smith",
                 content: "I recommend the official Next.js documentation, it is really comprehensive and includes a great tutorial!",
                 createdAt: "1 hour ago",
+                likes: 0,
+                likedByCurrentUser: false,
             },
         ],
     },
@@ -114,6 +130,8 @@ const INITIAL_POSTS: Post[] = [
         category: "study_material",
         createdAt: "5 hours ago",
         likes: 45,
+        likedByCurrentUser: false,
+        reportedByCurrentUser: false,
         replies: [],
     },
     {
@@ -124,12 +142,16 @@ const INITIAL_POSTS: Post[] = [
         category: "lost_item",
         createdAt: "1 day ago",
         likes: 8,
+        likedByCurrentUser: false,
+        reportedByCurrentUser: false,
         replies: [
             {
                 id: "r2",
                 author: "Emma Davis",
                 content: "I'm interested! What time do you usually meet?",
                 createdAt: "12 hours ago",
+                likes: 0,
+                likedByCurrentUser: false,
             },
         ],
     },
@@ -163,6 +185,7 @@ const thumbnailStyle: Record<Post["category"], string> = {
 
 export default function CommunityPage() {
     const router = useRouter();
+    const currentUser = useMemo(() => readStoredUser(), []);
     const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
     const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("all");
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -172,6 +195,7 @@ export default function CommunityPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
     const [newReplyContent, setNewReplyContent] = useState("");
+    const [actionError, setActionError] = useState("");
 
     const filteredPosts = useMemo(() => {
         const byCategory = posts.filter((post) => activeCategory === "all" || post.category === activeCategory);
@@ -184,7 +208,11 @@ export default function CommunityPage() {
 
     const loadRepliesForPost = async (postId: string) => {
         try {
-            const res = await fetch(`/api/community-replies?postId=${encodeURIComponent(postId)}`);
+            const params = new URLSearchParams({ postId });
+            if (currentUser?.id) {
+                params.set("viewerId", currentUser.id);
+            }
+            const res = await fetch(`/api/community-replies?${params.toString()}`);
             if (!res.ok) return;
             const data = (await res.json()) as ApiReply[];
             const mappedReplies = data.map(mapApiReply);
@@ -206,7 +234,12 @@ export default function CommunityPage() {
 
         const fetchPosts = async () => {
             try {
-                const res = await fetch("/api/community-posts");
+                const params = new URLSearchParams();
+                if (currentUser?.id) {
+                    params.set("viewerId", currentUser.id);
+                }
+                const query = params.toString();
+                const res = await fetch(query ? `/api/community-posts?${query}` : "/api/community-posts");
                 if (!res.ok) return;
 
                 const data = (await res.json()) as ApiPost[];
@@ -214,10 +247,15 @@ export default function CommunityPage() {
                     id: post._id,
                     title: post.title,
                     content: post.description,
-                    author: typeof post.author === "object" && post.author?.name ? post.author.name : "Current User",
+                    author:
+                        typeof post.author === "object"
+                            ? post.author.username || post.author.name || "Current User"
+                            : "Current User",
                     category: mapCategory(post.category),
                     createdAt: toTimeAgo(post.createdAt),
-                    likes: 0,
+                    likes: Number(post.likesCount ?? 0),
+                    likedByCurrentUser: Boolean(post.likedByCurrentUser),
+                    reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
                     replies: [],
                 }));
 
@@ -226,7 +264,11 @@ export default function CommunityPage() {
                 const repliesPerPost = await Promise.all(
                     mapped.map(async (post) => {
                         try {
-                            const replyRes = await fetch(`/api/community-replies?postId=${encodeURIComponent(post.id)}`);
+                            const replyParams = new URLSearchParams({ postId: post.id });
+                            if (currentUser?.id) {
+                                replyParams.set("viewerId", currentUser.id);
+                            }
+                            const replyRes = await fetch(`/api/community-replies?${replyParams.toString()}`);
                             if (!replyRes.ok) return [post.id, [] as Reply[]] as const;
                             const replyData = (await replyRes.json()) as ApiReply[];
                             return [post.id, replyData.map(mapApiReply)] as const;
@@ -249,18 +291,155 @@ export default function CommunityPage() {
         };
 
         fetchPosts();
-    }, []);
+    }, [currentUser?.id]);
 
-    const handleLikePost = (postId: string) => {
-        setPosts((prevPosts) => prevPosts.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)));
+    const handleLikePost = async (postId: string) => {
+        if (!currentUser?.id) {
+            setActionError("Please login to like posts.");
+            return;
+        }
+        setActionError("");
+        try {
+            const res = await fetch("/api/community-post-likes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    postId,
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    email: currentUser.email,
+                    name: currentUser.name,
+                }),
+            });
+            const payload = (await res.json().catch(() => null)) as
+                | { liked?: boolean; likesCount?: number; error?: string }
+                | null;
+            if (!res.ok) {
+                setActionError(payload?.error ?? "Failed to update post like.");
+                return;
+            }
+
+            setPosts((prevPosts) =>
+                prevPosts.map((post) =>
+                    post.id === postId
+                        ? {
+                            ...post,
+                            likedByCurrentUser: Boolean(payload?.liked),
+                            likes: Number(payload?.likesCount ?? post.likes),
+                        }
+                        : post
+                )
+            );
+        } catch {
+            setActionError("Unable to update post like right now.");
+        }
+    };
+
+    const handleLikeReply = async (postId: string, replyId: string) => {
+        if (!currentUser?.id) {
+            setActionError("Please login to like replies.");
+            return;
+        }
+        setActionError("");
+        try {
+            const res = await fetch("/api/community-reply-likes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    replyId,
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    email: currentUser.email,
+                    name: currentUser.name,
+                }),
+            });
+            const payload = (await res.json().catch(() => null)) as
+                | { liked?: boolean; likesCount?: number; error?: string }
+                | null;
+            if (!res.ok) {
+                setActionError(payload?.error ?? "Failed to update reply like.");
+                return;
+            }
+
+            setPosts((prevPosts) =>
+                prevPosts.map((post) =>
+                    post.id === postId
+                        ? {
+                            ...post,
+                            replies: post.replies.map((reply) =>
+                                reply.id === replyId
+                                    ? {
+                                        ...reply,
+                                        likedByCurrentUser: Boolean(payload?.liked),
+                                        likes: Number(payload?.likesCount ?? reply.likes),
+                                    }
+                                    : reply
+                            ),
+                        }
+                        : post
+                )
+            );
+        } catch {
+            setActionError("Unable to update reply like right now.");
+        }
+    };
+
+    const handleReportPost = async (postId: string) => {
+        if (!currentUser?.id) {
+            setActionError("Please login to report posts.");
+            return;
+        }
+
+        const reason = window.prompt("Please enter report reason");
+        if (!reason || !reason.trim()) {
+            return;
+        }
+
+        setActionError("");
+        try {
+            const res = await fetch("/api/community-post-reports", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    postId,
+                    userId: currentUser.id,
+                    username: currentUser.username,
+                    email: currentUser.email,
+                    name: currentUser.name,
+                    reason: reason.trim(),
+                }),
+            });
+            const payload = (await res.json().catch(() => null)) as
+                | { error?: string }
+                | null;
+            if (!res.ok) {
+                setActionError(payload?.error ?? "Failed to report post.");
+                return;
+            }
+
+            setPosts((prevPosts) =>
+                prevPosts.map((post) =>
+                    post.id === postId
+                        ? { ...post, reportedByCurrentUser: true }
+                        : post
+                )
+            );
+        } catch {
+            setActionError("Unable to report this post right now.");
+        }
     };
 
     const handleReplySubmit = async (e: React.FormEvent, postId: string) => {
         e.preventDefault();
         if (!newReplyContent.trim()) return;
 
-        const storedUser = readStoredUser();
+        if (!currentUser?.id) {
+            setActionError("Please login to reply.");
+            return;
+        }
+
         const message = newReplyContent.trim();
+        setActionError("");
 
         try {
             const res = await fetch("/api/community-replies", {
@@ -269,11 +448,17 @@ export default function CommunityPage() {
                 body: JSON.stringify({
                     postId,
                     message,
-                    author: storedUser?.id,
-                    authorName: storedUser?.name ?? "Current User",
+                    author: currentUser.id,
+                    authorUsername: currentUser.username,
+                    authorEmail: currentUser.email,
+                    authorName: currentUser.name,
                 }),
             });
-            if (!res.ok) return;
+            if (!res.ok) {
+                const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+                setActionError(payload?.error ?? "Failed to add reply.");
+                return;
+            }
 
             const createdReply = (await res.json()) as ApiReply;
             const mappedReply = mapApiReply(createdReply);
@@ -283,7 +468,7 @@ export default function CommunityPage() {
             );
             setNewReplyContent("");
         } catch {
-            // Retain current input on network errors.
+            setActionError("Unable to submit reply right now.");
         }
     };
 
@@ -300,7 +485,7 @@ export default function CommunityPage() {
     const handleLogout = () => {
         clearDemoSession();
         setIsProfileMenuOpen(false);
-        router.push("/");
+        router.push("/student");
     };
 
     return (
@@ -496,6 +681,11 @@ export default function CommunityPage() {
                             </button>
                         ))}
                     </div>
+                    {actionError ? (
+                        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            {actionError}
+                        </p>
+                    ) : null}
 
                     {filteredPosts.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-blue-200 bg-white/95 p-10 text-center text-slate-500">
@@ -531,7 +721,9 @@ export default function CommunityPage() {
                                         <div className="mt-4 flex items-center gap-2 border-t border-blue-100 pt-3">
                                             <button
                                                 onClick={() => handleLikePost(post.id)}
-                                                className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm text-slate-700 hover:bg-blue-50"
+                                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm hover:bg-blue-50 ${
+                                                    post.likedByCurrentUser ? "text-blue-700" : "text-slate-700"
+                                                }`}
                                             >
                                                 <ThumbsUp size={16} /> {post.likes}
                                             </button>
@@ -541,7 +733,13 @@ export default function CommunityPage() {
                                             >
                                                 <MessageSquare size={16} /> Reply
                                             </button>
-                                            
+                                            <button
+                                                onClick={() => handleReportPost(post.id)}
+                                                disabled={post.reportedByCurrentUser}
+                                                className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm text-slate-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                                            >
+                                                {post.reportedByCurrentUser ? "Reported" : "Report"}
+                                            </button>
                                         </div>
                                     </div>
 
@@ -558,6 +756,17 @@ export default function CommunityPage() {
                                                                 <p className="text-xs text-slate-500">{reply.createdAt}</p>
                                                             </div>
                                                             <p className="mt-1 text-sm text-slate-700">{reply.content}</p>
+                                                            <div className="mt-2 flex items-center gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleLikeReply(post.id, reply.id)}
+                                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs hover:bg-blue-50 ${
+                                                                        reply.likedByCurrentUser ? "text-blue-700" : "text-slate-600"
+                                                                    }`}
+                                                                >
+                                                                    <ThumbsUp size={13} /> {reply.likes}
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))
                                                 )}
@@ -593,3 +802,5 @@ export default function CommunityPage() {
         </main>
     );
 }
+
+

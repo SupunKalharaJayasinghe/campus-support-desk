@@ -3,11 +3,11 @@ import TopNav from "@/components/layout/TopNav";
 import Container from "@/components/ui/Container";
 
 const STUDENT_LINKS = [
-  { label: "Dashboard", href: "/student" },
-  { label: "Book Lecturer", href: "/student/booking" },
-  { label: "Report Lost Item", href: "/student/lost-items" },
-  { label: "Announcements", href: "/student/announcements" },
-  { label: "Help Requests", href: "/student/support" },
+  { label: "Dashbord", href: "/student" },
+  { label: "Book lecture", href: "/student/booking" },
+  { label: "Announcement", href: "/student/announcements" },
+  { label: "Report a problem", href: "/student/support" },
+  { label: "Community help", href: "/community" },
 ];
 
 export default function StudentLayout({

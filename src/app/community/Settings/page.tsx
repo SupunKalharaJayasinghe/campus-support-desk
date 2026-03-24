@@ -18,61 +18,15 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import communityBackground from "@/app/images/community/community2.jpg";
-import { readStoredUser, updateStoredUser } from "@/lib/rbac";
-
-type ProfileVisibility = "public" | "private";
-
-type CommunityProfileSettings = {
-    displayName: string;
-    username: string;
-    email: string;
-    bio: string;
-    faculty: string;
-    studyYear: string;
-    visibility: ProfileVisibility;
-};
-
-const SETTINGS_STORAGE_KEY = "community_profile_settings";
-
-const DEFAULT_SETTINGS: CommunityProfileSettings = {
-    displayName: "Current User",
-    username: "",
-    email: "",
-    bio: "",
-    faculty: "Computing",
-    studyYear: "Year 2",
-    visibility: "public",
-};
-
-function buildInitialSettings(): CommunityProfileSettings {
-    const storedUser = readStoredUser();
-    const base: CommunityProfileSettings = {
-        ...DEFAULT_SETTINGS,
-        displayName: storedUser?.name ?? DEFAULT_SETTINGS.displayName,
-        username: storedUser?.username ?? DEFAULT_SETTINGS.username,
-        email: storedUser?.email ?? DEFAULT_SETTINGS.email,
-    };
-
-    if (typeof window === "undefined") {
-        return base;
-    }
-
-    try {
-        const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        if (!raw) return base;
-        const parsed = JSON.parse(raw) as Partial<CommunityProfileSettings>;
-        return {
-            ...base,
-            ...parsed,
-            visibility: parsed.visibility === "private" ? "private" : "public",
-        };
-    } catch {
-        return base;
-    }
-}
+import {
+    readCommunityProfileSettings,
+    saveCommunityProfileSettings,
+    type CommunityProfileSettings,
+} from "@/lib/community-profile";
+import { updateStoredUser } from "@/lib/rbac";
 
 export default function CommunitySettingsPage() {
-    const [form, setForm] = useState<CommunityProfileSettings>(() => buildInitialSettings());
+    const [form, setForm] = useState<CommunityProfileSettings>(() => readCommunityProfileSettings());
     const [isSaving, setIsSaving] = useState(false);
     const [savedAt, setSavedAt] = useState<string>("");
 
@@ -91,15 +45,7 @@ export default function CommunitySettingsPage() {
         if (isSaving) return;
         setIsSaving(true);
 
-        const sanitized: CommunityProfileSettings = {
-            ...form,
-            displayName: form.displayName.trim() || "Current User",
-            username: form.username.trim(),
-            email: form.email.trim(),
-            bio: form.bio.trim(),
-        };
-
-        window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(sanitized));
+        const sanitized = saveCommunityProfileSettings(form);
         updateStoredUser({
             name: sanitized.displayName,
             username: sanitized.username || undefined,

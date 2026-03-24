@@ -1,71 +1,18 @@
-import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/mongodb";
+import { resolveCommunityActorId } from "@/lib/community-user";
+import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
-import { UserModel } from "@/models/User";
+import CommunityReplyLike from "@/models/communityReplyLike";
 import mongoose from "mongoose";
 
-function toNormalizedEmail(name: string) {
-  return `${name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")}@demo.local`;
-}
-
-function toBaseUsername(name: string) {
-  const compact = name.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return compact || "USER";
-}
-
-async function createUniqueUsername(base: string) {
-  let candidate = base.slice(0, 20);
-  let suffix = 1;
-
-  while (await UserModel.exists({ username: candidate })) {
-    const suffixText = String(suffix);
-    const allowedBaseLength = Math.max(1, 20 - suffixText.length);
-    candidate = `${base.slice(0, allowedBaseLength)}${suffixText}`;
-    suffix += 1;
-  }
-
-  return candidate;
-}
-
-async function resolveAuthorId(author: unknown, authorName: unknown) {
-  if (typeof author === "string" && mongoose.Types.ObjectId.isValid(author)) {
-    return author;
-  }
-
-  if (typeof authorName !== "string" || !authorName.trim()) {
-    return null;
-  }
-
-  const normalizedName = authorName.trim();
-  const normalizedEmail = toNormalizedEmail(normalizedName);
-
-  let dbUser = await UserModel.findOne({ email: normalizedEmail });
-  if (!dbUser) {
-    const baseUsername = toBaseUsername(normalizedName);
-    const username = await createUniqueUsername(baseUsername);
-
-    dbUser = await UserModel.create({
-      username,
-      email: normalizedEmail,
-      passwordHash: await bcrypt.hash(`temp-${Date.now()}`, 10),
-      role: "STUDENT",
-      status: "ACTIVE",
-      mustChangePassword: false,
-    });
-  }
-
-  return dbUser?._id ? dbUser._id.toString() : null;
-}
+const MAX_REPLIES_PER_USER_PER_POST = 3;
 
 export async function POST(req: Request) {
   try {
     await connectDB();
 
     const body = await req.json();
-    const { postId, author, authorName, message } = body;
+    const { postId, author, authorUsername, authorEmail, authorName, message } = body;
 
     if (!postId || !message) {
       return Response.json(
@@ -78,24 +25,50 @@ export async function POST(req: Request) {
       return Response.json({ error: "Invalid postId" }, { status: 400 });
     }
 
-    const authorId = await resolveAuthorId(author, authorName);
-
+    const authorId = await resolveCommunityActorId({
+      userId: author,
+      username: authorUsername,
+      email: authorEmail,
+      name: authorName,
+    });
     if (!authorId) {
       return Response.json(
-        { error: "Valid author id or authorName is required" },
-        { status: 400 }
+        { error: "Only logged-in users can reply" },
+        { status: 401 }
+      );
+    }
+
+    const postExists = await CommunityPost.exists({ _id: postId });
+    if (!postExists) {
+      return Response.json({ error: "Post not found" }, { status: 404 });
+    }
+
+    const existingReplyCount = await CommunityReply.countDocuments({
+      postId,
+      author: authorId,
+    });
+    if (existingReplyCount >= MAX_REPLIES_PER_USER_PER_POST) {
+      return Response.json(
+        { error: "Reply limit reached for this post" },
+        { status: 429 }
       );
     }
 
     const reply = await CommunityReply.create({
       postId,
       author: authorId,
-      message,
+      message: String(message).trim(),
     });
 
     const createdReply = await reply.populate("author", "username");
-
-    return Response.json(createdReply, { status: 201 });
+    return Response.json(
+      {
+        ...createdReply.toObject(),
+        likesCount: 0,
+        likedByCurrentUser: false,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("community-replies POST failed", error);
     return Response.json({ error: "Failed to create reply" }, { status: 500 });
@@ -108,9 +81,13 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const postId = searchParams.get("postId");
+    const viewerId = searchParams.get("viewerId");
 
     if (!postId) {
-      return Response.json({ error: "postId query param is required" }, { status: 400 });
+      return Response.json(
+        { error: "postId query param is required" },
+        { status: 400 }
+      );
     }
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
@@ -119,9 +96,53 @@ export async function GET(req: Request) {
 
     const replies = await CommunityReply.find({ postId })
       .sort({ createdAt: -1 })
-      .populate("author", "username");
+      .populate("author", "username")
+      .lean();
 
-    return Response.json(replies);
+    const replyIds = replies
+      .map((reply) => reply._id)
+      .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
+
+    const likeCountsRaw =
+      replyIds.length === 0
+        ? []
+        : await CommunityReplyLike.aggregate<{
+            _id: mongoose.Types.ObjectId;
+            count: number;
+          }>([
+            { $match: { replyId: { $in: replyIds } } },
+            { $group: { _id: "$replyId", count: { $sum: 1 } } },
+          ]);
+    const likeCountByReplyId = new Map(
+      likeCountsRaw.map((row) => [String(row._id), row.count])
+    );
+
+    const viewerObjectId =
+      viewerId && mongoose.Types.ObjectId.isValid(viewerId) ? viewerId : null;
+
+    const likedByViewerRaw =
+      viewerObjectId && replyIds.length > 0
+        ? await CommunityReplyLike.find({
+            userId: viewerObjectId,
+            replyId: { $in: replyIds },
+          })
+            .select({ replyId: 1 })
+            .lean()
+        : [];
+    const likedByViewerSet = new Set(
+      likedByViewerRaw.map((row) => String(row.replyId))
+    );
+
+    const enrichedReplies = replies.map((reply) => {
+      const replyId = String(reply._id);
+      return {
+        ...reply,
+        likesCount: likeCountByReplyId.get(replyId) ?? 0,
+        likedByCurrentUser: likedByViewerSet.has(replyId),
+      };
+    });
+
+    return Response.json(enrichedReplies);
   } catch (error) {
     console.error("community-replies GET failed", error);
     return Response.json({ error: "Failed to fetch replies" }, { status: 500 });

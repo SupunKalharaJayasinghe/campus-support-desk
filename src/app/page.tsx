@@ -82,13 +82,6 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-bg">
 
- <Link
-        className="inline-flex w-full items-center justify-center rounded-2xl border-none bg-[#034AA6] px-8 py-3 text-sm font-semibold text-[#D9D9D9] transition-all duration-200 hover:bg-[#0339A6] hover:shadow-shadowHover sm:w-auto"
-        href="/community"
-      >
-        Community Help
-      </Link>
-
       <section className="w-full py-24">
         <Container size="6xl">
           <div

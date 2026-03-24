@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import {
     ArrowLeft,
@@ -19,10 +20,10 @@ import {
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import communityBackground from "@/app/images/community/community2.jpg";
+import { readCommunityProfileSettings } from "@/lib/community-profile";
+import { readStoredUser } from "@/lib/rbac";
 
-const PROFILE_DATA = {
-    name: "Current User",
-    role: "Verified Mentor",
+const PROFILE_FALLBACK = {
     reputation: 1250,
     joined: "Aug 2024",
     about: "Passionate about helping classmates with coursework, project planning, and campus life tips.",
@@ -43,7 +44,30 @@ const PROFILE_DATA = {
     ]
 };
 
+function roleToCommunityLabel(role: string | undefined) {
+    if (role === "SUPER_ADMIN") return "Community Admin";
+    if (role === "LECTURER") return "Verified Mentor";
+    if (role === "LOST_ITEM_STAFF") return "Support Staff";
+    return "Student Member";
+}
+
 export default function CommunityProfilePage() {
+    const profileData = useMemo(() => {
+        const storedUser = readStoredUser();
+        const settings = readCommunityProfileSettings();
+
+        return {
+            ...PROFILE_FALLBACK,
+            name: settings.displayName || storedUser?.name || storedUser?.username || "Current User",
+            role: roleToCommunityLabel(storedUser?.role),
+            about: settings.bio || PROFILE_FALLBACK.about,
+            username: settings.username || storedUser?.username || "-",
+            email: settings.email || storedUser?.email || "-",
+            faculty: settings.faculty,
+            studyYear: settings.studyYear,
+        };
+    }, []);
+
     return (
         <main
             className="relative min-h-screen py-10 lg:py-14"
@@ -80,31 +104,36 @@ export default function CommunityProfilePage() {
                                 </div>
                                 <div className="text-center sm:text-left">
                                     <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                                        <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">{PROFILE_DATA.name}</h1>
+                                        <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">{profileData.name}</h1>
                                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-700 px-3 py-1 text-xs font-semibold text-white">
                                             <CheckCircle2 size={13} />
-                                            {PROFILE_DATA.role}
+                                            {profileData.role}
                                         </span>
                                     </div>
                                     <p className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-600 sm:justify-start">
-                                        <CalendarDays size={15} /> Joined {PROFILE_DATA.joined}
+                                        <CalendarDays size={15} /> Joined {profileData.joined}
                                     </p>
-                                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">{PROFILE_DATA.about}</p>
+                                    <p className="mt-2 text-xs text-slate-600">Username: {profileData.username}</p>
+                                    <p className="mt-1 text-xs text-slate-600">Email: {profileData.email}</p>
+                                    <p className="mt-1 text-xs text-slate-600">
+                                        {profileData.faculty} - {profileData.studyYear}
+                                    </p>
+                                    <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">{profileData.about}</p>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-blue-100 bg-white/90 p-3">
                                 <div className="rounded-xl bg-blue-50 p-3">
                                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</p>
-                                    <p className="mt-1 text-lg font-bold text-slate-800">#{PROFILE_DATA.rank}</p>
+                                    <p className="mt-1 text-lg font-bold text-slate-800">#{profileData.rank}</p>
                                 </div>
                                 <div className="rounded-xl bg-blue-50 p-3">
                                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Views</p>
-                                    <p className="mt-1 text-lg font-bold text-slate-800">{PROFILE_DATA.profileViews}</p>
+                                    <p className="mt-1 text-lg font-bold text-slate-800">{profileData.profileViews}</p>
                                 </div>
                                 <div className="col-span-2 rounded-xl bg-blue-700 p-3 text-white">
                                     <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Current Streak</p>
                                     <p className="mt-1 flex items-center gap-2 text-lg font-bold">
-                                        <Flame size={17} /> {PROFILE_DATA.streakDays} days active
+                                        <Flame size={17} /> {profileData.streakDays} days active
                                     </p>
                                 </div>
                             </div>
@@ -117,28 +146,28 @@ export default function CommunityProfilePage() {
                                 <Star size={16} />
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reputation</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.reputation}</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.reputation}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-blue-100 p-2 text-blue-700">
                                 <FileText size={16} />
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posts</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.posts}</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.posts}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-cyan-100 p-2 text-cyan-700">
                                 <MessageSquare size={16} />
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Replies</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.replies}</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.replies}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-green-100 p-2 text-green-700">
                                 <ThumbsUp size={16} />
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Helpful Votes</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{PROFILE_DATA.stats.helpful}</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.helpful}</p>
                         </Card>
                     </div>
 
@@ -202,7 +231,7 @@ export default function CommunityProfilePage() {
                                 <FileText size={20} className="text-blue-700" /> Recent Posts
                             </h2>
                             <div className="space-y-4">
-                                {PROFILE_DATA.recentPosts.map((post) => (
+                                {profileData.recentPosts.map((post) => (
                                     <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                                         <div className="mb-3 flex items-start justify-between gap-2">
                                             <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
@@ -235,7 +264,7 @@ export default function CommunityProfilePage() {
                                 <MessageSquare size={20} className="text-blue-700" /> Recent Replies
                             </h2>
                             <div className="space-y-4">
-                                {PROFILE_DATA.recentReplies.map((reply) => (
+                                {profileData.recentReplies.map((reply) => (
                                     <Card key={reply.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                                         <p className="text-xs font-semibold text-slate-500">
                                             Replying to <span className="text-slate-700">{reply.postTitle}</span>
