@@ -541,9 +541,7 @@ export default function CommunityPage() {
                                             >
                                                 <MessageSquare size={16} /> Reply
                                             </button>
-                                            <button type="button" className="ml-auto inline-flex rounded-full p-2 text-slate-700 hover:bg-blue-50">
-                                                <Share2 size={16} />
-                                            </button>
+                                            
                                         </div>
                                     </div>
 
