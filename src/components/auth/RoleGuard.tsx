@@ -15,7 +15,7 @@ export default function RoleGuard({
   allowedRole,
   children,
 }: {
-  allowedRole?: AppRole;
+  allowedRole?: AppRole | AppRole[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -26,6 +26,14 @@ export default function RoleGuard({
   const currentUser = isDemoMode ? null : readStoredUser();
   const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);
 
+  const roleAllowed = (allowed: AppRole | AppRole[] | null | undefined) => {
+    if (!allowed || !currentRole) {
+      return true;
+    }
+
+    return Array.isArray(allowed) ? allowed.includes(currentRole) : currentRole === allowed;
+  };
+
   let redirectTarget: string | null = null;
 
   if (!isDemoMode) {
@@ -33,9 +41,9 @@ export default function RoleGuard({
       redirectTarget = "/login";
     } else if (currentUser.mustChangePassword) {
       redirectTarget = "/change-password";
-    } else if (allowedRole && currentRole !== allowedRole) {
+    } else if (!roleAllowed(allowedRole)) {
       redirectTarget = HOME_BY_ROLE[currentRole];
-    } else if (expectedRole && currentRole !== expectedRole) {
+    } else if (!roleAllowed(expectedRole)) {
       redirectTarget = HOME_BY_ROLE[currentRole];
     }
   }

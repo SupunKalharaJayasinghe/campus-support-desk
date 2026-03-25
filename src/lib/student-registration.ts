@@ -649,6 +649,26 @@ export function listStudentEnrollmentsInMemory(studentRecordId: string) {
   return sortEnrollmentsByLatest(rows);
 }
 
+export function listEnrollmentRecordsInMemory(options?: {
+  studentId?: string;
+  intakeId?: string;
+  degreeProgramId?: string;
+  status?: "" | StudentStatus;
+}) {
+  const studentId = String(options?.studentId ?? "").trim();
+  const intakeId = String(options?.intakeId ?? "").trim();
+  const degreeProgramId = normalizeAcademicCode(options?.degreeProgramId);
+  const status = options?.status ?? "";
+
+  return enrollmentMemoryStore()
+    .filter((row) => (studentId ? row.studentId === studentId : true))
+    .filter((row) => (intakeId ? row.intakeId === intakeId : true))
+    .filter((row) => (degreeProgramId ? row.degreeProgramId === degreeProgramId : true))
+    .filter((row) => (status ? row.status === status : true))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .map((row) => ({ ...row }));
+}
+
 export function findEnrollmentInMemoryById(enrollmentId: string) {
   const targetEnrollmentId = String(enrollmentId ?? "").trim();
   if (!targetEnrollmentId) {

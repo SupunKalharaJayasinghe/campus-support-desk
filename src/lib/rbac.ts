@@ -54,7 +54,7 @@ export function isRole(value: string): value is AppRole {
   );
 }
 
-export function getExpectedRoleForPath(pathname: string): AppRole | null {
+export function getExpectedRoleForPath(pathname: string): AppRole | AppRole[] | null {
   if (pathname === "/student" || pathname.startsWith("/student/")) {
     return "STUDENT";
   }
@@ -63,6 +63,9 @@ export function getExpectedRoleForPath(pathname: string): AppRole | null {
   }
   if (pathname === "/lost-items" || pathname.startsWith("/lost-items/")) {
     return "LOST_ITEM_STAFF";
+  }
+  if (pathname === "/admin/grades" || pathname.startsWith("/admin/grades/")) {
+    return ["SUPER_ADMIN", "LECTURER"];
   }
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return "SUPER_ADMIN";

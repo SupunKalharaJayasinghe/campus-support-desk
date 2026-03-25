@@ -4,9 +4,17 @@ import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
+import {
+  deleteGradeInMemory,
+  findGradeInMemoryById,
+  updateGradeInMemory,
+} from "@/lib/grade-store";
 import { calculateFullGrade } from "@/lib/grade-utils";
+import { findLecturerInMemoryById } from "@/lib/lecturer-store";
 import { connectMongoose } from "@/lib/mongoose";
+import { findModuleOfferingById } from "@/lib/module-offering-store";
 import { findModuleById } from "@/lib/module-store";
+import { findStudentInMemoryById } from "@/lib/student-registration";
 import { GradeModel } from "@/models/Grade";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
@@ -67,6 +75,33 @@ function parseOptionalObjectId(value: unknown) {
   return { provided: true, invalid: false, value: normalized };
 }
 
+function readId(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim();
+  }
+
+  if (typeof value === "object") {
+    const row = value as {
+      _id?: unknown;
+      id?: unknown;
+      toString?: () => string;
+    };
+    const nestedId = String(row._id ?? row.id ?? "").trim();
+    if (nestedId) {
+      return nestedId;
+    }
+
+    const rendered = typeof row.toString === "function" ? row.toString() : "";
+    return rendered === "[object Object]" ? "" : rendered.trim();
+  }
+
+  return "";
+}
+
 function toApiGrade(row: unknown) {
   const doc = asObject(row);
   if (!doc) {
@@ -81,39 +116,49 @@ function toApiGrade(row: unknown) {
   const student = asObject(doc.studentId);
   const offering = asObject(doc.moduleOfferingId);
   const gradedBy = asObject(doc.gradedBy);
-  const moduleId = String(offering?.moduleId ?? "").trim();
+  const studentRecordId = readId(doc.studentId);
+  const offeringRecordId = readId(doc.moduleOfferingId);
+  const graderId = readId(doc.gradedBy);
+  const memoryStudent = !student && studentRecordId ? findStudentInMemoryById(studentRecordId) : null;
+  const memoryOffering =
+    !offering && offeringRecordId ? findModuleOfferingById(offeringRecordId) : null;
+  const memoryLecturer = !gradedBy && graderId ? findLecturerInMemoryById(graderId) : null;
+  const moduleId = String(offering?.moduleId ?? memoryOffering?.moduleId ?? "").trim();
   const moduleRecord = moduleId ? findModuleById(moduleId) : null;
-  const firstName = collapseSpaces(student?.firstName);
-  const lastName = collapseSpaces(student?.lastName);
+  const firstName = collapseSpaces(student?.firstName ?? memoryStudent?.firstName);
+  const lastName = collapseSpaces(student?.lastName ?? memoryStudent?.lastName);
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
-  const studentRecordId = String(student?._id ?? student?.id ?? "").trim();
-  const offeringRecordId = String(offering?._id ?? offering?.id ?? "").trim();
-  const graderId = String(gradedBy?._id ?? gradedBy?.id ?? "").trim();
 
   return {
     id,
     _id: id,
-    studentId: student
+    studentId: student || memoryStudent
       ? {
           _id: studentRecordId || null,
           id: studentRecordId || null,
-          studentId: collapseSpaces(student.studentId),
-          registrationNumber: collapseSpaces(student.studentId),
+          studentId: collapseSpaces(student?.studentId ?? memoryStudent?.studentId),
+          registrationNumber: collapseSpaces(
+            student?.studentId ?? memoryStudent?.studentId
+          ),
           firstName,
           lastName,
           fullName,
         }
       : null,
-    moduleOfferingId: offering
+    moduleOfferingId: offering || memoryOffering
       ? {
           _id: offeringRecordId || null,
           id: offeringRecordId || null,
           moduleId,
-          moduleCode: moduleRecord?.code ?? "",
-          moduleName: moduleRecord?.name ?? "",
-          intakeId: collapseSpaces(offering.intakeId),
-          termCode: collapseSpaces(offering.termCode),
-          status: collapseSpaces(offering.status),
+          moduleCode: collapseSpaces(
+            offering?.moduleCode ?? memoryOffering?.moduleCode ?? moduleRecord?.code
+          ),
+          moduleName: collapseSpaces(
+            offering?.moduleName ?? memoryOffering?.moduleName ?? moduleRecord?.name
+          ),
+          intakeId: collapseSpaces(offering?.intakeId ?? memoryOffering?.intakeId),
+          termCode: collapseSpaces(offering?.termCode ?? memoryOffering?.termCode),
+          status: collapseSpaces(offering?.status ?? memoryOffering?.status),
         }
       : null,
     caMarks: Number(doc.caMarks ?? 0),
@@ -124,14 +169,18 @@ function toApiGrade(row: unknown) {
     status: collapseSpaces(doc.status),
     academicYear: collapseSpaces(doc.academicYear),
     semester: Number(doc.semester ?? 0),
-    gradedBy: gradedBy
+    gradedBy: gradedBy || memoryLecturer || graderId
       ? {
           _id: graderId || null,
           id: graderId || null,
-          username: collapseSpaces(gradedBy.username),
-          name: collapseSpaces(gradedBy.username),
-          email: collapseSpaces(gradedBy.email).toLowerCase(),
-          role: collapseSpaces(gradedBy.role),
+          username: collapseSpaces(
+            gradedBy?.username ?? memoryLecturer?.email ?? graderId
+          ),
+          name: collapseSpaces(
+            gradedBy?.username ?? memoryLecturer?.fullName ?? graderId
+          ),
+          email: collapseSpaces(gradedBy?.email ?? memoryLecturer?.email).toLowerCase(),
+          role: collapseSpaces(gradedBy?.role ?? (memoryLecturer ? "LECTURER" : "")),
         }
       : null,
     gradedAt: toIsoDate(doc.gradedAt) || null,
@@ -166,12 +215,6 @@ export async function GET(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
 
     const gradeId = String(params.id ?? "").trim();
     if (!gradeId) {
@@ -179,6 +222,21 @@ export async function GET(
         { success: false, error: "Grade id is required" },
         { status: 400 }
       );
+    }
+
+    if (!mongooseConnection) {
+      const grade = findGradeInMemoryById(gradeId);
+      if (!grade) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: toApiGrade(grade),
+      });
     }
 
     if (!mongoose.Types.ObjectId.isValid(gradeId)) {
@@ -217,25 +275,12 @@ export async function PUT(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
 
     const gradeId = String(params.id ?? "").trim();
     if (!gradeId) {
       return NextResponse.json(
         { success: false, error: "Grade id is required" },
         { status: 400 }
-      );
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(gradeId)) {
-      return NextResponse.json(
-        { success: false, error: "Grade not found" },
-        { status: 404 }
       );
     }
 
@@ -255,6 +300,7 @@ export async function PUT(
     const finalExamMarks = hasFinalExamMarks
       ? sanitizeMarks(body.finalExamMarks)
       : undefined;
+    const rawGradedBy = collapseSpaces(body.gradedBy);
     const gradedBy = parseOptionalObjectId(body.gradedBy);
     const remarks = hasRemarks ? sanitizeRemarks(body.remarks) : undefined;
 
@@ -275,20 +321,86 @@ export async function PUT(
       );
     }
 
-    if (gradedBy.invalid) {
+    if (mongooseConnection && gradedBy.invalid) {
       return NextResponse.json(
         { success: false, error: "gradedBy must be a valid user id" },
         { status: 400 }
       );
     }
 
-    if (gradedBy.value) {
-      const gradedByExists = Boolean(
-        await UserModel.exists({ _id: gradedBy.value }).catch(() => null)
+    if (!mongooseConnection) {
+      const current = findGradeInMemoryById(gradeId);
+      if (!current) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
+
+      const nextCaMarks = caMarks ?? current.caMarks;
+      const nextFinalExamMarks = finalExamMarks ?? current.finalExamMarks;
+      const shouldRecalculate = hasCaMarks || hasFinalExamMarks;
+      const calculated = shouldRecalculate
+        ? calculateFullGrade(nextCaMarks, nextFinalExamMarks)
+        : null;
+
+      const updated = updateGradeInMemory(gradeId, {
+        caMarks: nextCaMarks,
+        finalExamMarks: nextFinalExamMarks,
+        totalMarks: calculated?.totalMarks ?? current.totalMarks,
+        gradeLetter: calculated?.gradeLetter ?? current.gradeLetter,
+        gradePoint: calculated?.gradePoint ?? current.gradePoint,
+        status: calculated?.status ?? current.status,
+        remarks: remarks ?? current.remarks,
+        gradedBy: gradedBy.provided ? rawGradedBy || null : current.gradedBy,
+        gradedAt:
+          shouldRecalculate || gradedBy.provided
+            ? new Date().toISOString()
+            : current.gradedAt,
+      });
+
+      if (!updated) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: toApiGrade(updated),
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(gradeId)) {
+      return NextResponse.json(
+        { success: false, error: "Grade not found" },
+        { status: 404 }
       );
-      if (!gradedByExists) {
+    }
+
+    if (gradedBy.value) {
+      const gradedByUser = await UserModel.findById(gradedBy.value)
+        .select("role")
+        .lean()
+        .exec()
+        .catch(() => null);
+      const gradedByRecord = asObject(gradedByUser);
+      const gradedByRole = collapseSpaces(gradedByRecord?.role).toUpperCase();
+
+      if (!gradedByRecord) {
         return NextResponse.json(
           { success: false, error: "Graded by user not found" },
+          { status: 400 }
+        );
+      }
+
+      if (gradedByRole !== "ADMIN" && gradedByRole !== "LECTURER") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "gradedBy user must have an ADMIN or LECTURER role",
+          },
           { status: 400 }
         );
       }
@@ -365,12 +477,6 @@ export async function DELETE(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
 
     const gradeId = String(params.id ?? "").trim();
     if (!gradeId) {
@@ -380,40 +486,50 @@ export async function DELETE(
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(gradeId)) {
-      return NextResponse.json(
-        { success: false, error: "Grade not found" },
-        { status: 404 }
-      );
-    }
+    if (!mongooseConnection) {
+      const removed = deleteGradeInMemory(gradeId);
+      if (!removed) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(gradeId)) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
 
-    const current = await GradeModel.findById(gradeId)
-      .select("_id moduleOfferingId")
-      .lean()
-      .exec()
-      .catch(() => null);
-    if (!current) {
-      return NextResponse.json(
-        { success: false, error: "Grade not found" },
-        { status: 404 }
-      );
-    }
+      const current = await GradeModel.findById(gradeId)
+        .select("_id moduleOfferingId")
+        .lean()
+        .exec()
+        .catch(() => null);
+      if (!current) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
 
-    const row = current as { moduleOfferingId?: unknown };
-    const offeringId = collapseSpaces(row.moduleOfferingId);
+      const row = current as { moduleOfferingId?: unknown };
+      const offeringId = collapseSpaces(row.moduleOfferingId);
 
-    await GradeModel.deleteOne({ _id: gradeId }).catch(() => null);
+      await GradeModel.deleteOne({ _id: gradeId }).catch(() => null);
 
-    if (offeringId) {
-      const hasRemainingGrades = Boolean(
-        await GradeModel.exists({ moduleOfferingId: offeringId }).catch(() => null)
-      );
+      if (offeringId) {
+        const hasRemainingGrades = Boolean(
+          await GradeModel.exists({ moduleOfferingId: offeringId }).catch(() => null)
+        );
 
-      if (!hasRemainingGrades) {
-        await ModuleOfferingModel.updateOne(
-          { _id: offeringId },
-          { $set: { hasGrades: false } }
-        ).catch(() => null);
+        if (!hasRemainingGrades) {
+          await ModuleOfferingModel.updateOne(
+            { _id: offeringId },
+            { $set: { hasGrades: false } }
+          ).catch(() => null);
+        }
       }
     }
 

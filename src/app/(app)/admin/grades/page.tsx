@@ -673,6 +673,11 @@ export default function GradesAdminPage() {
     () => buildPreview(editCaMarks, editFinalExamMarks),
     [editCaMarks, editFinalExamMarks]
   );
+  const editCaState = useMemo(() => parseMarkValue(editCaMarks), [editCaMarks]);
+  const editFinalState = useMemo(
+    () => parseMarkValue(editFinalExamMarks),
+    [editFinalExamMarks]
+  );
 
   const isOverlayOpen = Boolean(editTarget || deleteTarget || clearConfirmOpen);
 
@@ -701,14 +706,39 @@ export default function GradesAdminPage() {
     setOfferingsError("");
 
     try {
-      const response = await fetch(
-        "/api/module-offerings?page=1&pageSize=100&sort=module&status=ACTIVE",
-        {
-          cache: "no-store",
+      let page = 1;
+      let total = 0;
+      const collected: ModuleOfferingOption[] = [];
+
+      while (page === 1 || collected.length < total) {
+        const response = await fetch(
+          `/api/module-offerings?page=${page}&pageSize=100&sort=module`,
+          {
+            cache: "no-store",
+          }
+        );
+        const payload = await readJson<unknown>(response);
+        const payloadObject = asObject(payload);
+        const batch = parseModuleOfferings(payload);
+
+        collected.push(...batch);
+
+        const parsedTotal = Number(payloadObject?.total ?? collected.length);
+        total =
+          Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : collected.length;
+
+        if (batch.length === 0 || collected.length >= total) {
+          break;
         }
+
+        page += 1;
+      }
+
+      setModuleOfferings(
+        Array.from(new Map(collected.map((item) => [item.id, item])).values()).sort((left, right) =>
+          offeringLabel(left).localeCompare(offeringLabel(right))
+        )
       );
-      const payload = await readJson<unknown>(response);
-      setModuleOfferings(parseModuleOfferings(payload));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load module offerings";
@@ -1137,6 +1167,13 @@ export default function GradesAdminPage() {
     savableEntryRows.length > 0 &&
     invalidEntryCount === 0 &&
     !isSavingAll;
+  const canSaveEdit =
+    Boolean(editTarget) &&
+    !editCaState.invalid &&
+    !editFinalState.invalid &&
+    !editCaState.empty &&
+    !editFinalState.empty &&
+    !isSavingEdit;
 
   return (
     <>
@@ -1683,7 +1720,7 @@ export default function GradesAdminPage() {
                 </span>
                 <Input
                   className={cn(
-                    parseMarkValue(editCaMarks).invalid &&
+                    editCaState.invalid &&
                       "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                   )}
                   inputMode="decimal"
@@ -1701,7 +1738,7 @@ export default function GradesAdminPage() {
                 </span>
                 <Input
                   className={cn(
-                    parseMarkValue(editFinalExamMarks).invalid &&
+                    editFinalState.invalid &&
                       "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                   )}
                   inputMode="decimal"
@@ -1756,7 +1793,7 @@ export default function GradesAdminPage() {
               <Button disabled={isSavingEdit} onClick={() => setEditTarget(null)} variant="secondary">
                 Cancel
               </Button>
-              <Button className="gap-2" disabled={isSavingEdit} onClick={() => void handleSaveEdit()}>
+              <Button className="gap-2" disabled={!canSaveEdit} onClick={() => void handleSaveEdit()}>
                 {isSavingEdit ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 Save Changes
               </Button>

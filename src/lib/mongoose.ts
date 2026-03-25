@@ -15,9 +15,14 @@ export async function connectMongoose() {
   }
 
   if (!global.__mongooseConnectionPromise) {
-    global.__mongooseConnectionPromise = mongoose.connect(uri, {
-      dbName: process.env.MONGODB_DB || undefined,
-    });
+    global.__mongooseConnectionPromise = mongoose
+      .connect(uri, {
+        dbName: process.env.MONGODB_DB || undefined,
+      })
+      .catch((error) => {
+        global.__mongooseConnectionPromise = undefined;
+        throw error;
+      });
   }
 
   return global.__mongooseConnectionPromise;

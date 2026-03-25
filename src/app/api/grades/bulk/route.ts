@@ -5,8 +5,14 @@ import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
+import { findGradeInMemoryByStudentOffering, upsertGradeInMemory } from "@/lib/grade-store";
 import { calculateFullGrade } from "@/lib/grade-utils";
 import { connectMongoose } from "@/lib/mongoose";
+import { findModuleOfferingById } from "@/lib/module-offering-store";
+import {
+  findStudentInMemoryById,
+  listEnrollmentRecordsInMemory,
+} from "@/lib/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { GradeModel } from "@/models/Grade";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -116,12 +122,6 @@ function extractIdSet(rows: unknown[], key: "_id" | "studentId") {
 export async function POST(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
 
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
@@ -131,10 +131,14 @@ export async function POST(request: Request) {
     const moduleOfferingId = String(body.moduleOfferingId ?? "").trim();
     const academicYear = sanitizeAcademicYear(body.academicYear);
     const semester = sanitizeSemester(body.semester);
+    const rawGradedBy = collapseSpaces(body.gradedBy);
     const gradedBy = parseOptionalObjectId(body.gradedBy);
     const gradeRows = Array.isArray(body.grades) ? body.grades : null;
 
-    if (!moduleOfferingId || !mongoose.Types.ObjectId.isValid(moduleOfferingId)) {
+    if (
+      !moduleOfferingId ||
+      (mongooseConnection && !mongoose.Types.ObjectId.isValid(moduleOfferingId))
+    ) {
       return NextResponse.json(
         { success: false, error: "Valid moduleOfferingId is required" },
         { status: 400 }
@@ -155,7 +159,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (gradedBy.invalid) {
+    if (mongooseConnection && gradedBy.invalid) {
       return NextResponse.json(
         { success: false, error: "gradedBy must be a valid user id" },
         { status: 400 }
@@ -169,10 +173,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const offering = await ModuleOfferingModel.findById(moduleOfferingId)
-      .lean()
-      .exec()
-      .catch(() => null);
+    const offering = mongooseConnection
+      ? await ModuleOfferingModel.findById(moduleOfferingId)
+          .lean()
+          .exec()
+          .catch(() => null)
+      : findModuleOfferingById(moduleOfferingId);
     if (!offering) {
       return NextResponse.json(
         { success: false, error: "Module offering not found" },
@@ -180,13 +186,28 @@ export async function POST(request: Request) {
       );
     }
 
-    if (gradedBy.value) {
-      const gradedByExists = Boolean(
-        await UserModel.exists({ _id: gradedBy.value }).catch(() => null)
-      );
-      if (!gradedByExists) {
+    if (mongooseConnection && gradedBy.value) {
+      const gradedByUser = await UserModel.findById(gradedBy.value)
+        .select("role")
+        .lean()
+        .exec()
+        .catch(() => null);
+      const gradedByRecord = asObject(gradedByUser);
+      const gradedByRole = collapseSpaces(gradedByRecord?.role).toUpperCase();
+
+      if (!gradedByRecord) {
         return NextResponse.json(
           { success: false, error: "Graded by user not found" },
+          { status: 400 }
+        );
+      }
+
+      if (gradedByRole !== "ADMIN" && gradedByRole !== "LECTURER") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "gradedBy user must have an ADMIN or LECTURER role",
+          },
           { status: 400 }
         );
       }
@@ -212,7 +233,7 @@ export async function POST(request: Request) {
       const finalExamMarks = sanitizeMarks(rawRow.finalExamMarks);
       const remarks = sanitizeRemarks(rawRow.remarks);
 
-      if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) {
+      if (!studentId || (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId))) {
         return NextResponse.json(
           {
             success: false,
@@ -258,6 +279,81 @@ export async function POST(request: Request) {
         caMarks,
         finalExamMarks,
         remarks,
+      });
+    }
+
+    if (!mongooseConnection) {
+      const missingStudentId = parsedRows.find(
+        (row) => !findStudentInMemoryById(row.studentId)
+      );
+      if (missingStudentId) {
+        return NextResponse.json(
+          { success: false, error: `Student not found: ${missingStudentId.studentId}` },
+          { status: 400 }
+        );
+      }
+
+      const offeringRow = asObject(offering);
+      const intakeId = collapseSpaces(offeringRow?.intakeId);
+      const degreeProgramId = collapseSpaces(offeringRow?.degreeProgramId).toUpperCase();
+      const notEnrolledStudentId = parsedRows.find(
+        (row) =>
+          listEnrollmentRecordsInMemory({
+            studentId: row.studentId,
+            intakeId,
+            degreeProgramId,
+            status: "ACTIVE",
+          }).length === 0
+      );
+      if (notEnrolledStudentId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Student is not enrolled in this module offering: ${notEnrolledStudentId.studentId}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      let created = 0;
+      let updated = 0;
+      const gradedAt = new Date().toISOString();
+
+      parsedRows.forEach((row) => {
+        const calculated = calculateFullGrade(row.caMarks, row.finalExamMarks);
+        const exists = Boolean(
+          findGradeInMemoryByStudentOffering(row.studentId, moduleOfferingId)
+        );
+        upsertGradeInMemory({
+          studentId: row.studentId,
+          moduleOfferingId,
+          caMarks: row.caMarks,
+          finalExamMarks: row.finalExamMarks,
+          totalMarks: calculated.totalMarks,
+          gradeLetter: calculated.gradeLetter,
+          gradePoint: calculated.gradePoint,
+          status: calculated.status,
+          academicYear,
+          semester,
+          gradedBy: rawGradedBy || null,
+          gradedAt,
+          remarks: row.remarks,
+        });
+
+        if (exists) {
+          updated += 1;
+        } else {
+          created += 1;
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          created,
+          updated,
+          total: parsedRows.length,
+        },
       });
     }
 

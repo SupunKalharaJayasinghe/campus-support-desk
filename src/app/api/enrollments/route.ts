@@ -4,6 +4,11 @@ import "@/models/Enrollment";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import { connectMongoose } from "@/lib/mongoose";
+import { findModuleOfferingById } from "@/lib/module-offering-store";
+import {
+  findStudentInMemoryById,
+  listEnrollmentRecordsInMemory,
+} from "@/lib/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { StudentModel } from "@/models/Student";
@@ -82,12 +87,6 @@ function readId(value: unknown) {
 export async function GET(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { message: "Enrollment service is unavailable" },
-        { status: 503 }
-      );
-    }
 
     const { searchParams } = new URL(request.url);
     const moduleOfferingId = String(searchParams.get("moduleOfferingId") ?? "").trim();
@@ -97,14 +96,18 @@ export async function GET(request: Request) {
     const statusParam = searchParams.get("status");
     const status = sanitizeStatus(statusParam);
 
-    if (moduleOfferingId && !mongoose.Types.ObjectId.isValid(moduleOfferingId)) {
+    if (
+      mongooseConnection &&
+      moduleOfferingId &&
+      !mongoose.Types.ObjectId.isValid(moduleOfferingId)
+    ) {
       return NextResponse.json(
         { message: "Invalid module offering id" },
         { status: 400 }
       );
     }
 
-    if (studentId && !mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && studentId && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { message: "Invalid student id" },
         { status: 400 }
@@ -125,11 +128,13 @@ export async function GET(request: Request) {
     }
 
     if (moduleOfferingId) {
-      const offering = await ModuleOfferingModel.findById(moduleOfferingId)
-        .select("intakeId degreeProgramId")
-        .lean()
-        .exec()
-        .catch(() => null);
+      const offering = mongooseConnection
+        ? await ModuleOfferingModel.findById(moduleOfferingId)
+            .select("intakeId degreeProgramId")
+            .lean()
+            .exec()
+            .catch(() => null)
+        : findModuleOfferingById(moduleOfferingId);
 
       if (!offering) {
         return NextResponse.json(
@@ -154,28 +159,18 @@ export async function GET(request: Request) {
       }
     }
 
-    const rows = (await EnrollmentModel.find(query)
-      .sort({ updatedAt: -1 })
-      .lean()
-      .exec()
-      .catch(() => [])) as unknown[];
-
-    const studentObjectIds = rows
-      .map((row) => {
-        const record = asObject(row);
-        const id = readId(record?.studentId);
-        return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
-      })
-      .filter((row): row is mongoose.Types.ObjectId => Boolean(row));
-
-    const studentRows =
-      studentObjectIds.length > 0
-        ? ((await StudentModel.find({ _id: { $in: studentObjectIds } })
-            .select("studentId firstName lastName email status")
-            .lean()
-            .exec()
-            .catch(() => [])) as unknown[])
-        : [];
+    const rows = mongooseConnection
+      ? ((await EnrollmentModel.find(query)
+          .sort({ updatedAt: -1 })
+          .lean()
+          .exec()
+          .catch(() => [])) as unknown[])
+      : listEnrollmentRecordsInMemory({
+          studentId,
+          intakeId: collapseSpaces(query.intakeId),
+          degreeProgramId: collapseSpaces(query.degreeProgramId),
+          status: (collapseSpaces(query.status) as EnrollmentStatus) || "",
+        });
 
     const studentsById = new Map<
       string,
@@ -190,27 +185,65 @@ export async function GET(request: Request) {
       }
     >();
 
-    studentRows.forEach((row) => {
-      const record = asObject(row);
-      const id = readId(record?._id);
-      const registrationNumber = collapseSpaces(record?.studentId).toUpperCase();
-      const firstName = collapseSpaces(record?.firstName);
-      const lastName = collapseSpaces(record?.lastName);
+    if (mongooseConnection) {
+      const studentObjectIds = rows
+        .map((row) => {
+          const record = asObject(row);
+          const id = readId(record?.studentId);
+          return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+        })
+        .filter((row): row is mongoose.Types.ObjectId => Boolean(row));
 
-      if (!id || !registrationNumber) {
-        return;
-      }
+      const studentRows =
+        studentObjectIds.length > 0
+          ? ((await StudentModel.find({ _id: { $in: studentObjectIds } })
+              .select("studentId firstName lastName email status")
+              .lean()
+              .exec()
+              .catch(() => [])) as unknown[])
+          : [];
 
-      studentsById.set(id, {
-        id,
-        studentId: registrationNumber,
-        firstName,
-        lastName,
-        fullName: [firstName, lastName].filter(Boolean).join(" ").trim(),
-        email: collapseSpaces(record?.email).toLowerCase(),
-        status: collapseSpaces(record?.status).toUpperCase(),
+      studentRows.forEach((row) => {
+        const record = asObject(row);
+        const id = readId(record?._id);
+        const registrationNumber = collapseSpaces(record?.studentId).toUpperCase();
+        const firstName = collapseSpaces(record?.firstName);
+        const lastName = collapseSpaces(record?.lastName);
+
+        if (!id || !registrationNumber) {
+          return;
+        }
+
+        studentsById.set(id, {
+          id,
+          studentId: registrationNumber,
+          firstName,
+          lastName,
+          fullName: [firstName, lastName].filter(Boolean).join(" ").trim(),
+          email: collapseSpaces(record?.email).toLowerCase(),
+          status: collapseSpaces(record?.status).toUpperCase(),
+        });
       });
-    });
+    } else {
+      rows.forEach((row) => {
+        const record = asObject(row);
+        const id = readId(record?.studentId);
+        const student = findStudentInMemoryById(id);
+        if (!student) {
+          return;
+        }
+
+        studentsById.set(student.id, {
+          id: student.id,
+          studentId: student.studentId,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          fullName: [student.firstName, student.lastName].filter(Boolean).join(" ").trim(),
+          email: student.email,
+          status: student.status,
+        });
+      });
+    }
 
     const items = rows
       .map((row) => {

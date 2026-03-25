@@ -813,3 +813,20 @@ export function deleteModuleOffering(id: string) {
 
   return true;
 }
+
+export function setModuleOfferingGradesState(id: string, hasGrades: boolean) {
+  const targetId = String(id ?? "").trim();
+  const store = offeringStore();
+  const index = store.findIndex((offering) => offering.id === targetId && !offering.isDeleted);
+  if (index < 0) {
+    return false;
+  }
+
+  store[index] = {
+    ...store[index],
+    hasGrades,
+    updatedAt: new Date().toISOString(),
+  };
+
+  return true;
+}
