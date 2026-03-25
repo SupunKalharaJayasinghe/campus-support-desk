@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
-import { findDegreeProgram } from "@/lib/degree-program-store";
-import { findFaculty } from "@/lib/faculty-store";
-import { findIntakeById } from "@/lib/intake-store";
-import { connectMongoose } from "@/lib/mongoose";
+import { findDegreeProgram } from "@/models/degree-program-store";
+import { findFaculty } from "@/models/faculty-store";
+import { findIntakeById } from "@/models/intake-store";
+import { connectMongoose } from "@/models/mongoose";
 import {
   listModuleOfferingsByLabAssistantId,
   type ModuleOfferingRecord,
-} from "@/lib/module-offering-store";
-import { findModuleById } from "@/lib/module-store";
+} from "@/models/module-offering-store";
+import { findModuleById } from "@/models/module-store";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
 function asObject(value: unknown): Record<string, unknown> | null {

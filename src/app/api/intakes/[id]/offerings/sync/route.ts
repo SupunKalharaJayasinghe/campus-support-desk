@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import "@/models/Intake";
 import "@/models/Module";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
-import { sanitizeIntakeId, sanitizeTermCode } from "@/lib/intake-store";
-import { syncIntakeOfferingsForTerm } from "@/lib/module-offering-store";
+import { connectMongoose } from "@/models/mongoose";
+import { sanitizeIntakeId, sanitizeTermCode } from "@/models/intake-store";
+import { syncIntakeOfferingsForTerm } from "@/models/module-offering-store";
 
 export async function POST(
   request: Request,

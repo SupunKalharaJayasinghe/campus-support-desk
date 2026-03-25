@@ -4,8 +4,8 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { lostItemReports } from "@/lib/mockData";
-import type { LostItemReport } from "@/lib/mockData";
+import { lostItemReports } from "@/models/mockData";
+import type { LostItemReport } from "@/models/mockData";
 
 function statusVariant(status: LostItemReport["status"]) {
   if (status === "Claimed") {
@@ -75,3 +75,4 @@ export default function LostItemsQueuePage() {
     </div>
   );
 }
+

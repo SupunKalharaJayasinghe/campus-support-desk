@@ -1,5 +1,5 @@
 import Card from "@/components/ui/Card";
-import { adminMetrics, platformKpis } from "@/lib/mockData";
+import { adminMetrics, platformKpis } from "@/models/mockData";
 
 export default function AdminAnalyticsPage() {
   return (
@@ -31,3 +31,4 @@ export default function AdminAnalyticsPage() {
     </div>
   );
 }
+

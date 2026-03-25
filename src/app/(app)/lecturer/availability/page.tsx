@@ -5,8 +5,8 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/ToastProvider";
-import { lecturerAvailabilitySeed } from "@/lib/mockData";
-import type { LecturerSlot } from "@/lib/mockData";
+import { lecturerAvailabilitySeed } from "@/models/mockData";
+import type { LecturerSlot } from "@/models/mockData";
 
 function overlaps(a: LecturerSlot, b: LecturerSlot) {
   return a.date === b.date && a.start < b.end && b.start < a.end;
@@ -74,3 +74,4 @@ export default function LecturerAvailabilityPage() {
     </div>
   );
 }
+

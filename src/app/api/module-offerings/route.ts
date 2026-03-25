@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
 import "@/models/Lecturer";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   normalizeAcademicCode,
+  normalizeIntakeName,
+  normalizeModuleCode,
   normalizeDbOffering,
   parseTermCodeStrict,
   resolveAssigneeMaps,
@@ -16,7 +18,7 @@ import {
   toApiOfferingItem,
   validateLabAssistantAssignments,
   validateLecturerAssignments,
-} from "@/lib/module-offering-api";
+} from "@/models/module-offering-api";
 import {
   createModuleOffering,
   deleteModuleOffering,
@@ -25,9 +27,9 @@ import {
   type ModuleOfferingSort,
   type ModuleOfferingStatus,
   type SyllabusVersion,
-} from "@/lib/module-offering-store";
-import { listTermOptions, type TermCode } from "@/lib/intake-store";
-import { isMongoDuplicateKeyError } from "@/lib/student-registration";
+} from "@/models/module-offering-store";
+import { listTermOptions, type TermCode } from "@/models/intake-store";
+import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
 const TERM_SORT_ORDER = listTermOptions();
@@ -75,11 +77,11 @@ function sanitizeStatusFilter(value: string | null): "" | ModuleOfferingStatus {
 function filterAndSortOfferings(
   rows: ModuleOfferingRecord[],
   options: {
-    facultyId: string;
-    degreeProgramId: string;
-    intakeId: string;
+    facultyCode: string;
+    degreeCode: string;
+    intakeName: string;
     termCode: TermCode | null;
-    moduleId: string;
+    moduleCode: string;
     status: "" | ModuleOfferingStatus;
     search: string;
     sort: ModuleOfferingSort;
@@ -87,13 +89,19 @@ function filterAndSortOfferings(
 ) {
   const filtered = rows
     .filter((offering) => !offering.isDeleted)
-    .filter((offering) => (options.facultyId ? offering.facultyId === options.facultyId : true))
     .filter((offering) =>
-      options.degreeProgramId ? offering.degreeProgramId === options.degreeProgramId : true
+      options.facultyCode ? offering.facultyCode === options.facultyCode : true
     )
-    .filter((offering) => (options.intakeId ? offering.intakeId === options.intakeId : true))
+    .filter((offering) =>
+      options.degreeCode ? offering.degreeCode === options.degreeCode : true
+    )
+    .filter((offering) =>
+      options.intakeName
+        ? offering.intakeName.toLowerCase() === options.intakeName.toLowerCase()
+        : true
+    )
     .filter((offering) => (options.termCode ? offering.termCode === options.termCode : true))
-    .filter((offering) => (options.moduleId ? offering.moduleId === options.moduleId : true))
+    .filter((offering) => (options.moduleCode ? offering.moduleCode === options.moduleCode : true))
     .filter((offering) => (options.status ? offering.status === options.status : true))
     .filter((offering) => {
       if (!options.search) {
@@ -148,9 +156,17 @@ export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
   const { searchParams } = new URL(request.url);
 
-  const facultyId = normalizeAcademicCode(searchParams.get("facultyId"));
-  const degreeProgramId = normalizeAcademicCode(searchParams.get("degreeProgramId"));
-  const intakeId = sanitizeId(searchParams.get("intakeId"));
+  const facultyCode = normalizeAcademicCode(
+    searchParams.get("facultyCode") ?? searchParams.get("facultyId")
+  );
+  const degreeCode = normalizeAcademicCode(
+    searchParams.get("degreeCode") ??
+      searchParams.get("degreeProgramId") ??
+      searchParams.get("degreeId")
+  );
+  const intakeName = normalizeIntakeName(
+    searchParams.get("intakeName") ?? searchParams.get("intakeId")
+  );
   const termCodeRaw = sanitizeId(searchParams.get("termCode"));
   const termCode = termCodeRaw ? parseTermCodeStrict(termCodeRaw) : null;
   if (termCodeRaw && !termCode) {
@@ -160,7 +176,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const moduleId = sanitizeId(searchParams.get("moduleId"));
+  const moduleCode = normalizeModuleCode(
+    searchParams.get("moduleCode") ?? searchParams.get("moduleId")
+  );
   const search = String(searchParams.get("search") ?? "").trim().toLowerCase();
   const sort = sanitizeSort(searchParams.get("sort"));
   const status = sanitizeStatusFilter(searchParams.get("status"));
@@ -178,20 +196,8 @@ export async function GET(request: Request) {
     shouldUseStoreFallback = !hasAnyDbRows;
 
     const query: Record<string, unknown> = {};
-    if (facultyId) {
-      query.facultyId = facultyId;
-    }
-    if (degreeProgramId) {
-      query.degreeProgramId = degreeProgramId;
-    }
-    if (intakeId) {
-      query.intakeId = intakeId;
-    }
     if (termCode) {
       query.termCode = termCode;
-    }
-    if (moduleId) {
-      query.moduleId = moduleId;
     }
     if (status) {
       query.status = status;
@@ -207,11 +213,11 @@ export async function GET(request: Request) {
         .map((row) => normalizeDbOffering(row))
         .filter((row): row is ModuleOfferingRecord => Boolean(row)),
       {
-        facultyId,
-        degreeProgramId,
-        intakeId,
+        facultyCode,
+        degreeCode,
+        intakeName,
         termCode,
-        moduleId,
+        moduleCode,
         status,
         search,
         sort,
@@ -221,11 +227,11 @@ export async function GET(request: Request) {
 
   if (shouldUseStoreFallback) {
     allItems = listModuleOfferings({
-      facultyId,
-      degreeProgramId,
-      intakeId,
+      facultyCode,
+      degreeCode,
+      intakeName,
       termCode: termCode ?? undefined,
-      moduleId,
+      moduleCode,
       status,
       search,
       sort,
@@ -265,6 +271,10 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as Partial<{
+      facultyCode: string;
+      degreeCode: string;
+      intakeName: string;
+      moduleCode: string;
       facultyId: string;
       degreeProgramId: string;
       intakeId: string;
@@ -278,6 +288,10 @@ export async function POST(request: Request) {
     }>;
 
     const context = resolveOfferingContext({
+      facultyCode: body.facultyCode,
+      degreeCode: body.degreeCode,
+      intakeName: body.intakeName,
+      moduleCode: body.moduleCode,
       facultyId: body.facultyId,
       degreeProgramId: body.degreeProgramId,
       intakeId: body.intakeId,
@@ -300,8 +314,9 @@ export async function POST(request: Request) {
     await validateLecturerAssignments({
       ids: assignedLecturerIds,
       scope: {
-        facultyId: context.facultyId,
-        degreeProgramId: context.degreeProgramId,
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
         moduleId: context.moduleId,
       },
       mongooseConnection,
@@ -310,18 +325,52 @@ export async function POST(request: Request) {
     await validateLabAssistantAssignments({
       ids: assignedLabAssistantIds,
       scope: {
-        facultyId: context.facultyId,
-        degreeProgramId: context.degreeProgramId,
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
         moduleId: context.moduleId,
       },
       mongooseConnection,
     });
 
+    const assigneeMaps = await resolveAssigneeMaps(
+      {
+        lecturerIds: assignedLecturerIds,
+        labAssistantIds: assignedLabAssistantIds,
+      },
+      mongooseConnection
+    );
+
+    const assignedLecturers = assignedLecturerIds.map((id) => {
+      const row = assigneeMaps.lecturerMap.get(id);
+      return {
+        lecturerId: id,
+        name: row?.fullName ?? "",
+        email: row?.email ?? "",
+      };
+    });
+    const assignedLabAssistants = assignedLabAssistantIds.map((id) => {
+      const row = assigneeMaps.labAssistantMap.get(id);
+      return {
+        assistantId: id,
+        name: row?.fullName ?? "",
+        email: row?.email ?? "",
+      };
+    });
+
     if (mongooseConnection) {
       const dbDuplicate = await ModuleOfferingModel.exists({
-        intakeId: context.intakeId,
         termCode: context.termCode,
-        moduleId: context.moduleId,
+        $or: [
+          {
+            intakeName: context.intakeName,
+            moduleCode: context.moduleCode,
+          },
+          {
+            intakeId: context.intakeId,
+            moduleId: context.moduleId,
+          },
+        ],
       }).catch(() => null);
 
       if (dbDuplicate) {
@@ -332,9 +381,9 @@ export async function POST(request: Request) {
       }
     } else {
       const storeDuplicate = listModuleOfferings({
-        intakeId: context.intakeId,
+        intakeName: context.intakeName,
         termCode: context.termCode,
-        moduleId: context.moduleId,
+        moduleCode: context.moduleCode,
       }).some((row) => !row.isDeleted);
 
       if (storeDuplicate) {
@@ -346,8 +395,12 @@ export async function POST(request: Request) {
     }
 
     const created = createModuleOffering({
-      facultyId: context.facultyId,
-      degreeProgramId: context.degreeProgramId,
+      facultyCode: context.facultyCode,
+      degreeCode: context.degreeCode,
+      intakeName: context.intakeName,
+      moduleCode: context.moduleCode,
+      facultyId: context.facultyCode,
+      degreeProgramId: context.degreeCode,
       intakeId: context.intakeId,
       termCode: context.termCode,
       moduleId: context.moduleId,
@@ -363,6 +416,11 @@ export async function POST(request: Request) {
     if (mongooseConnection) {
       try {
         const dbCreated = await ModuleOfferingModel.create({
+          facultyCode: created.facultyCode,
+          degreeCode: created.degreeCode,
+          intakeName: created.intakeName,
+          moduleCode: created.moduleCode,
+          moduleName: created.moduleName,
           facultyId: created.facultyId,
           degreeProgramId: created.degreeProgramId,
           intakeId: created.intakeId,
@@ -371,8 +429,9 @@ export async function POST(request: Request) {
           syllabusVersion: created.syllabusVersion,
           assignedLecturerIds: created.assignedLecturerIds,
           assignedLabAssistantIds: created.assignedLabAssistantIds,
+          assignedLecturers,
+          assignedLabAssistants,
           status: created.status,
-          assignedLecturers: created.assignedLecturerIds,
           outlineWeeks: created.outlineWeeks,
           outlinePending: created.outlinePending,
           hasGrades: created.hasGrades,
@@ -400,15 +459,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const assignees = await resolveAssigneeMaps(
-      {
-        lecturerIds: responseOffering.assignedLecturerIds,
-        labAssistantIds: responseOffering.assignedLabAssistantIds,
-      },
-      mongooseConnection
-    );
-
-    return NextResponse.json(toApiOfferingItem(responseOffering, assignees), {
+    return NextResponse.json(toApiOfferingItem(responseOffering, assigneeMaps), {
       status: 201,
     });
   } catch (error) {
@@ -431,3 +482,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

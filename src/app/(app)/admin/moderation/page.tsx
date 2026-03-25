@@ -4,8 +4,8 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { moderationReportsSeed } from "@/lib/mockData";
-import type { ModerationReport } from "@/lib/mockData";
+import { moderationReportsSeed } from "@/models/mockData";
+import type { ModerationReport } from "@/models/mockData";
 
 function statusVariant(status: ModerationReport["status"]) {
   if (status === "Resolved") {
@@ -73,3 +73,4 @@ export default function AdminModerationPage() {
     </div>
   );
 }
+

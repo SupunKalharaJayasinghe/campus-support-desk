@@ -8,7 +8,7 @@ import {
   sanitizeDurationYears,
   type DegreeProgramStatus,
   updateDegreeProgram,
-} from "@/lib/degree-program-store";
+} from "@/models/degree-program-store";
 
 export async function PUT(
   request: Request,

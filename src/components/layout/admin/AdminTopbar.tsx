@@ -10,8 +10,8 @@ import {
   resolveActiveAdminRoute,
 } from "@/components/layout/admin/admin-nav";
 import Badge from "@/components/ui/Badge";
-import { readStoredRole, readStoredUser } from "@/lib/rbac";
-import type { AppRole } from "@/lib/rbac";
+import { readStoredRole, readStoredUser } from "@/models/rbac";
+import type { AppRole } from "@/models/rbac";
 
 const SEGMENT_LABELS: Record<string, string> = {
   admin: "Dashboard",
@@ -179,3 +179,4 @@ export default function AdminTopbar() {
     </header>
   );
 }
+

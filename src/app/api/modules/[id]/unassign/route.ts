@@ -1,14 +1,14 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   deleteModuleOffering,
   hasModuleOfferingProgress,
   listModuleOfferingsByModuleId,
-} from "@/lib/module-offering-store";
-import { findModuleById } from "@/lib/module-store";
+} from "@/models/module-offering-store";
+import { findModuleById } from "@/models/module-store";
 
 interface UnassignRequestBody {
   offeringIds?: string[];

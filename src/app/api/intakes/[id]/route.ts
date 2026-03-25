@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import "@/models/Intake";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   deleteIntake,
   findIntakeById,
@@ -18,8 +18,8 @@ import {
   type IntakeRecord,
   type IntakeTermScheduleRecord,
   updateIntake,
-} from "@/lib/intake-store";
-import type { IntakeTermScheduleInput } from "@/lib/intake-store";
+} from "@/models/intake-store";
+import type { IntakeTermScheduleInput } from "@/models/intake-store";
 
 function normalizeCode(value: string | null | undefined) {
   return String(value ?? "")

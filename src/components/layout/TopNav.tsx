@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Container from "@/components/ui/Container";
-import { clearDemoSession, isDemoModeEnabled } from "@/lib/rbac";
+import { clearDemoSession, isDemoModeEnabled } from "@/models/rbac";
 
 export interface TopNavLink {
   label: string;
@@ -152,3 +152,4 @@ export default function TopNav({
     </header>
   );
 }
+

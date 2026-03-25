@@ -1,15 +1,10 @@
 {
-  "/api/module-offerings/route": "app/api/module-offerings/route.js",
-  "/api/faculties/route": "app/api/faculties/route.js",
-  "/api/lecturers/route": "app/api/lecturers/route.js",
-  "/api/degrees/route": "app/api/degrees/route.js",
+  "/page": "app/page.js",
   "/api/modules/route": "app/api/modules/route.js",
-  "/api/lecturers/[id]/route": "app/api/lecturers/[id]/route.js",
-  "/(app)/admin/academics/degree-programs/page": "app/(app)/admin/academics/degree-programs/page.js",
-  "/(app)/admin/administration/system-settings/page": "app/(app)/admin/administration/system-settings/page.js",
+  "/api/faculties/route": "app/api/faculties/route.js",
+  "/api/degree-programs/route": "app/api/degree-programs/route.js",
   "/(app)/admin/page": "app/(app)/admin/page.js",
-  "/(app)/admin/users/lab-assistants/page": "app/(app)/admin/users/lab-assistants/page.js",
-  "/(app)/admin/users/admins/page": "app/(app)/admin/users/admins/page.js",
+  "/(app)/admin/users/lecturers/page": "app/(app)/admin/users/lecturers/page.js",
   "/(app)/admin/academics/module-offerings/page": "app/(app)/admin/academics/module-offerings/page.js",
-  "/(app)/admin/users/lecturers/page": "app/(app)/admin/users/lecturers/page.js"
+  "/(app)/admin/academics/modules/page": "app/(app)/admin/academics/modules/page.js"
 }

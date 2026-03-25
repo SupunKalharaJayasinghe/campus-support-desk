@@ -6,7 +6,7 @@ import {
   sanitizeFacultyStatus,
   type FacultyStatus,
   findFaculty,
-} from "@/lib/faculty-store";
+} from "@/models/faculty-store";
 
 export async function GET() {
   return NextResponse.json(listFaculties());
@@ -60,3 +60,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

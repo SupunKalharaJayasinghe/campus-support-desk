@@ -12,33 +12,150 @@ const OutlineWeekSchema = new Schema(
   { _id: false }
 );
 
+function normalizeAcademicCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
+}
+
+function normalizeString(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeIdList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeAssigneeObjects(
+  value: unknown,
+  options: {
+    idKeys: string[];
+    outputIdKey: "lecturerId" | "assistantId";
+  }
+) {
+  if (!Array.isArray(value)) {
+    return [] as Array<{
+      lecturerId?: string;
+      assistantId?: string;
+      name: string;
+      email: string;
+    }>;
+  }
+
+  const byId = new Map<
+    string,
+    {
+      lecturerId?: string;
+      assistantId?: string;
+      name: string;
+      email: string;
+    }
+  >();
+
+  value.forEach((item) => {
+    let id = "";
+    let name = "";
+    let email = "";
+
+    if (typeof item === "string") {
+      id = String(item).trim();
+    } else if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      id =
+        options.idKeys
+          .map((key) => String(row[key] ?? "").trim())
+          .find(Boolean) ?? "";
+      name = normalizeString(row.name ?? row.fullName);
+      email = String(row.email ?? "").trim().toLowerCase();
+    }
+
+    if (!id) {
+      return;
+    }
+
+    const existing = byId.get(id);
+    if (existing) {
+      byId.set(id, {
+        ...existing,
+        name: existing.name || name,
+        email: existing.email || email,
+      });
+      return;
+    }
+
+    byId.set(id, {
+      [options.outputIdKey]: id,
+      name,
+      email,
+    });
+  });
+
+  return Array.from(byId.values());
+}
+
 const ModuleOfferingSchema = new Schema(
   {
-    facultyId: {
+    facultyCode: {
       type: String,
       required: true,
       trim: true,
       uppercase: true,
     },
-    degreeProgramId: {
+    degreeCode: {
       type: String,
       required: true,
       trim: true,
       uppercase: true,
     },
-    intakeId: { type: String, required: true, trim: true },
+    intakeName: { type: String, required: true, trim: true },
     termCode: {
       type: String,
       required: true,
       enum: ["Y1S1", "Y1S2", "Y2S1", "Y2S2", "Y3S1", "Y3S2", "Y4S1", "Y4S2"],
     },
-    moduleId: { type: String, required: true, trim: true },
+    moduleCode: { type: String, required: true, trim: true, uppercase: true },
+    moduleName: { type: String, required: true, trim: true },
     syllabusVersion: { type: String, required: true, enum: ["OLD", "NEW"] },
+    assignedLecturers: { type: [Schema.Types.Mixed], default: [] },
+    assignedLabAssistants: { type: [Schema.Types.Mixed], default: [] },
+    status: { type: String, required: true, enum: ["ACTIVE", "INACTIVE"], default: "ACTIVE" },
+    // Legacy compatibility fields still used by older code paths.
+    facultyId: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    degreeProgramId: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
+    intakeId: { type: String, trim: true, default: "" },
+    moduleId: { type: String, trim: true, default: "" },
     assignedLecturerIds: { type: [String], default: [] },
     assignedLabAssistantIds: { type: [String], default: [] },
-    status: { type: String, required: true, enum: ["ACTIVE", "INACTIVE"], default: "ACTIVE" },
-    // Backward-compatible alias used by existing module dependency/unassign flows.
-    assignedLecturers: { type: [String], default: [] },
     outlineWeeks: { type: [OutlineWeekSchema], default: [] },
     outlinePending: { type: Boolean, default: false },
     hasGrades: { type: Boolean, default: false },
@@ -52,41 +169,108 @@ const ModuleOfferingSchema = new Schema(
 );
 
 ModuleOfferingSchema.index(
-  { intakeId: 1, termCode: 1, moduleId: 1 },
+  { intakeName: 1, termCode: 1, moduleCode: 1 },
   { unique: true }
+);
+ModuleOfferingSchema.index(
+  { intakeId: 1, termCode: 1, moduleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      intakeId: { $exists: true, $type: "string", $ne: "" },
+      moduleId: { $exists: true, $type: "string", $ne: "" },
+    },
+  }
 );
 ModuleOfferingSchema.index({ updatedAt: -1, status: 1 });
 ModuleOfferingSchema.index({
-  facultyId: 1,
-  degreeProgramId: 1,
-  intakeId: 1,
+  facultyCode: 1,
+  degreeCode: 1,
+  intakeName: 1,
   termCode: 1,
+  moduleCode: 1,
   status: 1,
 });
 
 ModuleOfferingSchema.pre("validate", function syncAssignedAliases(next) {
-  const row = this as {
+  const row = this as unknown as {
+    facultyCode?: string;
+    degreeCode?: string;
+    intakeName?: string;
+    moduleCode?: string;
+    moduleName?: string;
+    facultyId?: string;
+    degreeProgramId?: string;
+    intakeId?: string;
+    moduleId?: string;
     assignedLecturerIds?: string[];
-    assignedLecturers?: string[];
+    assignedLecturers?: unknown[];
     assignedLabAssistantIds?: string[];
+    assignedLabAssistants?: unknown[];
   };
 
-  const fromIds = Array.isArray(row.assignedLecturerIds) ? row.assignedLecturerIds : [];
-  const fromAlias = Array.isArray(row.assignedLecturers) ? row.assignedLecturers : [];
-  const normalized = Array.from(
-    new Set([...fromIds, ...fromAlias].map((item) => String(item ?? "").trim()).filter(Boolean))
-  );
-  const normalizedLabAssistants = Array.from(
-    new Set(
-      (Array.isArray(row.assignedLabAssistantIds) ? row.assignedLabAssistantIds : [])
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-    )
-  );
+  row.facultyCode = normalizeAcademicCode(row.facultyCode ?? row.facultyId);
+  row.degreeCode = normalizeAcademicCode(row.degreeCode ?? row.degreeProgramId);
+  row.intakeName = normalizeString(row.intakeName ?? row.intakeId);
+  row.moduleCode = normalizeModuleCode(row.moduleCode ?? row.moduleId);
+  row.moduleName =
+    normalizeString(row.moduleName) || normalizeString(row.moduleCode ?? row.moduleId);
 
-  row.assignedLecturerIds = normalized;
-  row.assignedLecturers = normalized;
-  row.assignedLabAssistantIds = normalizedLabAssistants;
+  row.facultyId = normalizeAcademicCode(row.facultyId ?? row.facultyCode);
+  row.degreeProgramId = normalizeAcademicCode(row.degreeProgramId ?? row.degreeCode);
+  row.intakeId = normalizeString(row.intakeId);
+  row.moduleId = normalizeString(row.moduleId);
+
+  const normalizedLecturerObjects = normalizeAssigneeObjects(row.assignedLecturers, {
+    idKeys: ["lecturerId", "id", "_id"],
+    outputIdKey: "lecturerId",
+  });
+  const normalizedLecturerIds = Array.from(
+    new Set([
+      ...normalizeIdList(row.assignedLecturerIds),
+      ...normalizedLecturerObjects
+        .map((item) => String(item.lecturerId ?? "").trim())
+        .filter(Boolean),
+    ])
+  );
+  const lecturerMap = new Map(
+    normalizedLecturerObjects.map((item) => [String(item.lecturerId ?? "").trim(), item])
+  );
+  row.assignedLecturerIds = normalizedLecturerIds;
+  row.assignedLecturers = normalizedLecturerIds.map((lecturerId) => {
+    const existing = lecturerMap.get(lecturerId);
+    return {
+      lecturerId,
+      name: existing?.name ?? "",
+      email: existing?.email ?? "",
+    };
+  });
+
+  const normalizedAssistantObjects = normalizeAssigneeObjects(row.assignedLabAssistants, {
+    idKeys: ["assistantId", "id", "_id"],
+    outputIdKey: "assistantId",
+  });
+  const normalizedAssistantIds = Array.from(
+    new Set([
+      ...normalizeIdList(row.assignedLabAssistantIds),
+      ...normalizedAssistantObjects
+        .map((item) => String(item.assistantId ?? "").trim())
+        .filter(Boolean),
+    ])
+  );
+  const assistantMap = new Map(
+    normalizedAssistantObjects.map((item) => [String(item.assistantId ?? "").trim(), item])
+  );
+  row.assignedLabAssistantIds = normalizedAssistantIds;
+  row.assignedLabAssistants = normalizedAssistantIds.map((assistantId) => {
+    const existing = assistantMap.get(assistantId);
+    return {
+      assistantId,
+      name: existing?.name ?? "",
+      email: existing?.email ?? "",
+    };
+  });
+
   next();
 });
 

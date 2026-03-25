@@ -9,8 +9,8 @@ import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/ToastProvider";
-import { studentPosts } from "@/lib/mockData";
-import type { PostCategory, PostItem } from "@/lib/mockData";
+import { studentPosts } from "@/models/mockData";
+import type { PostCategory, PostItem } from "@/models/mockData";
 
 type Filter = "All" | PostCategory;
 
@@ -230,3 +230,4 @@ export default function StudentPostsPage() {
     </div>
   );
 }
+

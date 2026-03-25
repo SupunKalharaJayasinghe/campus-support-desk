@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import "@/models/Module";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
-import { findDegreeProgram } from "@/lib/degree-program-store";
-import { findFaculty } from "@/lib/faculty-store";
-import { listModuleOfferingsByModuleId } from "@/lib/module-offering-store";
+import { connectMongoose } from "@/models/mongoose";
+import { findDegreeProgram } from "@/models/degree-program-store";
+import { findFaculty } from "@/models/faculty-store";
+import { listModuleOfferingsByModuleId } from "@/models/module-offering-store";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   deleteModule,
@@ -17,7 +17,7 @@ import {
   type ApplicableTermCode,
   type ModuleOutlineTemplateItem,
   type SyllabusVersion,
-} from "@/lib/module-store";
+} from "@/models/module-store";
 
 function hasSameItems(left: string[], right: string[]) {
   if (left.length !== right.length) {

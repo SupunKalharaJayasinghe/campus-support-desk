@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   listDegreePrograms,
   type DegreeProgramStatus,
-} from "@/lib/degree-program-store";
+} from "@/models/degree-program-store";
 
 function normalizeCode(value: string | null | undefined) {
   return String(value ?? "")
@@ -66,3 +66,4 @@ export async function GET(request: Request) {
     total: items.length,
   });
 }
+

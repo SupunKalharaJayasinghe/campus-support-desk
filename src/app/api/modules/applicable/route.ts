@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/Module";
-import { connectMongoose } from "@/lib/mongoose";
-import { listApplicableModules } from "@/lib/module-store";
+import { connectMongoose } from "@/models/mongoose";
+import { listApplicableModules } from "@/models/module-store";
 
 export async function GET(request: Request) {
   await connectMongoose().catch(() => null);
@@ -46,3 +46,4 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ items });
 }
+

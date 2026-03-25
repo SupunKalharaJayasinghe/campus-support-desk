@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import "@/models/Counter";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   buildStudentEmail,
   buildStudentId,
   getStudentIdStartSeed,
   previewNextStudentIdentityInMemory,
   resolveStudentPrefix,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { CounterModel } from "@/models/Counter";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -61,3 +61,4 @@ export async function GET(request: Request) {
     );
   }
 }
+

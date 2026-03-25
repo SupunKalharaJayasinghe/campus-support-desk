@@ -10,7 +10,7 @@ import {
   type DegreeProgramSort,
   type DegreeProgramStatus,
   findDegreeProgram,
-} from "@/lib/degree-program-store";
+} from "@/models/degree-program-store";
 
 function parsePageParam(value: string | null, fallback: number) {
   const parsed = Number(value);
@@ -188,3 +188,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

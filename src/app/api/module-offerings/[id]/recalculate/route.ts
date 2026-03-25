@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
-import { recalculateModuleOfferingOutline } from "@/lib/module-offering-store";
+import { connectMongoose } from "@/models/mongoose";
+import { recalculateModuleOfferingOutline } from "@/models/module-offering-store";
 
 export async function POST(
   request: Request,

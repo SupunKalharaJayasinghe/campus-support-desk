@@ -16,7 +16,7 @@ import {
   itemMatchesPath,
   resolveActiveAdminRoute,
 } from "@/components/layout/admin/admin-nav";
-import { readStoredRole } from "@/lib/rbac";
+import { readStoredRole } from "@/models/rbac";
 
 interface FlyoutMetrics {
   maxHeight: number;
@@ -357,3 +357,4 @@ export default function AdminSidebar({
     </aside>
   );
 }
+

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
 import "@/models/Lecturer";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   normalizeDbOffering,
   resolveAssigneeMaps,
@@ -15,7 +15,7 @@ import {
   toApiOfferingItem,
   validateLabAssistantAssignments,
   validateLecturerAssignments,
-} from "@/lib/module-offering-api";
+} from "@/models/module-offering-api";
 import {
   deleteModuleOffering,
   findModuleOfferingById,
@@ -24,8 +24,8 @@ import {
   updateModuleOffering,
   type ModuleOfferingStatus,
   type SyllabusVersion,
-} from "@/lib/module-offering-store";
-import { isMongoDuplicateKeyError } from "@/lib/student-registration";
+} from "@/models/module-offering-store";
+import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
 function isDuplicateMessage(error: unknown) {
@@ -93,6 +93,10 @@ export async function PUT(
     }
 
     const body = (await request.json()) as Partial<{
+      facultyCode: string;
+      degreeCode: string;
+      intakeName: string;
+      moduleCode: string;
       facultyId: string;
       degreeProgramId: string;
       intakeId: string;
@@ -122,8 +126,13 @@ export async function PUT(
       const existingLabAssistantIds = sanitizeIdList(row.assignedLabAssistantIds);
 
       const context = resolveOfferingContext({
-        facultyId: body.facultyId ?? row.facultyId,
-        degreeProgramId: body.degreeProgramId ?? row.degreeProgramId,
+        facultyCode: body.facultyCode ?? row.facultyCode ?? row.facultyId,
+        degreeCode: body.degreeCode ?? row.degreeCode ?? row.degreeProgramId,
+        intakeName: body.intakeName ?? row.intakeName,
+        moduleCode: body.moduleCode ?? row.moduleCode,
+        facultyId: body.facultyId ?? row.facultyId ?? row.facultyCode,
+        degreeProgramId:
+          body.degreeProgramId ?? row.degreeProgramId ?? row.degreeCode,
         intakeId: body.intakeId ?? row.intakeId,
         termCode: body.termCode ?? row.termCode,
         moduleId: body.moduleId ?? row.moduleId,
@@ -147,8 +156,9 @@ export async function PUT(
       await validateLecturerAssignments({
         ids: nextLecturerIds,
         scope: {
-          facultyId: context.facultyId,
-          degreeProgramId: context.degreeProgramId,
+          facultyCode: context.facultyCode,
+          degreeCode: context.degreeCode,
+          moduleCode: context.moduleCode,
           moduleId: context.moduleId,
         },
         mongooseConnection,
@@ -156,18 +166,51 @@ export async function PUT(
       await validateLabAssistantAssignments({
         ids: nextLabAssistantIds,
         scope: {
-          facultyId: context.facultyId,
-          degreeProgramId: context.degreeProgramId,
+          facultyCode: context.facultyCode,
+          degreeCode: context.degreeCode,
+          moduleCode: context.moduleCode,
           moduleId: context.moduleId,
         },
         mongooseConnection,
       });
 
+      const assignees = await resolveAssigneeMaps(
+        {
+          lecturerIds: nextLecturerIds,
+          labAssistantIds: nextLabAssistantIds,
+        },
+        mongooseConnection
+      );
+      const lecturerSnapshots = nextLecturerIds.map((id) => {
+        const rowItem = assignees.lecturerMap.get(id);
+        return {
+          lecturerId: id,
+          name: rowItem?.fullName ?? "",
+          email: rowItem?.email ?? "",
+        };
+      });
+      const labAssistantSnapshots = nextLabAssistantIds.map((id) => {
+        const rowItem = assignees.labAssistantMap.get(id);
+        return {
+          assistantId: id,
+          name: rowItem?.fullName ?? "",
+          email: rowItem?.email ?? "",
+        };
+      });
+
       const duplicate = await ModuleOfferingModel.exists({
         _id: { $ne: row._id },
-        intakeId: context.intakeId,
         termCode: context.termCode,
-        moduleId: context.moduleId,
+        $or: [
+          {
+            intakeName: context.intakeName,
+            moduleCode: context.moduleCode,
+          },
+          {
+            intakeId: context.intakeId,
+            moduleId: context.moduleId,
+          },
+        ],
       }).catch(() => null);
 
       if (duplicate) {
@@ -177,16 +220,22 @@ export async function PUT(
         );
       }
 
-      row.facultyId = context.facultyId;
-      row.degreeProgramId = context.degreeProgramId;
+      row.facultyCode = context.facultyCode;
+      row.degreeCode = context.degreeCode;
+      row.intakeName = context.intakeName;
+      row.moduleCode = context.moduleCode;
+      row.moduleName = context.moduleName;
+      row.facultyId = context.facultyCode;
+      row.degreeProgramId = context.degreeCode;
       row.intakeId = context.intakeId;
       row.termCode = context.termCode;
       row.moduleId = context.moduleId;
       row.syllabusVersion = nextSyllabusVersion;
       row.status = nextStatus;
       row.assignedLecturerIds = nextLecturerIds;
-      row.assignedLecturers = nextLecturerIds;
+      row.assignedLecturers = lecturerSnapshots;
       row.assignedLabAssistantIds = nextLabAssistantIds;
+      row.assignedLabAssistants = labAssistantSnapshots;
 
       try {
         await row.save();
@@ -209,14 +258,6 @@ export async function PUT(
         );
       }
 
-      const assignees = await resolveAssigneeMaps(
-        {
-          lecturerIds: normalized.assignedLecturerIds,
-          labAssistantIds: normalized.assignedLabAssistantIds,
-        },
-        mongooseConnection
-      );
-
       return NextResponse.json(toApiOfferingItem(normalized, assignees));
     }
 
@@ -226,8 +267,13 @@ export async function PUT(
     }
 
     const context = resolveOfferingContext({
-      facultyId: body.facultyId ?? existing.facultyId,
-      degreeProgramId: body.degreeProgramId ?? existing.degreeProgramId,
+      facultyCode: body.facultyCode ?? existing.facultyCode ?? existing.facultyId,
+      degreeCode: body.degreeCode ?? existing.degreeCode ?? existing.degreeProgramId,
+      intakeName: body.intakeName ?? existing.intakeName,
+      moduleCode: body.moduleCode ?? existing.moduleCode,
+      facultyId: body.facultyId ?? existing.facultyId ?? existing.facultyCode,
+      degreeProgramId:
+        body.degreeProgramId ?? existing.degreeProgramId ?? existing.degreeCode,
       intakeId: body.intakeId ?? existing.intakeId,
       termCode: body.termCode ?? existing.termCode,
       moduleId: body.moduleId ?? existing.moduleId,
@@ -251,8 +297,9 @@ export async function PUT(
     await validateLecturerAssignments({
       ids: nextLecturerIds,
       scope: {
-        facultyId: context.facultyId,
-        degreeProgramId: context.degreeProgramId,
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
         moduleId: context.moduleId,
       },
       mongooseConnection: null,
@@ -260,17 +307,18 @@ export async function PUT(
     await validateLabAssistantAssignments({
       ids: nextLabAssistantIds,
       scope: {
-        facultyId: context.facultyId,
-        degreeProgramId: context.degreeProgramId,
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
         moduleId: context.moduleId,
       },
       mongooseConnection: null,
     });
 
     const duplicateInStore = listModuleOfferings({
-      intakeId: context.intakeId,
+      intakeName: context.intakeName,
       termCode: context.termCode,
-      moduleId: context.moduleId,
+      moduleCode: context.moduleCode,
     }).some((offering) => offering.id !== offeringId && !offering.isDeleted);
 
     if (duplicateInStore) {
@@ -281,8 +329,12 @@ export async function PUT(
     }
 
     const updated = updateModuleOffering(offeringId, {
-      facultyId: context.facultyId,
-      degreeProgramId: context.degreeProgramId,
+      facultyCode: context.facultyCode,
+      degreeCode: context.degreeCode,
+      intakeName: context.intakeName,
+      moduleCode: context.moduleCode,
+      facultyId: context.facultyCode,
+      degreeProgramId: context.degreeCode,
       intakeId: context.intakeId,
       termCode: context.termCode,
       moduleId: context.moduleId,

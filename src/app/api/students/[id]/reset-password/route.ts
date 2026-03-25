@@ -2,12 +2,12 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import "@/models/Student";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   getMongoDuplicateField,
   resetStudentPasswordInMemory,
   sanitizeNicNumber,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { StudentModel } from "@/models/Student";
 import { UserModel } from "@/models/User";
 

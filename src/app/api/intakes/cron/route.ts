@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { connectMongoose } from "@/lib/mongoose";
-import { runIntakeDailyAutomation } from "@/lib/intake-store";
+import { connectMongoose } from "@/models/mongoose";
+import { runIntakeDailyAutomation } from "@/models/intake-store";
 
 export async function POST() {
   try {
@@ -17,3 +17,4 @@ export async function POST() {
     );
   }
 }
+

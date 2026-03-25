@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   getIntakeTerms,
   recalculateIntakeFutureTerms,
   sanitizeIntakeId,
   sanitizeToggle,
-} from "@/lib/intake-store";
+} from "@/models/intake-store";
 
 export async function POST(
   request: Request,

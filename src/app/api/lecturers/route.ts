@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/Lecturer";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   buildLecturerEmailLocalPart,
   createLecturerInMemory,
@@ -18,11 +18,11 @@ import {
   type LecturerPersistedRecord,
   type LecturerSort,
   type LecturerStatus,
-} from "@/lib/lecturer-store";
-import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/lib/student-registration";
+} from "@/models/lecturer-store";
+import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/models/student-registration";
 import { LecturerModel } from "@/models/Lecturer";
 import { UserModel } from "@/models/User";
-import { hashStaffPassword, resolveDefaultStaffPassword } from "@/lib/staff-auth";
+import { hashStaffPassword, resolveDefaultStaffPassword } from "@/models/staff-auth";
 
 interface LecturerWriteInput {
   fullName: string;
@@ -342,3 +342,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

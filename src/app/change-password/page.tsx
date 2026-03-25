@@ -11,7 +11,7 @@ import {
   readStoredRole,
   readStoredUser,
   updateStoredUser,
-} from "@/lib/rbac";
+} from "@/models/rbac";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -225,3 +225,4 @@ export default function ChangePasswordPage() {
     </div>
   );
 }
+

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import "@/models/Enrollment";
 import "@/models/Student";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   decorateStudentDetailRecord,
   deleteStudentInMemory,
@@ -16,7 +16,7 @@ import {
   type EnrollmentPersistedRecord,
   type StudentPersistedRecord,
   type StudentProfileWriteInput,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
 import { UserModel } from "@/models/User";

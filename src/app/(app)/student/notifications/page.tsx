@@ -7,7 +7,7 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import { notificationsByRole } from "@/lib/mockData";
+import { notificationsByRole } from "@/models/mockData";
 
 type Tab = "All" | "Unread" | "Announcements" | "System";
 
@@ -148,3 +148,4 @@ export default function StudentNotificationsPage() {
     </div>
   );
 }
+

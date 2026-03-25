@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import "@/models/Lecturer";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   listLecturersInMemory,
   normalizeAcademicCode,
   toLecturerPersistedRecordFromUnknown,
   type LecturerPersistedRecord,
-} from "@/lib/lecturer-store";
+} from "@/models/lecturer-store";
 import { LecturerModel } from "@/models/Lecturer";
 import {
   isStaffEligibleForOffering,
   staffEligibilityMongoFilter,
-} from "@/lib/staff-eligibility";
+} from "@/models/staff-eligibility";
 
 function toApiItem(row: LecturerPersistedRecord) {
   return {
@@ -85,3 +85,4 @@ export async function GET(request: Request) {
     total: items.length,
   });
 }
+

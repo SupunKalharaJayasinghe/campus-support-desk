@@ -1,5 +1,5 @@
 import Card from "@/components/ui/Card";
-import { foundItemsSeed, lostItemLocations, lostItemReports } from "@/lib/mockData";
+import { foundItemsSeed, lostItemLocations, lostItemReports } from "@/models/mockData";
 
 export default function LostItemsAnalyticsPage() {
   const resolved = lostItemReports.filter((item) => item.status === "Claimed").length;
@@ -43,3 +43,4 @@ export default function LostItemsAnalyticsPage() {
     </div>
   );
 }
+

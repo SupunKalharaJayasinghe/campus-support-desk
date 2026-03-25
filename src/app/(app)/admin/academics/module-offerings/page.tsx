@@ -81,20 +81,20 @@ const parseOfferings = (payload: unknown) => {
       const degreeObj = asObj(row.degree);
       const intakeObj = asObj(row.intake);
       const id = sid(row.id ?? row._id);
-      const moduleId = sid(row.moduleId ?? moduleObj?._id);
-      const intakeId = sid(row.intakeId ?? intakeObj?._id);
+      const moduleId = sid(row.moduleCode ?? row.moduleId ?? moduleObj?.code ?? moduleObj?._id);
+      const intakeId = sid(row.intakeName ?? row.intakeId ?? intakeObj?.name ?? intakeObj?._id);
       if (!id || !moduleId || !intakeId) return null;
       return {
         id,
-        facultyId: code(row.facultyId ?? facultyObj?.code),
+        facultyId: code(row.facultyCode ?? row.facultyId ?? facultyObj?.code),
         facultyName: txt(facultyObj?.name),
-        degreeProgramId: code(row.degreeProgramId ?? degreeObj?.code),
+        degreeProgramId: code(row.degreeCode ?? row.degreeProgramId ?? degreeObj?.code),
         degreeProgramName: txt(degreeObj?.name),
         intakeId,
-        intakeName: txt(intakeObj?.name),
+        intakeName: txt(row.intakeName ?? intakeObj?.name),
         termCode: String(row.termCode ?? "").trim().toUpperCase(),
         moduleId,
-        moduleCode: String(row.moduleCode ?? moduleObj?.code ?? "").trim().toUpperCase(),
+        moduleCode: String(row.moduleCode ?? moduleObj?.code ?? moduleId ?? "").trim().toUpperCase(),
         moduleName: txt(row.moduleName ?? moduleObj?.name),
         syllabusVersion: syllabus(row.syllabusVersion),
         status: status(row.status),
@@ -141,7 +141,7 @@ const parseIntakes = (payload: unknown): IntakeOption[] => {
   const mapped = rows.map((item): IntakeOption | null => {
       const row = asObj(item);
       if (!row) return null;
-      const id = sid(row.id ?? row._id);
+      const id = sid(row.name ?? row.id ?? row._id);
       if (!id) return null;
       const currentTerm = String(row.currentTerm ?? "").trim().toUpperCase();
       return { id, name: txt(row.name), currentTerm: currentTerm || undefined, facultyCode: code(row.facultyCode ?? row.facultyId), degreeCode: code(row.degreeCode ?? row.degreeId) };
@@ -157,7 +157,7 @@ const parseModules = (payload: unknown): OfferingModuleOption[] => {
     .map((item) => {
       const row = asObj(item);
       if (!row) return null;
-      const id = sid(row.id ?? row._id);
+      const id = String(row.code ?? row.id ?? row._id ?? "").trim().toUpperCase();
       if (!id) return null;
       return { id, code: String(row.code ?? "").trim().toUpperCase(), name: txt(row.name), defaultSyllabusVersion: syllabus(row.defaultSyllabusVersion) } satisfies OfferingModuleOption;
     })
@@ -257,7 +257,7 @@ export default function ModuleOfferingsPage() {
     }
 
     try {
-      const params = new URLSearchParams({ facultyId: code(facultyId), degreeProgramId: code(degreeProgramId), moduleId: sid(moduleId) });
+      const params = new URLSearchParams({ facultyCode: code(facultyId), degreeCode: code(degreeProgramId), moduleCode: sid(moduleId) });
       const payload = await readJson<unknown>(await fetch(`/api/module-offerings/eligible-${kind}?${params.toString()}`, { cache: "no-store" }));
       const rows = parseEligible(payload);
       const allowed = new Set(rows.map((r) => r.id));
@@ -290,9 +290,9 @@ export default function ModuleOfferingsPage() {
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sort: sortBy });
       if (deferredSearch.trim()) params.set("search", deferredSearch.trim());
-      if (facultyFilter) params.set("facultyId", facultyFilter);
-      if (degreeFilter) params.set("degreeProgramId", degreeFilter);
-      if (intakeFilter) params.set("intakeId", intakeFilter);
+      if (facultyFilter) params.set("facultyCode", facultyFilter);
+      if (degreeFilter) params.set("degreeCode", degreeFilter);
+      if (intakeFilter) params.set("intakeName", intakeFilter);
       if (termFilter) params.set("termCode", termFilter);
       if (statusFilter) params.set("status", statusFilter);
       const parsed = parseOfferings(await readJson<unknown>(await fetch(`/api/module-offerings?${params.toString()}`, { cache: "no-store" })));
@@ -410,7 +410,7 @@ export default function ModuleOfferingsPage() {
 
     setIsSaving(true);
     try {
-      const payload = { facultyId: form.facultyId, degreeProgramId: form.degreeProgramId, intakeId: form.intakeId, termCode: form.termCode, moduleId: form.moduleId, syllabusVersion: form.syllabusVersion, status: form.status, assignedLecturerIds: form.assignedLecturerIds, assignedLabAssistantIds: form.assignedLabAssistantIds };
+      const payload = { facultyCode: form.facultyId, degreeCode: form.degreeProgramId, intakeName: form.intakeId, termCode: form.termCode, moduleCode: form.moduleId, syllabusVersion: form.syllabusVersion, status: form.status, assignedLecturerIds: form.assignedLecturerIds, assignedLabAssistantIds: form.assignedLabAssistantIds };
       if (modalMode === "add") {
         await readJson<unknown>(await fetch("/api/module-offerings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }));
       } else {

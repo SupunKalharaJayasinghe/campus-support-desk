@@ -5,7 +5,7 @@ import "@/models/Counter";
 import "@/models/Enrollment";
 import "@/models/Student";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   buildStudentEmail,
   buildStudentId,
@@ -31,7 +31,7 @@ import {
   type StudentProfileWriteInput,
   type StudentSort,
   type StudentStatus,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { CounterModel } from "@/models/Counter";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
@@ -508,3 +508,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

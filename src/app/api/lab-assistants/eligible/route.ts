@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import {
   listLabAssistantsInMemory,
   normalizeAcademicCode,
   toLabAssistantPersistedRecordFromUnknown,
   type LabAssistantPersistedRecord,
-} from "@/lib/lab-assistant-store";
+} from "@/models/lab-assistant-store";
 import {
   isStaffEligibleForOffering,
   staffEligibilityMongoFilter,
-} from "@/lib/staff-eligibility";
+} from "@/models/staff-eligibility";
 
 function toApiItem(row: LabAssistantPersistedRecord) {
   return {
@@ -85,3 +85,4 @@ export async function GET(request: Request) {
     total: items.length,
   });
 }
+

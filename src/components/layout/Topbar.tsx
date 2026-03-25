@@ -6,15 +6,15 @@ import { LogOut, Menu } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Container from "@/components/ui/Container";
-import { NAV_BY_ROLE } from "@/lib/nav";
+import { NAV_BY_ROLE } from "@/models/nav";
 import {
   WORKSPACE_TITLE_BY_ROLE,
   clearDemoSession,
   isDemoModeEnabled,
   readStoredRole,
   readStoredUser,
-} from "@/lib/rbac";
-import type { AppRole } from "@/lib/rbac";
+} from "@/models/rbac";
+import type { AppRole } from "@/models/rbac";
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -80,3 +80,4 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     </header>
   );
 }
+

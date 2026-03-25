@@ -4,8 +4,8 @@ import "@/models/LabAssistant";
 import "@/models/Lecturer";
 import "@/models/Student";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
-import { toAppRoleFromUserRole } from "@/lib/rbac";
+import { connectMongoose } from "@/models/mongoose";
+import { toAppRoleFromUserRole } from "@/models/rbac";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { LecturerModel } from "@/models/Lecturer";
 import { StudentModel } from "@/models/Student";
@@ -136,3 +136,4 @@ export async function POST(request: Request) {
     );
   }
 }
+
