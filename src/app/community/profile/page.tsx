@@ -151,7 +151,7 @@ export default function CommunityProfilePage() {
 
                         <div className="flex items-center gap-2 sm:gap-3">
                             <Link
-                                href="/community/post/create"
+                                href="#create-post"
                                 className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
                                 onClick={closeSidebarIfMobile}
                             >
@@ -335,59 +335,7 @@ export default function CommunityProfilePage() {
                         </Card>
                     </div>
 
-                    <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-3">
-                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
-                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
-                                <Award size={18} className="text-blue-700" />
-                                Contribution Highlights
-                            </h2>
-                            <ul className="mt-4 space-y-3 text-sm text-slate-700">
-                                <li className="rounded-xl bg-blue-50 p-3">Top 5% helper in academic questions this month.</li>
-                                <li className="rounded-xl bg-blue-50 p-3">Recognized by 12 members as a study mentor.</li>
-                                <li className="rounded-xl bg-blue-50 p-3">Maintained active participation for over 3 weeks.</li>
-                            </ul>
-                        </Card>
-                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
-                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
-                                <Users size={18} className="text-blue-700" />
-                                Community Reach
-                            </h2>
-                            <div className="mt-4 space-y-3 text-sm">
-                                <div className="rounded-xl bg-slate-50 p-3">
-                                    <p className="text-slate-500">Followers</p>
-                                    <p className="mt-1 text-xl font-bold text-slate-800">214</p>
-                                </div>
-                                <div className="rounded-xl bg-slate-50 p-3">
-                                    <p className="text-slate-500">Mentions in Posts</p>
-                                    <p className="mt-1 text-xl font-bold text-slate-800">37</p>
-                                </div>
-                                <div className="rounded-xl bg-slate-50 p-3">
-                                    <p className="text-slate-500">Shared Resources</p>
-                                    <p className="mt-1 text-xl font-bold text-slate-800">19</p>
-                                </div>
-                            </div>
-                        </Card>
-                        <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
-                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
-                                <BookMarked size={18} className="text-blue-700" />
-                                Focus Areas
-                            </h2>
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                {["Exam Prep", "Web Development", "Study Group", "Campus Support", "Project Reviews"].map((tag) => (
-                                    <span
-                                        key={tag}
-                                        className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800"
-                                    >
-                                        {tag}
-                                    </span>
-                                ))}
-                            </div>
-                            <div className="mt-5 rounded-xl bg-blue-700 p-4 text-white">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Availability</p>
-                                <p className="mt-1 text-sm">Usually active between 6:00 PM and 10:00 PM.</p>
-                            </div>
-                        </Card>
-                    </div>
+                   
 
                     <div id="create-post" className="mt-10 scroll-mt-6">
                         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
