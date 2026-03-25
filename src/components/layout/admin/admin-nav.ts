@@ -101,7 +101,11 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { label: "Assignments", href: "/admin/assessments/assignments" },
       { label: "Subgroup Deadlines", href: "/admin/assessments/subgroup-deadlines" },
       { label: "Submissions", href: "/admin/assessments/submissions" },
-      { label: "Grades", href: "/admin/assessments/grades" },
+      {
+        label: "Grades",
+        href: "/admin/grades",
+        matchHrefs: ["/admin/assessments/grades"],
+      },
     ],
   },
   {
