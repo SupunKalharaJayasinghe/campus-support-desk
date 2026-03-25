@@ -24,6 +24,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import { clearDemoSession, readStoredUser } from "@/lib/rbac";
+import { readCommunityProfileSettings } from "@/lib/community-profile";
 import communityBackground from "@/app/images/community/community2.jpg";
 
 type Reply = {
@@ -54,6 +55,7 @@ type ApiPost = {
     description: string;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt?: string;
+    authorDisplayName?: string;
     author?: string | { username?: string; name?: string };
     likesCount?: number;
     likedByCurrentUser?: boolean;
@@ -63,6 +65,7 @@ type ApiPost = {
 type ApiReply = {
     _id: string;
     postId: string;
+    authorDisplayName?: string;
     author?: string | { username?: string; name?: string };
     message: string;
     createdAt?: string;
@@ -87,9 +90,10 @@ const toTimeAgo = (createdAt?: string): string => {
 const mapApiReply = (reply: ApiReply): Reply => ({
     id: reply._id,
     author:
-        typeof reply.author === "object"
-            ? reply.author.username || reply.author.name || "Current User"
-            : "Current User",
+        reply.authorDisplayName ||
+        (typeof reply.author === "object"
+            ? reply.author.name || "Current User"
+            : "Current User"),
     content: reply.message,
     createdAt: toTimeAgo(reply.createdAt),
     likes: Number(reply.likesCount ?? 0),
@@ -248,9 +252,10 @@ export default function CommunityPage() {
                     title: post.title,
                     content: post.description,
                     author:
-                        typeof post.author === "object"
-                            ? post.author.username || post.author.name || "Current User"
-                            : "Current User",
+                        post.authorDisplayName ||
+                        (typeof post.author === "object"
+                            ? post.author.name || "Current User"
+                            : "Current User"),
                     category: mapCategory(post.category),
                     createdAt: toTimeAgo(post.createdAt),
                     likes: Number(post.likesCount ?? 0),
@@ -439,6 +444,9 @@ export default function CommunityPage() {
         }
 
         const message = newReplyContent.trim();
+        const settings = readCommunityProfileSettings();
+        const authorDisplayName =
+            settings.displayName.trim() || currentUser?.name?.trim() || "Current User";
         setActionError("");
 
         try {
@@ -451,7 +459,9 @@ export default function CommunityPage() {
                     author: currentUser.id,
                     authorUsername: currentUser.username,
                     authorEmail: currentUser.email,
-                    authorName: currentUser.name,
+                    // keep server fallback in sync with display name
+                    authorName: authorDisplayName,
+                    authorDisplayName,
                 }),
             });
             if (!res.ok) {

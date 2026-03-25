@@ -10,6 +10,7 @@ import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import communityBackground from "@/app/images/community/community2.jpg";
 import { readStoredUser } from "@/lib/rbac";
+import { readCommunityProfileSettings } from "@/lib/community-profile";
 
 const CATEGORY_OPTIONS = [
     { label: "Lost Item", value: "lost_item" },
@@ -107,6 +108,9 @@ export default function CreateCommunityPostPage() {
 
         try {
             const storedUser = readStoredUser();
+            const profileSettings = readCommunityProfileSettings();
+            const authorDisplayName =
+                profileSettings.displayName.trim() || storedUser?.name?.trim() || "Current User";
             const res = await fetch("/api/community-posts", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -118,7 +122,11 @@ export default function CreateCommunityPostPage() {
                     attachments,
                     status,
                     author: storedUser?.id,
-                    authorName: storedUser?.name ?? "Current User",
+                    // keep both name fields aligned with the latest profile display name
+                    authorName: authorDisplayName,
+                    authorUsername: storedUser?.username ?? "",
+                    authorEmail: storedUser?.email ?? "",
+                    authorDisplayName,
                 }),
             });
 

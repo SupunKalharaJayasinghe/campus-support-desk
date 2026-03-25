@@ -30,6 +30,13 @@ const CommunityPostSchema = new Schema(
     required: true,
   },
 
+  authorDisplayName: {
+    type: String,
+    required: true,
+    trim: true,
+    maxLength: 50,
+  },
+
   attachments: [
     {
       type: String,

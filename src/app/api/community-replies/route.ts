@@ -12,7 +12,15 @@ export async function POST(req: Request) {
     await connectDB();
 
     const body = await req.json();
-    const { postId, author, authorUsername, authorEmail, authorName, message } = body;
+    const {
+      postId,
+      author,
+      authorUsername,
+      authorEmail,
+      authorName,
+      authorDisplayName,
+      message,
+    } = body;
 
     if (!postId || !message) {
       return Response.json(
@@ -57,13 +65,16 @@ export async function POST(req: Request) {
     const reply = await CommunityReply.create({
       postId,
       author: authorId,
+      authorDisplayName:
+        String(authorDisplayName ?? "").trim() ||
+        String(authorName ?? "").trim() ||
+        "Community User",
       message: String(message).trim(),
     });
 
-    const createdReply = await reply.populate("author", "username");
     return Response.json(
       {
-        ...createdReply.toObject(),
+        ...reply.toObject(),
         likesCount: 0,
         likedByCurrentUser: false,
       },
@@ -96,7 +107,6 @@ export async function GET(req: Request) {
 
     const replies = await CommunityReply.find({ postId })
       .sort({ createdAt: -1 })
-      .populate("author", "username")
       .lean();
 
     const replyIds = replies
