@@ -16,8 +16,8 @@ interface ConfirmDeleteOfferingModalProps {
 export default function ConfirmDeleteOfferingModal({
   open,
   deleting,
-  title = "Delete offering?",
-  message = "This will remove the module offering assignment for this intake term.",
+  title = "Delete module offering?",
+  message = "This will remove the selected module offering and its lecturer/lab assistant assignments.",
   targetLabel,
   onClose,
   onConfirm,
@@ -28,7 +28,7 @@ export default function ConfirmDeleteOfferingModal({
 
   return (
     <div
-      className="fixed inset-0 z-[96] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[96] flex items-center justify-center bg-slate-950/80 p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !deleting) {
           onClose();

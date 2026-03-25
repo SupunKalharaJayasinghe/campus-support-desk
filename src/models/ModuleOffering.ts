@@ -56,11 +56,19 @@ ModuleOfferingSchema.index(
   { unique: true }
 );
 ModuleOfferingSchema.index({ updatedAt: -1, status: 1 });
+ModuleOfferingSchema.index({
+  facultyId: 1,
+  degreeProgramId: 1,
+  intakeId: 1,
+  termCode: 1,
+  status: 1,
+});
 
 ModuleOfferingSchema.pre("validate", function syncAssignedAliases(next) {
   const row = this as {
     assignedLecturerIds?: string[];
     assignedLecturers?: string[];
+    assignedLabAssistantIds?: string[];
   };
 
   const fromIds = Array.isArray(row.assignedLecturerIds) ? row.assignedLecturerIds : [];
@@ -68,9 +76,17 @@ ModuleOfferingSchema.pre("validate", function syncAssignedAliases(next) {
   const normalized = Array.from(
     new Set([...fromIds, ...fromAlias].map((item) => String(item ?? "").trim()).filter(Boolean))
   );
+  const normalizedLabAssistants = Array.from(
+    new Set(
+      (Array.isArray(row.assignedLabAssistantIds) ? row.assignedLabAssistantIds : [])
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    )
+  );
 
   row.assignedLecturerIds = normalized;
   row.assignedLecturers = normalized;
+  row.assignedLabAssistantIds = normalizedLabAssistants;
   next();
 });
 

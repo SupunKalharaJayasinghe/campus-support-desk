@@ -40,6 +40,31 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/admin/users/admins/page.js"
+    ],
+    "/(app)/admin/academics/intakes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/academics/intakes/page.js"
+    ],
+    "/(app)/admin/users/lecturers/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/users/lecturers/page.js"
+    ],
+    "/(app)/admin/communication/targeted-notifications/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/communication/targeted-notifications/page.js"
+    ],
+    "/(app)/admin/communication/announcements/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/communication/announcements/page.js"
+    ],
+    "/(app)/admin/academics/module-offerings/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/academics/module-offerings/page.js"
     ]
   }
 }

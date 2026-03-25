@@ -539,6 +539,11 @@ export function createModuleOffering(input: {
 export function updateModuleOffering(
   id: string,
   input: {
+    facultyId?: string;
+    degreeProgramId?: string;
+    intakeId?: string;
+    termCode?: TermCode;
+    moduleId?: string;
     syllabusVersion?: SyllabusVersion;
     assignedLecturerIds?: string[];
     assignedLabAssistantIds?: string[];
@@ -553,24 +558,112 @@ export function updateModuleOffering(
     return null;
   }
 
+  const current = store[index];
+  const nextIntakeId =
+    input.intakeId === undefined ? current.intakeId : String(input.intakeId ?? "").trim();
+  const nextTermCode =
+    input.termCode === undefined ? current.termCode : sanitizeTermCode(input.termCode);
+  const nextModuleId =
+    input.moduleId === undefined ? current.moduleId : String(input.moduleId ?? "").trim();
+
+  if (!nextIntakeId) {
+    throw new Error("Intake is required");
+  }
+
+  if (!nextModuleId) {
+    throw new Error("Module is required");
+  }
+
+  const intake = findIntakeById(nextIntakeId);
+  if (!intake) {
+    throw new Error("Intake not found");
+  }
+
+  const moduleRecord = findModuleById(nextModuleId);
+  if (!moduleRecord) {
+    throw new Error("Module not found");
+  }
+
+  const nextFacultyId = normalizeAcademicCode(
+    input.facultyId ?? current.facultyId ?? intake.facultyCode
+  );
+  const nextDegreeProgramId = normalizeAcademicCode(
+    input.degreeProgramId ?? current.degreeProgramId ?? intake.degreeCode
+  );
+
+  if (!nextFacultyId) {
+    throw new Error("Faculty is required");
+  }
+
+  if (!nextDegreeProgramId) {
+    throw new Error("Degree is required");
+  }
+
+  if (nextFacultyId !== intake.facultyCode) {
+    throw new Error("Selected intake does not belong to the selected faculty");
+  }
+
+  if (nextDegreeProgramId !== intake.degreeCode) {
+    throw new Error("Selected intake does not belong to the selected degree");
+  }
+
+  if (!isModuleApplicableToIntakeTerm(moduleRecord, intake, nextTermCode)) {
+    throw new Error("Module is not applicable for the selected faculty, degree, and term");
+  }
+
+  const duplicate = store.find(
+    (offering) =>
+      offering.id !== targetId &&
+      !offering.isDeleted &&
+      offering.intakeId === nextIntakeId &&
+      offering.termCode === nextTermCode &&
+      offering.moduleId === nextModuleId
+  );
+  if (duplicate) {
+    throw new Error("Module is already assigned for this intake term");
+  }
+
+  const contextChanged =
+    nextFacultyId !== current.facultyId ||
+    nextDegreeProgramId !== current.degreeProgramId ||
+    nextIntakeId !== current.intakeId ||
+    nextTermCode !== current.termCode ||
+    nextModuleId !== current.moduleId;
+  const termStartDate = getIntakeTermStartDate(intake, nextTermCode);
+  const nextOutlineWeeks = contextChanged
+    ? termStartDate
+      ? generateOutlineWeeks(termStartDate, moduleRecord.outlineTemplate)
+      : []
+    : current.outlineWeeks;
+  const nextOutlinePending = contextChanged ? !termStartDate : current.outlinePending;
+
   const updated: ModuleOfferingRecord = {
-    ...store[index],
+    ...current,
+    facultyId: nextFacultyId,
+    degreeProgramId: nextDegreeProgramId,
+    intakeId: nextIntakeId,
+    termCode: nextTermCode,
+    moduleId: nextModuleId,
+    moduleCode: moduleRecord.code,
+    moduleName: moduleRecord.name,
     syllabusVersion:
       input.syllabusVersion === undefined
-        ? store[index].syllabusVersion
+        ? current.syllabusVersion
         : sanitizeSyllabusVersion(input.syllabusVersion),
     assignedLecturerIds:
       input.assignedLecturerIds !== undefined || input.assignedLecturers !== undefined
         ? sanitizeAssignmentIds(input.assignedLecturerIds ?? input.assignedLecturers)
-        : store[index].assignedLecturerIds,
+        : current.assignedLecturerIds,
     assignedLabAssistantIds:
       input.assignedLabAssistantIds === undefined
-        ? store[index].assignedLabAssistantIds
+        ? current.assignedLabAssistantIds
         : sanitizeAssignmentIds(input.assignedLabAssistantIds),
     status:
       input.status === undefined
-        ? store[index].status
+        ? current.status
         : sanitizeOfferingStatus(input.status),
+    outlineWeeks: nextOutlineWeeks,
+    outlinePending: nextOutlinePending,
     updatedAt: new Date().toISOString(),
   };
   updated.assignedLecturers = [...updated.assignedLecturerIds];

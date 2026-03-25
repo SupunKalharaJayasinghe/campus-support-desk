@@ -14,287 +14,166 @@ import { useToast } from "@/components/ui/ToastProvider";
 import ConfirmDeleteOfferingModal from "./components/ConfirmDeleteOfferingModal";
 import EditOfferingModal, {
   type EditOfferingContext,
+  type OfferingDegreeOption,
+  type OfferingFacultyOption,
+  type OfferingFormState,
+  type OfferingIntakeOption,
+  type OfferingModuleOption,
   type OfferingStaffItem,
   type OfferingStatus,
-  type SyllabusVersion,
 } from "./components/EditOfferingModal";
 
 type PageSize = 10 | 25 | 50 | 100;
 type SortOption = "updated" | "module" | "term";
-type TermCode =
-  | "Y1S1"
-  | "Y1S2"
-  | "Y2S1"
-  | "Y2S2"
-  | "Y3S1"
-  | "Y3S2"
-  | "Y4S1"
-  | "Y4S2";
+type TermCode = "Y1S1" | "Y1S2" | "Y2S1" | "Y2S2" | "Y3S1" | "Y3S2" | "Y4S1" | "Y4S2";
+type ModalMode = "add" | "edit";
 
-interface FacultyOption {
-  code: string;
-  name: string;
-}
+interface DegreeOption extends OfferingDegreeOption { facultyCode: string }
+interface IntakeOption extends OfferingIntakeOption { facultyCode: string; degreeCode: string }
+interface OfferingRecord extends EditOfferingContext { createdAt: string; updatedAt: string }
 
-interface DegreeOption {
-  code: string;
-  name: string;
-  facultyCode: string;
-}
+const TERM_OPTIONS: TermCode[] = ["Y1S1", "Y1S2", "Y2S1", "Y2S2", "Y3S1", "Y3S2", "Y4S1", "Y4S2"];
 
-interface IntakeOption {
-  id: string;
-  name: string;
-  facultyCode: string;
-  degreeCode: string;
-}
+const code = (v: unknown) => String(v ?? "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
+const sid = (v: unknown) => String(v ?? "").trim();
+const txt = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim();
+const status = (v: unknown): OfferingStatus => (v === "INACTIVE" ? "INACTIVE" : "ACTIVE");
+const syllabus = (v: unknown) => (v === "OLD" ? "OLD" : "NEW");
+const asObj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 
-interface OfferingRecord extends EditOfferingContext {
-  updatedAt: string;
-}
-
-function cn(...classes: Array<string | false | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function normalizeAcademicCode(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 6);
-}
-
-function collapseSpaces(value: unknown) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function sanitizeStatus(value: unknown): OfferingStatus {
-  return value === "INACTIVE" ? "INACTIVE" : "ACTIVE";
-}
-
-function sanitizeSyllabus(value: unknown): SyllabusVersion {
-  return value === "OLD" ? "OLD" : "NEW";
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toISOString().slice(0, 10);
-}
+const fmtDate = (v?: string | null) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
+};
 
 async function readJson<T>(response: Response) {
-  const payload = (await response.json().catch(() => null)) as
-    | T
-    | { message?: string }
-    | null;
-
+  const payload = (await response.json().catch(() => null)) as T | { message?: string } | null;
   if (!response.ok) {
-    throw new Error(
-      payload && typeof payload === "object" && "message" in payload && payload.message
-        ? payload.message
-        : "Request failed"
-    );
+    const msg = payload && typeof payload === "object" && "message" in payload ? payload.message : "Request failed";
+    throw new Error(msg || "Request failed");
   }
-
   return (payload ?? ({} as T)) as T;
 }
 
-function parseStaffArray(value: unknown): OfferingStaffItem[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
+const parseStaff = (value: unknown): OfferingStaffItem[] => {
+  if (!Array.isArray(value)) return [];
   return value
     .map((item) => {
-      const row = asObject(item);
-      if (!row) {
-        return null;
-      }
-
-      const id = String(row.id ?? row._id ?? "").trim();
-      if (!id) {
-        return null;
-      }
-
-      return {
-        id,
-        fullName: collapseSpaces(row.fullName) || id,
-        email: String(row.email ?? "").trim().toLowerCase(),
-        status: String(row.status ?? "").trim().toUpperCase(),
-      } satisfies OfferingStaffItem;
+      const row = asObj(item);
+      if (!row) return null;
+      const id = sid(row.id ?? row._id);
+      if (!id) return null;
+      return { id, fullName: txt(row.fullName) || id, email: String(row.email ?? "").trim().toLowerCase(), status: String(row.status ?? "").trim().toUpperCase() || "ACTIVE" } satisfies OfferingStaffItem;
     })
     .filter((item): item is OfferingStaffItem => Boolean(item));
-}
+};
 
-function parseOfferings(payload: unknown): {
-  items: OfferingRecord[];
-  total: number;
-  page: number;
-  pageSize: PageSize;
-} {
-  const root = asObject(payload);
+const parseOfferings = (payload: unknown) => {
+  const root = asObj(payload);
   const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
-
   const items = rows
     .map((item) => {
-      const row = asObject(item);
-      if (!row) {
-        return null;
-      }
-
-      const id = String(row.id ?? row._id ?? "").trim();
-      const moduleId = String(row.moduleId ?? "").trim();
-      const intakeId = String(row.intakeId ?? "").trim();
-      if (!id || !moduleId || !intakeId) {
-        return null;
-      }
-
-      const moduleObject = asObject(row.module);
-      const facultyObject = asObject(row.faculty);
-      const degreeObject = asObject(row.degree);
-      const intakeObject = asObject(row.intake);
-
-      const lecturers = parseStaffArray(row.lecturers);
-      const labAssistants = parseStaffArray(row.labAssistants);
-
+      const row = asObj(item);
+      if (!row) return null;
+      const moduleObj = asObj(row.module);
+      const facultyObj = asObj(row.faculty);
+      const degreeObj = asObj(row.degree);
+      const intakeObj = asObj(row.intake);
+      const id = sid(row.id ?? row._id);
+      const moduleId = sid(row.moduleId ?? moduleObj?._id);
+      const intakeId = sid(row.intakeId ?? intakeObj?._id);
+      if (!id || !moduleId || !intakeId) return null;
       return {
         id,
-        facultyId: normalizeAcademicCode(row.facultyId),
-        facultyName: collapseSpaces(facultyObject?.name),
-        degreeProgramId: normalizeAcademicCode(row.degreeProgramId),
-        degreeProgramName: collapseSpaces(degreeObject?.name),
+        facultyId: code(row.facultyId ?? facultyObj?.code),
+        facultyName: txt(facultyObj?.name),
+        degreeProgramId: code(row.degreeProgramId ?? degreeObj?.code),
+        degreeProgramName: txt(degreeObj?.name),
         intakeId,
-        intakeName: collapseSpaces(intakeObject?.name),
+        intakeName: txt(intakeObj?.name),
         termCode: String(row.termCode ?? "").trim().toUpperCase(),
         moduleId,
-        moduleCode: String(row.moduleCode ?? moduleObject?.code ?? "").trim().toUpperCase(),
-        moduleName: collapseSpaces(row.moduleName ?? moduleObject?.name),
-        syllabusVersion: sanitizeSyllabus(row.syllabusVersion),
-        status: sanitizeStatus(row.status),
-        lecturers,
-        labAssistants,
+        moduleCode: String(row.moduleCode ?? moduleObj?.code ?? "").trim().toUpperCase(),
+        moduleName: txt(row.moduleName ?? moduleObj?.name),
+        syllabusVersion: syllabus(row.syllabusVersion),
+        status: status(row.status),
+        lecturers: parseStaff(row.lecturers),
+        labAssistants: parseStaff(row.labAssistants),
+        createdAt: String(row.createdAt ?? ""),
         updatedAt: String(row.updatedAt ?? ""),
       } satisfies OfferingRecord;
     })
     .filter((item): item is OfferingRecord => Boolean(item));
-
   const total = Math.max(0, Number(root?.total) || items.length);
   const page = Math.max(1, Number(root?.page) || 1);
-  const pageSize = [10, 25, 50, 100].includes(Number(root?.pageSize))
-    ? (Number(root?.pageSize) as PageSize)
-    : 10;
+  const pageSize = [10, 25, 50, 100].includes(Number(root?.pageSize)) ? (Number(root?.pageSize) as PageSize) : 10;
+  return { items, total, page, pageSize };
+};
 
-  return {
-    items,
-    total,
-    page,
-    pageSize,
-  };
-}
-
-function parseFaculties(payload: unknown): FacultyOption[] {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
-
-  return payload
+const parseFaculties = (payload: unknown): OfferingFacultyOption[] =>
+  (Array.isArray(payload) ? payload : [])
     .map((item) => {
-      const row = asObject(item);
-      if (!row) {
-        return null;
-      }
-
-      const code = normalizeAcademicCode(row.code);
-      if (!code) {
-        return null;
-      }
-
-      return {
-        code,
-        name: collapseSpaces(row.name),
-      } satisfies FacultyOption;
+      const row = asObj(item);
+      if (!row) return null;
+      const c = code(row.code);
+      return c ? ({ code: c, name: txt(row.name) } satisfies OfferingFacultyOption) : null;
     })
-    .filter((item): item is FacultyOption => Boolean(item));
-}
+    .filter((item): item is OfferingFacultyOption => Boolean(item));
 
-function parseDegrees(payload: unknown): DegreeOption[] {
-  const root = asObject(payload);
+const parseDegrees = (payload: unknown): DegreeOption[] => {
+  const root = asObj(payload);
   const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
-
   return rows
     .map((item) => {
-      const row = asObject(item);
-      if (!row) {
-        return null;
-      }
-
-      const code = normalizeAcademicCode(row.code);
-      const facultyCode = normalizeAcademicCode(row.facultyCode);
-      if (!code || !facultyCode) {
-        return null;
-      }
-
-      return {
-        code,
-        name: collapseSpaces(row.name),
-        facultyCode,
-      } satisfies DegreeOption;
+      const row = asObj(item);
+      if (!row) return null;
+      const c = code(row.code ?? row.id);
+      const f = code(row.facultyCode ?? row.facultyId);
+      return c && f ? ({ code: c, name: txt(row.name), facultyCode: f } satisfies DegreeOption) : null;
     })
     .filter((item): item is DegreeOption => Boolean(item));
-}
+};
 
-function parseIntakes(payload: unknown): IntakeOption[] {
-  const root = asObject(payload);
+const parseIntakes = (payload: unknown): IntakeOption[] => {
+  const root = asObj(payload);
   const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+  const mapped = rows.map((item): IntakeOption | null => {
+      const row = asObj(item);
+      if (!row) return null;
+      const id = sid(row.id ?? row._id);
+      if (!id) return null;
+      const currentTerm = String(row.currentTerm ?? "").trim().toUpperCase();
+      return { id, name: txt(row.name), currentTerm: currentTerm || undefined, facultyCode: code(row.facultyCode ?? row.facultyId), degreeCode: code(row.degreeCode ?? row.degreeId) };
+    });
 
+  return mapped.filter((item): item is IntakeOption => item !== null);
+};
+
+const parseModules = (payload: unknown): OfferingModuleOption[] => {
+  const root = asObj(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
   return rows
     .map((item) => {
-      const row = asObject(item);
-      if (!row) {
-        return null;
-      }
-
-      const id = String(row.id ?? row._id ?? "").trim();
-      if (!id) {
-        return null;
-      }
-
-      return {
-        id,
-        name: collapseSpaces(row.name),
-        facultyCode: normalizeAcademicCode(row.facultyCode ?? row.facultyId),
-        degreeCode: normalizeAcademicCode(row.degreeCode ?? row.degreeId),
-      } satisfies IntakeOption;
+      const row = asObj(item);
+      if (!row) return null;
+      const id = sid(row.id ?? row._id);
+      if (!id) return null;
+      return { id, code: String(row.code ?? "").trim().toUpperCase(), name: txt(row.name), defaultSyllabusVersion: syllabus(row.defaultSyllabusVersion) } satisfies OfferingModuleOption;
     })
-    .filter((item): item is IntakeOption => Boolean(item));
-}
+    .filter((item): item is OfferingModuleOption => Boolean(item));
+};
 
-function parseEligibleStaff(payload: unknown): OfferingStaffItem[] {
-  const root = asObject(payload);
-  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
-  return parseStaffArray(rows);
-}
+const parseEligible = (payload: unknown) => {
+  const root = asObj(payload);
+  return parseStaff(Array.isArray(root?.items) ? root.items : []);
+};
 
-const TERM_OPTIONS: TermCode[] = [
-  "Y1S1",
-  "Y1S2",
-  "Y2S1",
-  "Y2S2",
-  "Y3S1",
-  "Y3S2",
-  "Y4S1",
-  "Y4S2",
-];
+const emptyForm = (): OfferingFormState => ({ facultyId: "", degreeProgramId: "", intakeId: "", termCode: "Y1S1", moduleId: "", syllabusVersion: "NEW", status: "ACTIVE", assignedLecturerIds: [], assignedLabAssistantIds: [] });
+
+function staffChipLabel(staff: OfferingStaffItem[], id: string) {
+  return staff.find((item) => item.id === id)?.fullName ?? id;
+}
 
 export default function ModuleOfferingsPage() {
   const { setActiveWindow } = useAdminContext();
@@ -305,6 +184,7 @@ export default function ModuleOfferingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false);
   const [isLoadingLabAssistants, setIsLoadingLabAssistants] = useState(false);
 
@@ -318,733 +198,343 @@ export default function ModuleOfferingsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
 
-  const [faculties, setFaculties] = useState<FacultyOption[]>([]);
-  const [degrees, setDegrees] = useState<DegreeOption[]>([]);
-  const [intakes, setIntakes] = useState<IntakeOption[]>([]);
+  const [faculties, setFaculties] = useState<OfferingFacultyOption[]>([]);
+  const [filterDegrees, setFilterDegrees] = useState<DegreeOption[]>([]);
+  const [filterIntakes, setFilterIntakes] = useState<IntakeOption[]>([]);
 
+  const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [editTarget, setEditTarget] = useState<OfferingRecord | null>(null);
-  const [formSyllabusVersion, setFormSyllabusVersion] = useState<SyllabusVersion>("NEW");
-  const [formLecturerIds, setFormLecturerIds] = useState<string[]>([]);
-  const [formLabAssistantIds, setFormLabAssistantIds] = useState<string[]>([]);
+  const [form, setForm] = useState<OfferingFormState>(emptyForm());
+  const [modalDegrees, setModalDegrees] = useState<DegreeOption[]>([]);
+  const [modalIntakes, setModalIntakes] = useState<IntakeOption[]>([]);
+  const [modalModules, setModalModules] = useState<OfferingModuleOption[]>([]);
   const [eligibleLecturers, setEligibleLecturers] = useState<OfferingStaffItem[]>([]);
   const [eligibleLabAssistants, setEligibleLabAssistants] = useState<OfferingStaffItem[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<OfferingRecord | null>(null);
 
   const deferredSearch = useDeferredValue(searchQuery);
-  const isOverlayOpen = Boolean(editTarget || deleteTarget);
+  const isModalOpen = Boolean(modalMode);
+  const isOverlayOpen = Boolean(isModalOpen || deleteTarget);
+
+  const loadDegrees = useCallback(async (facultyId: string) => {
+    if (!code(facultyId)) return [] as DegreeOption[];
+    const payload = await readJson<unknown>(await fetch(`/api/degrees?facultyId=${encodeURIComponent(code(facultyId))}&status=ACTIVE`, { cache: "no-store" }));
+    return parseDegrees(payload);
+  }, []);
+
+  const loadIntakes = useCallback(async (facultyId: string, degreeId: string) => {
+    if (!code(degreeId)) return [] as IntakeOption[];
+    const params = new URLSearchParams({ page: "1", pageSize: "100", sort: "az", degreeProgramId: code(degreeId), status: "ACTIVE" });
+    if (code(facultyId)) params.set("facultyId", code(facultyId));
+    const payload = await readJson<unknown>(await fetch(`/api/intakes?${params.toString()}`, { cache: "no-store" }));
+    return parseIntakes(payload);
+  }, []);
+
+  const loadModules = useCallback(async (facultyId: string, degreeProgramId: string, termCode: string) => {
+    if (!code(facultyId) || !code(degreeProgramId) || !String(termCode ?? "").trim()) return [] as OfferingModuleOption[];
+    const params = new URLSearchParams({ facultyCode: code(facultyId), degreeId: code(degreeProgramId), term: String(termCode).trim().toUpperCase() });
+    const payload = await readJson<unknown>(await fetch(`/api/modules/applicable?${params.toString()}`, { cache: "no-store" }));
+    return parseModules(payload);
+  }, []);
+
+  const loadEligible = useCallback(async (kind: "lecturers" | "lab-assistants", facultyId: string, degreeProgramId: string, moduleId: string) => {
+    if (!code(facultyId) || !code(degreeProgramId) || !sid(moduleId)) {
+      if (kind === "lecturers") {
+        setEligibleLecturers([]);
+        setForm((p) => ({ ...p, assignedLecturerIds: [] }));
+      } else {
+        setEligibleLabAssistants([]);
+        setForm((p) => ({ ...p, assignedLabAssistantIds: [] }));
+      }
+      return;
+    }
+
+    if (kind === "lecturers") {
+      setIsLoadingLecturers(true);
+    } else {
+      setIsLoadingLabAssistants(true);
+    }
+
+    try {
+      const params = new URLSearchParams({ facultyId: code(facultyId), degreeProgramId: code(degreeProgramId), moduleId: sid(moduleId) });
+      const payload = await readJson<unknown>(await fetch(`/api/module-offerings/eligible-${kind}?${params.toString()}`, { cache: "no-store" }));
+      const rows = parseEligible(payload);
+      const allowed = new Set(rows.map((r) => r.id));
+      if (kind === "lecturers") {
+        setEligibleLecturers(rows);
+        setForm((p) => ({ ...p, assignedLecturerIds: p.assignedLecturerIds.filter((id) => allowed.has(id)) }));
+      } else {
+        setEligibleLabAssistants(rows);
+        setForm((p) => ({ ...p, assignedLabAssistantIds: p.assignedLabAssistantIds.filter((id) => allowed.has(id)) }));
+      }
+    } catch {
+      if (kind === "lecturers") {
+        setEligibleLecturers([]);
+        setForm((p) => ({ ...p, assignedLecturerIds: [] }));
+      } else {
+        setEligibleLabAssistants([]);
+        setForm((p) => ({ ...p, assignedLabAssistantIds: [] }));
+      }
+    } finally {
+      if (kind === "lecturers") {
+        setIsLoadingLecturers(false);
+      } else {
+        setIsLoadingLabAssistants(false);
+      }
+    }
+  }, []);
 
   const loadOfferings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        sort: sortBy,
-      });
-      if (deferredSearch.trim()) {
-        params.set("search", deferredSearch.trim());
-      }
-      if (facultyFilter) {
-        params.set("facultyId", facultyFilter);
-      }
-      if (degreeFilter) {
-        params.set("degreeProgramId", degreeFilter);
-      }
-      if (intakeFilter) {
-        params.set("intakeId", intakeFilter);
-      }
-      if (termFilter) {
-        params.set("termCode", termFilter);
-      }
-      if (statusFilter) {
-        params.set("status", statusFilter);
-      }
-
-      const response = await fetch(`/api/module-offerings?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const payload = await readJson<unknown>(response);
-      const parsed = parseOfferings(payload);
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sort: sortBy });
+      if (deferredSearch.trim()) params.set("search", deferredSearch.trim());
+      if (facultyFilter) params.set("facultyId", facultyFilter);
+      if (degreeFilter) params.set("degreeProgramId", degreeFilter);
+      if (intakeFilter) params.set("intakeId", intakeFilter);
+      if (termFilter) params.set("termCode", termFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      const parsed = parseOfferings(await readJson<unknown>(await fetch(`/api/module-offerings?${params.toString()}`, { cache: "no-store" })));
       setItems(parsed.items);
       setTotalCount(parsed.total);
     } catch (error) {
-      toast({
-        title: "Failed",
-        message: error instanceof Error ? error.message : "Failed to load module offerings",
-        variant: "error",
-      });
+      toast({ title: "Failed", message: error instanceof Error ? error.message : "Failed to load module offerings", variant: "error" });
       setItems([]);
       setTotalCount(0);
     } finally {
       setIsLoading(false);
     }
-  }, [
-    deferredSearch,
-    degreeFilter,
-    facultyFilter,
-    intakeFilter,
-    page,
-    pageSize,
-    sortBy,
-    statusFilter,
-    termFilter,
-    toast,
-  ]);
+  }, [deferredSearch, degreeFilter, facultyFilter, intakeFilter, page, pageSize, sortBy, statusFilter, termFilter, toast]);
 
-  const loadFaculties = useCallback(async () => {
-    try {
-      const response = await fetch("/api/faculties", { cache: "no-store" });
-      const payload = await readJson<unknown>(response);
-      setFaculties(parseFaculties(payload));
-    } catch {
-      setFaculties([]);
-    }
-  }, []);
-
-  const loadDegrees = useCallback(async (facultyId: string) => {
-    const code = normalizeAcademicCode(facultyId);
-    if (!code) {
-      setDegrees([]);
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `/api/degrees?facultyId=${encodeURIComponent(code)}&status=ACTIVE`,
-        { cache: "no-store" }
-      );
-      const payload = await readJson<unknown>(response);
-      setDegrees(parseDegrees(payload));
-    } catch {
-      setDegrees([]);
-    }
-  }, []);
-
-  const loadIntakes = useCallback(async (facultyId: string, degreeId: string) => {
-    const degreeCode = normalizeAcademicCode(degreeId);
-    if (!degreeCode) {
-      setIntakes([]);
-      return;
-    }
-
-    const params = new URLSearchParams({
-      page: "1",
-      pageSize: "100",
-      sort: "az",
-      degreeProgramId: degreeCode,
-    });
-    const facultyCode = normalizeAcademicCode(facultyId);
-    if (facultyCode) {
-      params.set("facultyId", facultyCode);
-    }
-
-    try {
-      const response = await fetch(`/api/intakes?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const payload = await readJson<unknown>(response);
-      setIntakes(parseIntakes(payload));
-    } catch {
-      setIntakes([]);
-    }
-  }, []);
-
-  const loadEligibleLecturers = useCallback(async (offering: OfferingRecord) => {
-    setIsLoadingLecturers(true);
-    try {
-      const response = await fetch(
-        `/api/module-offerings/${encodeURIComponent(
-          offering.id
-        )}/eligible-lecturers`,
-        { cache: "no-store" }
-      );
-      const payload = await readJson<unknown>(response);
-      setEligibleLecturers(parseEligibleStaff(payload));
-    } catch {
-      setEligibleLecturers([]);
-    } finally {
-      setIsLoadingLecturers(false);
-    }
-  }, []);
-
-  const loadEligibleLabAssistants = useCallback(async (offering: OfferingRecord) => {
-    setIsLoadingLabAssistants(true);
-    try {
-      const response = await fetch(
-        `/api/module-offerings/${encodeURIComponent(
-          offering.id
-        )}/eligible-lab-assistants`,
-        {
-          cache: "no-store",
-        }
-      );
-      const payload = await readJson<unknown>(response);
-      setEligibleLabAssistants(parseEligibleStaff(payload));
-    } catch {
-      setEligibleLabAssistants([]);
-    } finally {
-      setIsLoadingLabAssistants(false);
-    }
-  }, []);
+  useEffect(() => { void loadOfferings(); }, [loadOfferings]);
+  useEffect(() => { void (async () => {
+    try { setFaculties(parseFaculties(await readJson<unknown>(await fetch("/api/faculties", { cache: "no-store" })))); }
+    catch { setFaculties([]); }
+  })(); }, []);
 
   useEffect(() => {
-    void loadOfferings();
-  }, [loadOfferings]);
-
-  useEffect(() => {
-    void loadFaculties();
-  }, [loadFaculties]);
-
-  useEffect(() => {
-    if (!facultyFilter) {
-      setDegrees([]);
-      setDegreeFilter("");
-      setIntakes([]);
-      setIntakeFilter("");
-      return;
-    }
-
-    setDegreeFilter("");
-    setIntakes([]);
-    setIntakeFilter("");
-    void loadDegrees(facultyFilter);
+    if (!facultyFilter) { setFilterDegrees([]); setDegreeFilter(""); setFilterIntakes([]); setIntakeFilter(""); return; }
+    setDegreeFilter(""); setFilterIntakes([]); setIntakeFilter("");
+    void loadDegrees(facultyFilter).then(setFilterDegrees).catch(() => setFilterDegrees([]));
   }, [facultyFilter, loadDegrees]);
 
   useEffect(() => {
-    if (!degreeFilter) {
-      setIntakes([]);
-      setIntakeFilter("");
-      return;
-    }
-
+    if (!degreeFilter) { setFilterIntakes([]); setIntakeFilter(""); return; }
     setIntakeFilter("");
-    void loadIntakes(facultyFilter, degreeFilter);
+    void loadIntakes(facultyFilter, degreeFilter).then(setFilterIntakes).catch(() => setFilterIntakes([]));
   }, [degreeFilter, facultyFilter, loadIntakes]);
 
   useEffect(() => {
-    if (!isOverlayOpen) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
+    if (!isOverlayOpen) return;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [isOverlayOpen]);
 
   useEffect(() => {
-    if (!editTarget) {
-      setActiveWindow("List");
-      return;
-    }
+    if (modalMode === "add") { setActiveWindow("Create"); return; }
+    if (modalMode === "edit") { setActiveWindow("Edit"); return; }
+    setActiveWindow("List");
+  }, [modalMode, setActiveWindow]);
 
-    setActiveWindow("Edit");
-  }, [editTarget, setActiveWindow]);
-
-  useEffect(() => {
-    return () => {
-      setActiveWindow(null);
-    };
-  }, [setActiveWindow]);
+  useEffect(() => () => setActiveWindow(null), [setActiveWindow]);
 
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, pageCount);
 
+  const closeModal = () => {
+    if (isSaving) return;
+    setModalMode(null); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+  };
+
+  const openAddModal = () => { setModalMode("add"); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]); };
+
   const openEditModal = (offering: OfferingRecord) => {
+    setModalMode("edit");
     setEditTarget(offering);
-    setFormSyllabusVersion(offering.syllabusVersion);
-    setFormLecturerIds(offering.lecturers.map((row) => row.id));
-    setFormLabAssistantIds(offering.labAssistants.map((row) => row.id));
-    setEligibleLecturers([]);
-    setEligibleLabAssistants([]);
-    void loadEligibleLecturers(offering);
-    void loadEligibleLabAssistants(offering);
+    setForm({ facultyId: offering.facultyId, degreeProgramId: offering.degreeProgramId, intakeId: offering.intakeId, termCode: offering.termCode, moduleId: offering.moduleId, syllabusVersion: offering.syllabusVersion, status: offering.status, assignedLecturerIds: offering.lecturers.map((r) => r.id), assignedLabAssistantIds: offering.labAssistants.map((r) => r.id) });
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    void loadDegrees(offering.facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
+    void loadIntakes(offering.facultyId, offering.degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
+    setIsLoadingModules(true);
+    void loadModules(offering.facultyId, offering.degreeProgramId, offering.termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
+    void loadEligible("lecturers", offering.facultyId, offering.degreeProgramId, offering.moduleId);
+    void loadEligible("lab-assistants", offering.facultyId, offering.degreeProgramId, offering.moduleId);
   };
 
-  const closeEditModal = () => {
-    if (isSaving) {
-      return;
-    }
-
-    setEditTarget(null);
-    setEligibleLecturers([]);
-    setEligibleLabAssistants([]);
+  const handleFacultyChange = (value: string) => {
+    const facultyId = code(value);
+    setForm((p) => ({ ...p, facultyId, degreeProgramId: "", intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    if (facultyId) void loadDegrees(facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
   };
 
-  const toggleLecturer = (lecturerId: string) => {
-    setFormLecturerIds((previous) => {
-      const removing = previous.includes(lecturerId);
-      const next = removing
-        ? previous.filter((item) => item !== lecturerId)
-        : [...previous, lecturerId];
-      const name =
-        eligibleLecturers.find((row) => row.id === lecturerId)?.fullName ??
-        editTarget?.lecturers.find((row) => row.id === lecturerId)?.fullName ??
-        "Lecturer";
-      toast({
-        title: removing ? "Lecturer unassigned" : "Lecturer assigned",
-        message: name,
-        variant: "info",
-      });
-      return next;
-    });
+  const handleDegreeChange = (value: string) => {
+    const degreeProgramId = code(value);
+    setForm((p) => ({ ...p, degreeProgramId, intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
+    setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    if (!form.facultyId || !degreeProgramId) return;
+    void loadIntakes(form.facultyId, degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
+    setIsLoadingModules(true);
+    void loadModules(form.facultyId, degreeProgramId, form.termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
   };
 
-  const toggleLabAssistant = (labAssistantId: string) => {
-    setFormLabAssistantIds((previous) => {
-      const removing = previous.includes(labAssistantId);
-      const next = removing
-        ? previous.filter((item) => item !== labAssistantId)
-        : [...previous, labAssistantId];
-      const name =
-        eligibleLabAssistants.find((row) => row.id === labAssistantId)?.fullName ??
-        editTarget?.labAssistants.find((row) => row.id === labAssistantId)?.fullName ??
-        "Lab assistant";
-      toast({
-        title: removing ? "Lab assistant unassigned" : "Lab assistant assigned",
-        message: name,
-        variant: "info",
-      });
-      return next;
-    });
+  const handleTermChange = (value: string) => {
+    const termCode = String(value ?? "").trim().toUpperCase();
+    setForm((p) => ({ ...p, termCode, moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
+    setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    if (!form.facultyId || !form.degreeProgramId || !termCode) return;
+    setIsLoadingModules(true);
+    void loadModules(form.facultyId, form.degreeProgramId, termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
   };
+
+  const handleModuleChange = (value: string) => {
+    const moduleId = sid(value);
+    const selected = modalModules.find((m) => m.id === moduleId) ?? null;
+    setForm((p) => ({ ...p, moduleId, assignedLecturerIds: [], assignedLabAssistantIds: [], syllabusVersion: modalMode === "add" && selected ? selected.defaultSyllabusVersion : p.syllabusVersion }));
+    if (!form.facultyId || !form.degreeProgramId || !moduleId) { setEligibleLecturers([]); setEligibleLabAssistants([]); return; }
+    void loadEligible("lecturers", form.facultyId, form.degreeProgramId, moduleId);
+    void loadEligible("lab-assistants", form.facultyId, form.degreeProgramId, moduleId);
+  };
+
+  const toggleLecturer = (id: string) => setForm((p) => ({ ...p, assignedLecturerIds: p.assignedLecturerIds.includes(id) ? p.assignedLecturerIds.filter((x) => x !== id) : [...p.assignedLecturerIds, id] }));
+  const toggleLab = (id: string) => setForm((p) => ({ ...p, assignedLabAssistantIds: p.assignedLabAssistantIds.includes(id) ? p.assignedLabAssistantIds.filter((x) => x !== id) : [...p.assignedLabAssistantIds, id] }));
 
   const saveOffering = async () => {
-    if (!editTarget) {
+    if (!modalMode) return;
+    if (!form.facultyId || !form.degreeProgramId || !form.intakeId || !form.termCode || !form.moduleId) {
+      toast({ title: "Failed", message: "Faculty, degree, intake, term, and module are required", variant: "error" });
       return;
     }
 
     setIsSaving(true);
     try {
-      await readJson<unknown>(
-        await fetch(`/api/module-offerings/${encodeURIComponent(editTarget.id)}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            syllabusVersion: formSyllabusVersion,
-            assignedLecturerIds: formLecturerIds,
-            assignedLabAssistantIds: formLabAssistantIds,
-          }),
-        })
-      );
-
-      toast({
-        title: "Saved",
-        message: "Offering updated",
-        variant: "success",
-      });
-      closeEditModal();
+      const payload = { facultyId: form.facultyId, degreeProgramId: form.degreeProgramId, intakeId: form.intakeId, termCode: form.termCode, moduleId: form.moduleId, syllabusVersion: form.syllabusVersion, status: form.status, assignedLecturerIds: form.assignedLecturerIds, assignedLabAssistantIds: form.assignedLabAssistantIds };
+      if (modalMode === "add") {
+        await readJson<unknown>(await fetch("/api/module-offerings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }));
+      } else {
+        if (!editTarget) return;
+        await readJson<unknown>(await fetch(`/api/module-offerings/${encodeURIComponent(editTarget.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }));
+      }
+      toast({ title: "Saved", message: modalMode === "add" ? "Module offering created" : "Module offering updated", variant: "success" });
+      closeModal();
       await loadOfferings();
     } catch (error) {
-      toast({
-        title: "Failed",
-        message: error instanceof Error ? error.message : "Failed to update offering",
-        variant: "error",
-      });
+      toast({ title: "Failed", message: error instanceof Error ? error.message : "Failed to save module offering", variant: "error" });
     } finally {
       setIsSaving(false);
     }
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget) {
-      return;
-    }
-
+    if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await readJson<unknown>(
-        await fetch(`/api/module-offerings/${encodeURIComponent(deleteTarget.id)}`, {
-          method: "DELETE",
-        })
-      );
-      toast({
-        title: "Deleted",
-        message: "Module offering deleted",
-        variant: "success",
-      });
+      await readJson<unknown>(await fetch(`/api/module-offerings/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" }));
+      toast({ title: "Deleted", message: "Module offering deleted", variant: "success" });
       setDeleteTarget(null);
       await loadOfferings();
     } catch (error) {
-      toast({
-        title: "Failed",
-        message: error instanceof Error ? error.message : "Failed to delete offering",
-        variant: "error",
-      });
+      toast({ title: "Failed", message: error instanceof Error ? error.message : "Failed to delete module offering", variant: "error" });
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const filteredDegreeOptions = useMemo(
-    () => degrees.filter((item) => !facultyFilter || item.facultyCode === facultyFilter),
-    [degrees, facultyFilter]
-  );
-
-  const filteredIntakeOptions = useMemo(
-    () =>
-      intakes.filter(
-        (item) =>
-          (!facultyFilter || item.facultyCode === facultyFilter) &&
-          (!degreeFilter || item.degreeCode === degreeFilter)
-      ),
-    [degreeFilter, facultyFilter, intakes]
-  );
+  const modalDegreeOptions = useMemo(() => modalDegrees.filter((d) => !form.facultyId || d.facultyCode === form.facultyId), [modalDegrees, form.facultyId]);
+  const modalIntakeOptions = useMemo(() => modalIntakes.filter((i) => (!form.facultyId || i.facultyCode === form.facultyId) && (!form.degreeProgramId || i.degreeCode === form.degreeProgramId)), [modalIntakes, form.facultyId, form.degreeProgramId]);
+  const contextLecturers = useMemo(() => [...eligibleLecturers, ...(editTarget?.lecturers ?? [])], [eligibleLecturers, editTarget]);
+  const contextLab = useMemo(() => [...eligibleLabAssistants, ...(editTarget?.labAssistants ?? [])], [eligibleLabAssistants, editTarget]);
 
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageHeader
-        actions={
-          <Button
-            className="h-11 min-w-[188px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
-            onClick={() =>
-              toast({
-                title: "Info",
-                message: "Offerings are auto-created from intake module sync.",
-                variant: "info",
-              })
-            }
-          >
-            <Plus size={16} />
-            Add Module Offering
-          </Button>
-        }
+        actions={<Button className="h-11 min-w-[188px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]" onClick={openAddModal}><Plus size={16} />Add Module Offering</Button>}
         description="Assign lecturers and lab assistants to term-based module offerings."
         title="Module Offerings"
       />
 
-      <Card
-        className={cn(
-          "transition-all",
-          isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : ""
-        )}
-      >
+      <Card className={isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px] transition-all" : "transition-all"}>
         <div className="flex flex-col gap-4 border-b border-border pb-5">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(6,minmax(0,1fr))_220px]">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Search
-              </label>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50"
-                  size={16}
-                />
-                <Input
-                  className="h-12 pl-10"
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search module code or name"
-                  value={searchQuery}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Faculty
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  setFacultyFilter(normalizeAcademicCode(event.target.value));
-                  setPage(1);
-                }}
-                value={facultyFilter}
-              >
-                <option value="">All</option>
-                {faculties.map((faculty) => (
-                  <option key={faculty.code} value={faculty.code}>
-                    {faculty.code}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Degree
-              </label>
-              <Select
-                className="h-12"
-                disabled={!facultyFilter}
-                onChange={(event) => {
-                  setDegreeFilter(normalizeAcademicCode(event.target.value));
-                  setPage(1);
-                }}
-                value={degreeFilter}
-              >
-                <option value="">All</option>
-                {filteredDegreeOptions.map((degree) => (
-                  <option key={degree.code} value={degree.code}>
-                    {degree.code}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Intake
-              </label>
-              <Select
-                className="h-12"
-                disabled={!degreeFilter}
-                onChange={(event) => {
-                  setIntakeFilter(String(event.target.value ?? "").trim());
-                  setPage(1);
-                }}
-                value={intakeFilter}
-              >
-                <option value="">All</option>
-                {filteredIntakeOptions.map((intake) => (
-                  <option key={intake.id} value={intake.id}>
-                    {intake.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Term
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  const value = String(event.target.value ?? "")
-                    .trim()
-                    .toUpperCase() as "" | TermCode;
-                  setTermFilter(value);
-                  setPage(1);
-                }}
-                value={termFilter}
-              >
-                <option value="">All</option>
-                {TERM_OPTIONS.map((term) => (
-                  <option key={term} value={term}>
-                    {term}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Status
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as "" | OfferingStatus);
-                  setPage(1);
-                }}
-                value={statusFilter}
-              >
-                <option value="">All</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Sort
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  setSortBy(event.target.value as SortOption);
-                  setPage(1);
-                }}
-                value={sortBy}
-              >
-                <option value="updated">Recently Updated</option>
-                <option value="module">Module Code</option>
-                <option value="term">Term</option>
-              </Select>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-                Total Offerings
-              </p>
-              <p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p>
-            </div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Search</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50" size={16} /><Input className="h-12 pl-10" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} placeholder="Search module code or name" /></div></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Faculty</label><Select className="h-12" value={facultyFilter} onChange={(e) => { setFacultyFilter(code(e.target.value)); setPage(1); }}><option value="">All</option>{faculties.map((f) => <option key={f.code} value={f.code}>{f.code}</option>)}</Select></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Degree</label><Select className="h-12" disabled={!facultyFilter} value={degreeFilter} onChange={(e) => { setDegreeFilter(code(e.target.value)); setPage(1); }}><option value="">All</option>{filterDegrees.filter((d) => !facultyFilter || d.facultyCode === facultyFilter).map((d) => <option key={d.code} value={d.code}>{d.code}</option>)}</Select></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Intake</label><Select className="h-12" disabled={!degreeFilter} value={intakeFilter} onChange={(e) => { setIntakeFilter(sid(e.target.value)); setPage(1); }}><option value="">All</option>{filterIntakes.filter((i) => (!facultyFilter || i.facultyCode === facultyFilter) && (!degreeFilter || i.degreeCode === degreeFilter)).map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</Select></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Semester / Term</label><Select className="h-12" value={termFilter} onChange={(e) => { setTermFilter(String(e.target.value ?? "").trim().toUpperCase() as "" | TermCode); setPage(1); }}><option value="">All</option>{TERM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</Select></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Status</label><Select className="h-12" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as "" | OfferingStatus); setPage(1); }}><option value="">All</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></Select></div>
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Sort</label><Select className="h-12" value={sortBy} onChange={(e) => { setSortBy(e.target.value as SortOption); setPage(1); }}><option value="updated">Recently Updated</option><option value="module">Module Code</option><option value="term">Term</option></Select></div>
+            <div className="rounded-2xl border border-border bg-tint px-4 py-3"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Total Offerings</p><p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p></div>
           </div>
         </div>
 
         <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1340px] text-left text-sm">
-            <thead className="border-b border-border bg-tint">
-              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                <th className="px-4 py-3">Module</th>
-                <th className="px-4 py-3">Faculty</th>
-                <th className="px-4 py-3">Degree</th>
-                <th className="px-4 py-3">Intake</th>
-                <th className="px-4 py-3">Term</th>
-                <th className="px-4 py-3">Syllabus</th>
-                <th className="px-4 py-3">Lecturers</th>
-                <th className="px-4 py-3">Lab Assistants</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
+          <table className="w-full min-w-[1540px] text-left text-sm">
+            <thead className="border-b border-border bg-tint"><tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60"><th className="px-4 py-3">Module</th><th className="px-4 py-3">Faculty</th><th className="px-4 py-3">Degree</th><th className="px-4 py-3">Intake</th><th className="px-4 py-3">Semester / Term</th><th className="px-4 py-3">Syllabus</th><th className="px-4 py-3">Lecturers</th><th className="px-4 py-3">Lab Assistants</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Last Updated</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
             <tbody>
-              {isLoading ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={10}>
-                    Loading module offerings...
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={10}>
-                    No module offerings match the current filters.
-                  </td>
-                </tr>
-              ) : (
-                items.map((item) => (
-                  <tr className="border-b border-border/70 hover:bg-tint" key={item.id}>
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-heading">{item.moduleCode}</p>
-                      <p className="text-text/78">{item.moduleName}</p>
-                      <p className="mt-1 text-xs text-text/60">
-                        Updated {formatDate(item.updatedAt)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4 text-text/78">{item.facultyId || "—"}</td>
-                    <td className="px-4 py-4 text-text/78">{item.degreeProgramId || "—"}</td>
-                    <td className="px-4 py-4 text-text/78">{item.intakeName || item.intakeId}</td>
-                    <td className="px-4 py-4 text-text/78">{item.termCode || "—"}</td>
-                    <td className="px-4 py-4">
-                      <Badge variant={item.syllabusVersion === "OLD" ? "warning" : "primary"}>
-                        {item.syllabusVersion}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-4 text-text/78">
-                      <p className="font-semibold text-heading">{item.lecturers.length}</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {item.lecturers.slice(0, 2).map((lecturer) => (
-                          <span
-                            className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70"
-                            key={lecturer.id}
-                          >
-                            {lecturer.fullName}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-text/78">
-                      <p className="font-semibold text-heading">{item.labAssistants.length}</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {item.labAssistants.slice(0, 2).map((labAssistant) => (
-                          <span
-                            className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70"
-                            key={labAssistant.id}
-                          >
-                            {labAssistant.fullName}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>
-                        {item.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          aria-label={`Edit ${item.moduleCode} offering`}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                          onClick={() => openEditModal(item)}
-                          type="button"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          aria-label={`Delete ${item.moduleCode} offering`}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                          onClick={() => setDeleteTarget(item)}
-                          type="button"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              {isLoading ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={11}>Loading module offerings...</td></tr> : null}
+              {!isLoading && items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={11}>No module offerings match the current filters.</td></tr> : null}
+              {!isLoading ? items.map((item) => {
+                const l2 = item.lecturers.slice(0, 2); const a2 = item.labAssistants.slice(0, 2);
+                return <tr className="border-b border-border/70 hover:bg-tint" key={item.id}>
+                  <td className="px-4 py-4"><p className="font-semibold text-heading">{item.moduleCode}</p><p className="text-text/78">{item.moduleName}</p><p className="mt-1 text-xs text-text/60">Updated {fmtDate(item.updatedAt)}</p></td>
+                  <td className="px-4 py-4 text-text/78">{item.facultyId || "—"}</td><td className="px-4 py-4 text-text/78">{item.degreeProgramId || "—"}</td><td className="px-4 py-4 text-text/78">{item.intakeName || item.intakeId}</td><td className="px-4 py-4 text-text/78">{item.termCode || "—"}</td>
+                  <td className="px-4 py-4"><Badge variant={item.syllabusVersion === "OLD" ? "warning" : "primary"}>{item.syllabusVersion}</Badge></td>
+                  <td className="px-4 py-4 text-text/78"><p className="font-semibold text-heading">{item.lecturers.length}</p><div className="mt-1 flex flex-wrap gap-1.5">{l2.map((x) => <span key={x.id} className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70">{x.fullName}</span>)}{item.lecturers.length > 2 ? <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">+{item.lecturers.length - 2}</span> : null}</div></td>
+                  <td className="px-4 py-4 text-text/78"><p className="font-semibold text-heading">{item.labAssistants.length}</p><div className="mt-1 flex flex-wrap gap-1.5">{a2.map((x) => <span key={x.id} className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70">{x.fullName}</span>)}{item.labAssistants.length > 2 ? <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">+{item.labAssistants.length - 2}</span> : null}</div></td>
+                  <td className="px-4 py-4"><Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>{item.status}</Badge></td>
+                  <td className="px-4 py-4 text-text/70">{fmtDate(item.updatedAt)}</td>
+                  <td className="px-4 py-4"><div className="flex justify-end gap-2"><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Edit ${item.moduleCode} offering`} onClick={() => openEditModal(item)}><Pencil size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Delete ${item.moduleCode} offering`} onClick={() => setDeleteTarget(item)}><Trash2 size={16} /></button></div></td>
+                </tr>;
+              }) : null}
             </tbody>
           </table>
         </div>
-        <TablePagination
-          onPageChange={setPage}
-          onPageSizeChange={(value) => {
-            setPageSize(value as PageSize);
-            setPage(1);
-          }}
-          page={safePage}
-          pageCount={pageCount}
-          pageSize={pageSize}
-          totalItems={totalCount}
-        />
+
+        <TablePagination page={safePage} pageCount={pageCount} pageSize={pageSize} totalItems={totalCount} onPageChange={setPage} onPageSizeChange={(v) => { setPageSize(v as PageSize); setPage(1); }} />
       </Card>
 
       <EditOfferingModal
-        key={editTarget?.id ?? "offering-modal"}
-        assignedLabAssistantIds={formLabAssistantIds}
-        assignedLecturerIds={formLecturerIds}
-        eligibleLabAssistants={eligibleLabAssistants}
-        eligibleLecturers={eligibleLecturers}
-        loadingLabAssistants={isLoadingLabAssistants}
-        loadingLecturers={isLoadingLecturers}
-        offering={editTarget}
-        onClose={closeEditModal}
-        onSave={() => {
-          void saveOffering();
-        }}
-        onSyllabusVersionChange={setFormSyllabusVersion}
-        onToggleLabAssistant={toggleLabAssistant}
-        onToggleLecturer={toggleLecturer}
-        open={Boolean(editTarget)}
+        open={isModalOpen}
+        mode={modalMode ?? "add"}
         saving={isSaving}
-        syllabusVersion={formSyllabusVersion}
+        loadingModules={isLoadingModules}
+        loadingLecturers={isLoadingLecturers}
+        loadingLabAssistants={isLoadingLabAssistants}
+        offering={editTarget ? { ...editTarget, lecturers: editTarget.lecturers.map((r) => ({ ...r, fullName: staffChipLabel(contextLecturers, r.id) })), labAssistants: editTarget.labAssistants.map((r) => ({ ...r, fullName: staffChipLabel(contextLab, r.id) })) } : null}
+        form={form}
+        facultyOptions={faculties}
+        degreeOptions={modalDegreeOptions}
+        intakeOptions={modalIntakeOptions}
+        moduleOptions={modalModules}
+        termOptions={TERM_OPTIONS}
+        eligibleLecturers={eligibleLecturers}
+        eligibleLabAssistants={eligibleLabAssistants}
+        onFacultyChange={handleFacultyChange}
+        onDegreeChange={handleDegreeChange}
+        onIntakeChange={(v) => setForm((p) => ({ ...p, intakeId: sid(v) }))}
+        onTermChange={handleTermChange}
+        onModuleChange={handleModuleChange}
+        onSyllabusVersionChange={(v) => setForm((p) => ({ ...p, syllabusVersion: v }))}
+        onStatusChange={(v) => setForm((p) => ({ ...p, status: v }))}
+        onToggleLecturer={toggleLecturer}
+        onToggleLabAssistant={toggleLab}
+        onClose={closeModal}
+        onSave={() => { void saveOffering(); }}
       />
 
       <ConfirmDeleteOfferingModal
-        deleting={isDeleting}
-        message="This will remove the module offering assignment for this intake term."
-        onClose={() => {
-          if (isDeleting) {
-            return;
-          }
-
-          setDeleteTarget(null);
-        }}
-        onConfirm={() => {
-          void confirmDelete();
-        }}
         open={Boolean(deleteTarget)}
-        targetLabel={
-          deleteTarget
-            ? `${deleteTarget.moduleCode} / ${deleteTarget.intakeName || deleteTarget.intakeId} / ${deleteTarget.termCode}`
-            : ""
-        }
+        deleting={isDeleting}
         title="Delete module offering?"
+        message="This will remove the selected module offering and its lecturer/lab assistant assignments."
+        targetLabel={deleteTarget ? `${deleteTarget.moduleCode} / ${deleteTarget.intakeName || deleteTarget.intakeId} / ${deleteTarget.termCode}` : ""}
+        onClose={() => { if (!isDeleting) setDeleteTarget(null); }}
+        onConfirm={() => { void confirmDelete(); }}
       />
 
-      {isSaving || isDeleting ? (
-        <div className="pointer-events-none fixed bottom-4 left-4 z-[98] inline-flex items-center gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-xs font-semibold text-text/70 shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
-          <Loader2 className="animate-spin" size={14} />
-          Processing...
-        </div>
-      ) : null}
+      {isSaving || isDeleting ? <div className="pointer-events-none fixed bottom-4 left-4 z-[98] inline-flex items-center gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-xs font-semibold text-text/70 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"><Loader2 className="animate-spin" size={14} />Processing...</div> : null}
     </div>
   );
 }
