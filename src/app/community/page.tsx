@@ -168,12 +168,6 @@ const MOCK_MEMBERS = [
     { id: "4", name: "Nimal Perera", role: "Contributor" },
 ];
 
-const RECENT_ACTIVITY = [
-    { id: "a1", content: 'New event: "Hackathon Prep"', time: "14 days ago" },
-    { id: "a2", content: 'Discussion created: "Career Pathways"', time: "10 days ago" },
-    { id: "a3", content: 'Resource uploaded for "Data Structures"', time: "7 days ago" },
-];
-
 const categoryLabel: Record<(typeof CATEGORIES)[number], string> = {
     all: "All",
     lost_item: "Lost Items",
@@ -197,18 +191,29 @@ export default function CommunityPage() {
     const [isMembersVisible, setIsMembersVisible] = useState(true);
     const [isRecentVisible, setIsRecentVisible] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [titleSearch, setTitleSearch] = useState("");
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
     const [newReplyContent, setNewReplyContent] = useState("");
     const [actionError, setActionError] = useState("");
+    const recentPosts = useMemo(() => posts.slice(0, 5), [posts]);
 
     const filteredPosts = useMemo(() => {
         const byCategory = posts.filter((post) => activeCategory === "all" || post.category === activeCategory);
+        const titleQuery = titleSearch.trim().toLowerCase();
+        const byTitle =
+            titleQuery.length === 0
+                ? byCategory
+                : byCategory.filter(
+                    // Title-only search filter (requested)
+                    (post) => post.title.toLowerCase().includes(titleQuery)
+                );
+
         const query = searchQuery.trim().toLowerCase();
-        if (!query) return byCategory;
-        return byCategory.filter((post) =>
+        if (!query) return byTitle;
+        return byTitle.filter((post) =>
             `${post.title} ${post.content} ${post.author} ${post.category}`.toLowerCase().includes(query)
         );
-    }, [activeCategory, posts, searchQuery]);
+    }, [activeCategory, posts, searchQuery, titleSearch]);
 
     const loadRepliesForPost = async (postId: string) => {
         try {
@@ -228,6 +233,18 @@ export default function CommunityPage() {
             // Keep existing replies if DB read fails.
         }
     };
+
+    const handleJumpToPost = (postId: string) => {
+        setExpandedPostId(postId);
+        setNewReplyContent("");
+        void loadRepliesForPost(postId);
+        const el = document.getElementById(`post-${postId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    };
+
+    //filter posts by category
 
     useEffect(() => {
         const mapCategory = (category: ApiPost["category"]): Post["category"] => {
@@ -521,14 +538,14 @@ export default function CommunityPage() {
                             <span className="text-lg font-bold tracking-tight text-slate-800">Community</span>
                         </div>
                     </div>
-
+{/*search bar  */ }
                     <div className="hidden w-full max-w-2xl items-center gap-2 md:flex">
                         <div className="flex h-10 flex-1 items-center rounded-full border border-blue-200 bg-white/90 px-4">
                             <Search size={18} className="text-slate-500" />
                             <input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search community posts"
+                                placeholder="Search community post's title"
                                 className="ml-3 w-full bg-transparent text-sm text-slate-700 outline-none"
                             />
                         </div>
@@ -604,11 +621,11 @@ export default function CommunityPage() {
                 )}
 
                 <aside
-                    className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:static lg:translate-x-0 ${
+                    className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:top-16 lg:translate-x-0 ${
                         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:hidden"
                     }`}
                 >
-                    <div className="flex h-full flex-col gap-3">
+                    <div className="flex h-full flex-col">
                         <div className="space-y-1">
                             <Link href="/community" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
                                 <Home size={18} /> Home
@@ -617,17 +634,12 @@ export default function CommunityPage() {
                                 <User size={18} /> Profile
                             </Link>
                             
-                            <button
-                                type="button"
-                                onClick={() => setSidebarOpen(false)}
-                                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-blue-100 lg:hidden"
-                            >
-                                <X size={18} /> Hide Menu
-                            </button>
+                            
                         </div>
 
-                        <div className="h-px bg-blue-100" />
+                        <div className="my-3 h-px bg-blue-100" />
 
+                        <div className="flex-1 space-y-3 overflow-y-auto pr-1">
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
                                 type="button"
@@ -640,7 +652,7 @@ export default function CommunityPage() {
                                 {isMembersVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                             {isMembersVisible && (
-                                <div className="mt-3 space-y-2">
+                                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
                                     {MOCK_MEMBERS.map((member) => (
                                         <div key={member.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50">
                                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
@@ -663,20 +675,33 @@ export default function CommunityPage() {
                                 className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
                             >
                                 <span className="flex items-center gap-2">
-                                    <Clock size={16} /> Recent Status
+                                    <Clock size={16} /> Recent Posts
                                 </span>
                                 {isRecentVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
                             {isRecentVisible && (
-                                <div className="mt-3 space-y-2">
-                                    {RECENT_ACTIVITY.map((activity) => (
-                                        <div key={activity.id} className="rounded-lg px-2 py-1.5 hover:bg-blue-50">
-                                            <p className="text-sm leading-snug text-slate-700">{activity.content}</p>
-                                            <p className="mt-1 text-xs text-slate-500">{activity.time}</p>
-                                        </div>
-                                    ))}
+                                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
+                                    
+                                    {recentPosts.length === 0 ? (
+                                        <p className="text-xs text-slate-500">No posts yet.</p>
+                                    ) : (
+                                        recentPosts.map((post) => (
+                                            <button
+                                                key={post.id}
+                                                type="button"
+                                                onClick={() => handleJumpToPost(post.id)}
+                                                className="w-full rounded-lg px-2 py-1.5 text-left hover:bg-blue-50"
+                                            >
+                                                <p className="text-sm font-semibold leading-snug text-slate-800 line-clamp-2">
+                                                    {post.title}
+                                                </p>
+                                                <p className="mt-1 text-xs text-slate-500">{post.createdAt}</p>
+                                            </button>
+                                        ))
+                                    )}
                                 </div>
                             )}
+                        </div>
                         </div>
 
                         <button
@@ -718,7 +743,11 @@ export default function CommunityPage() {
                     ) : (
                         <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
                             {filteredPosts.map((post) => (
-                                <Card key={post.id} className="overflow-hidden rounded-2xl border border-blue-100 bg-white/95 shadow-none">
+                                <Card
+                                    key={post.id}
+                                    id={`post-${post.id}`}
+                                    className="overflow-hidden rounded-2xl border border-blue-100 bg-white/95 shadow-none"
+                                >
                                     <div className={`relative h-44 bg-gradient-to-r ${thumbnailStyle[post.category]}`}>
                                         <div className="absolute inset-0 bg-blue-900/20" />
                                         <div className="absolute bottom-3 left-3 rounded-md bg-slate-900/80 px-2 py-1 text-xs font-semibold text-white">
