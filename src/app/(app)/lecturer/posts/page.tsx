@@ -5,8 +5,8 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import { lecturerPosts } from "@/lib/mockData";
-import type { PostItem } from "@/lib/mockData";
+import { lecturerPosts } from "@/models/mockData";
+import type { PostItem } from "@/models/mockData";
 
 export default function LecturerPostsPage() {
   const [posts, setPosts] = useState<PostItem[]>(lecturerPosts);
@@ -73,3 +73,4 @@ export default function LecturerPostsPage() {
     </div>
   );
 }
+

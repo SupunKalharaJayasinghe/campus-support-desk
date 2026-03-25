@@ -2,14 +2,14 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Intake";
 import "@/models/ModuleOffering";
-import { findDegreeProgram } from "@/lib/degree-program-store";
-import { findFaculty } from "@/lib/faculty-store";
-import { findIntakeById } from "@/lib/intake-store";
+import { findDegreeProgram } from "@/models/degree-program-store";
+import { findFaculty } from "@/models/faculty-store";
+import { findIntakeById } from "@/models/intake-store";
 import {
   listModuleOfferingsByModuleId,
   type ModuleOfferingRecord,
-} from "@/lib/module-offering-store";
-import { connectMongoose } from "@/lib/mongoose";
+} from "@/models/module-offering-store";
+import { connectMongoose } from "@/models/mongoose";
 import { IntakeModel } from "@/models/Intake";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 

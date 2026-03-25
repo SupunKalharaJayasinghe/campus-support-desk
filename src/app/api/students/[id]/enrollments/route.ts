@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/Enrollment";
 import "@/models/Student";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   DUPLICATE_ENROLLMENT_MESSAGE,
   addEnrollmentToStudentInMemory,
@@ -15,7 +15,7 @@ import {
   validateStudentRelations,
   type EnrollmentPersistedRecord,
   type EnrollmentWriteInput,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
 

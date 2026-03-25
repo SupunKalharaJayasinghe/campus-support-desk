@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Enrollment";
 import "@/models/Student";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   decorateEnrollmentRecord,
   deleteEnrollmentInMemory,
@@ -14,7 +14,7 @@ import {
   updateEnrollmentInMemory,
   validateStudentRelations,
   type EnrollmentPersistedRecord,
-} from "@/lib/student-registration";
+} from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
 

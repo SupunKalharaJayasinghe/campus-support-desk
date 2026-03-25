@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
 import "@/models/ModuleOffering";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   deleteLabAssistantInMemory,
   findLabAssistantInMemoryById,
@@ -18,9 +18,9 @@ import {
   validateLabAssistantEligibility,
   type LabAssistantPersistedRecord,
   type LabAssistantStatus,
-} from "@/lib/lab-assistant-store";
-import { listModuleOfferingsByLabAssistantId } from "@/lib/module-offering-store";
-import { getMongoDuplicateField } from "@/lib/student-registration";
+} from "@/models/lab-assistant-store";
+import { listModuleOfferingsByLabAssistantId } from "@/models/module-offering-store";
+import { getMongoDuplicateField } from "@/models/student-registration";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";

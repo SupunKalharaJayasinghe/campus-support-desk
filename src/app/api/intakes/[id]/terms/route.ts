@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   getIntakeTerms,
   sanitizeDefaultWeeksPerTerm,
@@ -10,7 +10,7 @@ import {
   sanitizeToggle,
   updateIntakeTerms,
   type IntakeTermScheduleInput,
-} from "@/lib/intake-store";
+} from "@/models/intake-store";
 
 export async function GET(
   _request: Request,

@@ -4,8 +4,8 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { lecturerBookingRequests } from "@/lib/mockData";
-import type { LecturerBookingRequest } from "@/lib/mockData";
+import { lecturerBookingRequests } from "@/models/mockData";
+import type { LecturerBookingRequest } from "@/models/mockData";
 
 function badgeVariant(status: LecturerBookingRequest["status"]) {
   if (status === "Approved" || status === "Completed") {
@@ -76,3 +76,4 @@ export default function LecturerBookingsPage() {
     </div>
   );
 }
+

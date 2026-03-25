@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
-import { connectMongoose } from "@/lib/mongoose";
-import { updateModuleOfferingOutlineWeek } from "@/lib/module-offering-store";
+import { connectMongoose } from "@/models/mongoose";
+import { updateModuleOfferingOutlineWeek } from "@/models/module-offering-store";
 
 export async function PATCH(
   request: Request,

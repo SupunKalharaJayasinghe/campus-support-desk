@@ -5,8 +5,8 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import { foundItemsSeed } from "@/lib/mockData";
-import type { FoundItemRecord } from "@/lib/mockData";
+import { foundItemsSeed } from "@/models/mockData";
+import type { FoundItemRecord } from "@/models/mockData";
 
 function statusVariant(status: FoundItemRecord["status"]) {
   return status === "Returned" ? ("success" as const) : ("neutral" as const);
@@ -87,3 +87,4 @@ export default function FoundItemsPage() {
     </div>
   );
 }
+

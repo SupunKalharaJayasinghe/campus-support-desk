@@ -5,7 +5,7 @@ import {
   sanitizeFacultyStatus,
   type FacultyStatus,
   updateFaculty,
-} from "@/lib/faculty-store";
+} from "@/models/faculty-store";
 
 export async function PUT(
   request: Request,

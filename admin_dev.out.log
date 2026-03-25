@@ -1,0 +1,36 @@
+
+> campus-support-desk@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 9.4s (624 modules)
+ GET / 200 in 62ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 1696ms (701 modules)
+ GET /admin 200 in 2297ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 955ms (693 modules)
+ GET /login 200 in 1158ms
+ GET /admin 200 in 206ms
+ ✓ Compiled in 1303ms (334 modules)
+ ✓ Compiled in 1039ms (334 modules)
+ ✓ Compiled in 541ms (334 modules)
+ ✓ Compiled in 598ms (334 modules)
+   Reload env: .env.local
+ ✓ Compiled in 1044ms (320 modules)
+ ✓ Compiled in 1452ms (320 modules)
+ ✓ Compiled in 800ms (334 modules)
+ ○ Compiling /api/db-test ...
+ ✓ Compiled /api/db-test in 775ms (55 modules)
+ GET /api/db-test 500 in 4011ms
+   Reload env: .env.local
+ ✓ Compiled in 3.8s (334 modules)
+ ✓ Compiled in 2.5s (320 modules)
+   Reload env: .env
+ ✓ Compiled in 1784ms (320 modules)

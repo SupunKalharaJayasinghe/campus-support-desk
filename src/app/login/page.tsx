@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import campusBackground from "@/app/images/Services/lecturer.png";
-import { HOME_BY_ROLE, isDemoModeEnabled, persistDemoSession } from "@/lib/rbac";
-import type { AppRole } from "@/lib/rbac";
+import { HOME_BY_ROLE, isDemoModeEnabled, persistDemoSession } from "@/models/rbac";
+import type { AppRole } from "@/models/rbac";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -250,3 +250,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

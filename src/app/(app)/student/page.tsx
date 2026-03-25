@@ -5,8 +5,8 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
-import { authHeaders, updateStoredUser } from "@/lib/rbac";
-import { notificationsByRole, studentSummary } from "@/lib/mockData";
+import { authHeaders, updateStoredUser } from "@/models/rbac";
+import { notificationsByRole, studentSummary } from "@/models/mockData";
 
 export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -283,3 +283,4 @@ export default function StudentDashboardPage() {
     </div>
   );
 }
+

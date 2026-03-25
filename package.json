@@ -6,6 +6,7 @@
     "clean:next": "node -e \"require('fs').rmSync('.next',{ recursive: true, force: true })\"",
     "dev": "next dev",
     "dev:clean": "npm run clean:next && next dev",
+    "seed:admin": "node scripts/seed-admin.mjs",
     "build": "next build",
     "build:clean": "npm run clean:next && next build",
     "start": "next start",

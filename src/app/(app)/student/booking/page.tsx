@@ -6,8 +6,8 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import { availableLecturerSlots, studentBookings } from "@/lib/mockData";
-import type { StudentBooking } from "@/lib/mockData";
+import { availableLecturerSlots, studentBookings } from "@/models/mockData";
+import type { StudentBooking } from "@/models/mockData";
 
 interface SelectedSlot {
   lecturer: string;
@@ -160,3 +160,4 @@ export default function StudentBookingPage() {
     </div>
   );
 }
+

@@ -35,22 +35,81 @@ export interface EditOfferingContext {
   labAssistants: OfferingStaffItem[];
 }
 
+export interface OfferingFormState {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  termCode: string;
+  moduleId: string;
+  syllabusVersion: SyllabusVersion;
+  status: OfferingStatus;
+  assignedLecturerIds: string[];
+  assignedLabAssistantIds: string[];
+}
+
+export interface OfferingFacultyOption {
+  code: string;
+  name: string;
+}
+
+export interface OfferingDegreeOption {
+  code: string;
+  name: string;
+}
+
+export interface OfferingIntakeOption {
+  id: string;
+  name: string;
+  currentTerm?: string;
+}
+
+export interface OfferingModuleOption {
+  id: string;
+  code: string;
+  name: string;
+  defaultSyllabusVersion: SyllabusVersion;
+}
+
 interface EditOfferingModalProps {
+  mode: "add" | "edit";
   open: boolean;
   saving: boolean;
+  loadingModules: boolean;
   loadingLecturers: boolean;
   loadingLabAssistants: boolean;
   offering: EditOfferingContext | null;
-  syllabusVersion: SyllabusVersion;
-  assignedLecturerIds: string[];
-  assignedLabAssistantIds: string[];
+  form: OfferingFormState;
+  facultyOptions: OfferingFacultyOption[];
+  degreeOptions: OfferingDegreeOption[];
+  intakeOptions: OfferingIntakeOption[];
+  moduleOptions: OfferingModuleOption[];
+  termOptions: string[];
   eligibleLecturers: OfferingStaffItem[];
   eligibleLabAssistants: OfferingStaffItem[];
+  onFacultyChange: (value: string) => void;
+  onDegreeChange: (value: string) => void;
+  onIntakeChange: (value: string) => void;
+  onTermChange: (value: string) => void;
+  onModuleChange: (value: string) => void;
   onSyllabusVersionChange: (value: SyllabusVersion) => void;
+  onStatusChange: (value: OfferingStatus) => void;
   onToggleLecturer: (lecturerId: string) => void;
   onToggleLabAssistant: (labAssistantId: string) => void;
   onClose: () => void;
   onSave: () => void;
+}
+
+interface StaffSectionProps {
+  title: string;
+  loading: boolean;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  assignedIds: string[];
+  eligibleItems: OfferingStaffItem[];
+  lookup: Map<string, OfferingStaffItem>;
+  onToggle: (id: string) => void;
+  saving: boolean;
+  emptyMessage: string;
 }
 
 function normalizeSearch(value: string) {
@@ -69,18 +128,124 @@ function staffMatchesSearch(staff: OfferingStaffItem, query: string) {
   return `${staff.fullName} ${staff.email}`.toLowerCase().includes(query);
 }
 
+function StaffSection({
+  title,
+  loading,
+  searchValue,
+  onSearchChange,
+  assignedIds,
+  eligibleItems,
+  lookup,
+  onToggle,
+  saving,
+  emptyMessage,
+}: StaffSectionProps) {
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(searchValue);
+    return eligibleItems.filter((item) => staffMatchesSearch(item, query));
+  }, [eligibleItems, searchValue]);
+
+  return (
+    <section className="rounded-2xl border border-border bg-white p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-heading">{title}</p>
+        <Badge variant="primary">{assignedIds.length}</Badge>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {assignedIds.length === 0 ? (
+          <p className="text-sm text-text/65">No {title.toLowerCase()} assigned.</p>
+        ) : (
+          assignedIds.map((id) => {
+            const row = lookup.get(id);
+            return (
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading hover:bg-slate-200"
+                key={id}
+                onClick={() => onToggle(id)}
+                type="button"
+              >
+                {row?.fullName ?? id}
+                <X size={12} />
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <div className="relative mt-3">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/55"
+          size={14}
+        />
+        <Input
+          className="h-10 pl-8"
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder={`Search ${title.toLowerCase()}`}
+          value={searchValue}
+        />
+      </div>
+
+      <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+        {loading ? (
+          <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
+            Loading eligible {title.toLowerCase()}...
+          </p>
+        ) : filteredItems.length === 0 ? (
+          <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
+            {emptyMessage}
+          </p>
+        ) : (
+          filteredItems.map((item) => (
+            <label
+              className="inline-flex w-full items-start gap-2 rounded-xl border border-border bg-tint px-2.5 py-2 text-sm text-heading"
+              key={item.id}
+            >
+              <input
+                checked={assignedIds.includes(item.id)}
+                className="mt-0.5 h-4 w-4 rounded border-border"
+                disabled={saving}
+                onChange={() => onToggle(item.id)}
+                type="checkbox"
+              />
+              <span>
+                <span className="font-semibold">{item.fullName}</span>
+                <span className="block text-xs text-text/60">{item.email}</span>
+                <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-text/58">
+                  {item.status || "ACTIVE"}
+                </span>
+              </span>
+            </label>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function EditOfferingModal({
+  mode,
   open,
   saving,
+  loadingModules,
   loadingLecturers,
   loadingLabAssistants,
   offering,
-  syllabusVersion,
-  assignedLecturerIds,
-  assignedLabAssistantIds,
+  form,
+  facultyOptions,
+  degreeOptions,
+  intakeOptions,
+  moduleOptions,
+  termOptions,
   eligibleLecturers,
   eligibleLabAssistants,
+  onFacultyChange,
+  onDegreeChange,
+  onIntakeChange,
+  onTermChange,
+  onModuleChange,
   onSyllabusVersionChange,
+  onStatusChange,
   onToggleLecturer,
   onToggleLabAssistant,
   onClose,
@@ -90,34 +255,20 @@ export default function EditOfferingModal({
   const [labAssistantSearch, setLabAssistantSearch] = useState("");
 
   const lecturerLookup = useMemo(
-    () =>
-      buildStaffLookup([
-        ...(offering?.lecturers ?? []),
-        ...eligibleLecturers,
-      ]),
+    () => buildStaffLookup([...(offering?.lecturers ?? []), ...eligibleLecturers]),
     [eligibleLecturers, offering]
   );
-
   const labAssistantLookup = useMemo(
-    () =>
-      buildStaffLookup([
-        ...(offering?.labAssistants ?? []),
-        ...eligibleLabAssistants,
-      ]),
+    () => buildStaffLookup([...(offering?.labAssistants ?? []), ...eligibleLabAssistants]),
     [eligibleLabAssistants, offering]
   );
 
-  const filteredLecturers = useMemo(() => {
-    const query = normalizeSearch(lecturerSearch);
-    return eligibleLecturers.filter((item) => staffMatchesSearch(item, query));
-  }, [eligibleLecturers, lecturerSearch]);
+  const selectedFaculty = facultyOptions.find((item) => item.code === form.facultyId) ?? null;
+  const selectedDegree = degreeOptions.find((item) => item.code === form.degreeProgramId) ?? null;
+  const selectedIntake = intakeOptions.find((item) => item.id === form.intakeId) ?? null;
+  const selectedModule = moduleOptions.find((item) => item.id === form.moduleId) ?? null;
 
-  const filteredLabAssistants = useMemo(() => {
-    const query = normalizeSearch(labAssistantSearch);
-    return eligibleLabAssistants.filter((item) => staffMatchesSearch(item, query));
-  }, [eligibleLabAssistants, labAssistantSearch]);
-
-  if (!open || !offering) {
+  if (!open) {
     return null;
   }
 
@@ -140,10 +291,10 @@ export default function EditOfferingModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-                Edit
+                {mode === "add" ? "CREATE" : "EDIT"}
               </p>
               <p className="mt-1 text-2xl font-semibold text-heading">
-                Edit Module Offering
+                {mode === "add" ? "Add Module Offering" : "Edit Module Offering"}
               </p>
             </div>
             <button
@@ -156,257 +307,192 @@ export default function EditOfferingModal({
             </button>
           </div>
 
-          <div className="mt-6 grid gap-4 rounded-2xl border border-border bg-tint/60 p-4 sm:grid-cols-2 lg:grid-cols-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Faculty</p>
-              <p className="mt-1 text-sm font-semibold text-heading">
-                {offering.facultyId}
-                {offering.facultyName ? ` - ${offering.facultyName}` : ""}
+          <section className="mt-6 rounded-2xl border border-border bg-white p-4">
+            <p className="text-sm font-semibold text-heading">Offering Context</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Faculty
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving}
+                  onChange={(event) => onFacultyChange(event.target.value)}
+                  value={form.facultyId}
+                >
+                  <option value="">Select faculty</option>
+                  {facultyOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Degree
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving || !form.facultyId}
+                  onChange={(event) => onDegreeChange(event.target.value)}
+                  value={form.degreeProgramId}
+                >
+                  <option value="">Select degree</option>
+                  {degreeOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Intake
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving || !form.degreeProgramId}
+                  onChange={(event) => onIntakeChange(event.target.value)}
+                  value={form.intakeId}
+                >
+                  <option value="">Select intake</option>
+                  {intakeOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Semester / Term
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving}
+                  onChange={(event) => onTermChange(event.target.value)}
+                  value={form.termCode}
+                >
+                  {termOptions.map((term) => (
+                    <option key={term} value={term}>
+                      {term}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Module
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving || !form.facultyId || !form.degreeProgramId || !form.termCode}
+                  onChange={(event) => onModuleChange(event.target.value)}
+                  value={form.moduleId}
+                >
+                  <option value="">Select module</option>
+                  {moduleOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+                {loadingModules ? (
+                  <p className="mt-1 text-xs text-text/60">Loading valid modules...</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-border bg-tint/60 p-3 text-sm text-heading">
+              <p>
+                Intake: <span className="font-semibold">{selectedIntake?.name || "—"}</span>
+              </p>
+              <p className="mt-1">
+                Semester: <span className="font-semibold">{form.termCode || "—"}</span>
+              </p>
+              <p className="mt-1">
+                Faculty: <span className="font-semibold">{selectedFaculty?.code || form.facultyId || "—"}</span>
+              </p>
+              <p className="mt-1">
+                Degree: <span className="font-semibold">{selectedDegree?.code || form.degreeProgramId || "—"}</span>
+              </p>
+              <p className="mt-1">
+                Module: <span className="font-semibold">{selectedModule ? `${selectedModule.code} - ${selectedModule.name}` : "—"}</span>
               </p>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Degree</p>
-              <p className="mt-1 text-sm font-semibold text-heading">
-                {offering.degreeProgramId}
-                {offering.degreeProgramName ? ` - ${offering.degreeProgramName}` : ""}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Intake</p>
-              <p className="mt-1 text-sm font-semibold text-heading">
-                {offering.intakeName || offering.intakeId}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Term</p>
-              <p className="mt-1 text-sm font-semibold text-heading">{offering.termCode}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Module</p>
-              <p className="mt-1 text-sm font-semibold text-heading">
-                {offering.moduleCode} - {offering.moduleName}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Syllabus</p>
-              <p className="mt-1 text-sm font-semibold text-heading">{syllabusVersion}</p>
-            </div>
-          </div>
-
-          <div className="mt-6 max-w-xs">
-            <label className="mb-1.5 block text-sm font-medium text-heading">
-              Syllabus Version
-            </label>
-            <Select
-              className="h-12"
-              disabled={saving}
-              onChange={(event) =>
-                onSyllabusVersionChange(
-                  event.target.value === "OLD" ? "OLD" : "NEW"
-                )
-              }
-              value={syllabusVersion}
-            >
-              <option value="NEW">NEW</option>
-              <option value="OLD">OLD</option>
-            </Select>
-          </div>
-
-          <div className="mt-6 grid gap-5 lg:grid-cols-2">
-            <section className="rounded-2xl border border-border bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-heading">Lecturers</p>
-                <Badge variant="primary">{assignedLecturerIds.length}</Badge>
-              </div>
-              <p className="mt-1 text-xs text-text/62">
-                Eligibility based on selected Faculty, Degree, and Module mappings.
-              </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {assignedLecturerIds.length === 0 ? (
-                  <p className="text-sm text-text/65">No lecturers assigned.</p>
-                ) : (
-                  assignedLecturerIds.map((lecturerId) => {
-                    const row = lecturerLookup.get(lecturerId);
-                    return (
-                      <button
-                        className="inline-flex items-center gap-2 rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading hover:bg-slate-200"
-                        key={lecturerId}
-                        onClick={() => onToggleLecturer(lecturerId)}
-                        type="button"
-                      >
-                        {row?.fullName ?? lecturerId}
-                        <X size={12} />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="relative mt-3">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/55" size={14} />
-                <Input
-                  className="h-10 pl-8"
-                  onChange={(event) => setLecturerSearch(event.target.value)}
-                  placeholder="Search lecturers"
-                  value={lecturerSearch}
-                />
-              </div>
-
-              <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
-                {loadingLecturers ? (
-                  <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
-                    Loading eligible lecturers...
-                  </p>
-                ) : filteredLecturers.length === 0 ? (
-                  <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
-                    No eligible lecturers found for this module.
-                  </p>
-                ) : (
-                  filteredLecturers.map((lecturer) => (
-                    <label
-                      className="inline-flex w-full items-start gap-2 rounded-xl border border-border bg-tint px-2.5 py-2 text-sm text-heading"
-                      key={lecturer.id}
-                    >
-                      <input
-                        checked={assignedLecturerIds.includes(lecturer.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-border"
-                        disabled={saving}
-                        onChange={() => onToggleLecturer(lecturer.id)}
-                        type="checkbox"
-                      />
-                      <span>
-                        <span className="font-semibold">{lecturer.fullName}</span>
-                        <span className="block text-xs text-text/60">{lecturer.email}</span>
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-heading">Lab Assistants</p>
-                <Badge variant="primary">{assignedLabAssistantIds.length}</Badge>
-              </div>
-              <p className="mt-1 text-xs text-text/62">
-                Eligibility based on selected Faculty, Degree, and Module mappings.
-              </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {assignedLabAssistantIds.length === 0 ? (
-                  <p className="text-sm text-text/65">No lab assistants assigned.</p>
-                ) : (
-                  assignedLabAssistantIds.map((labAssistantId) => {
-                    const row = labAssistantLookup.get(labAssistantId);
-                    return (
-                      <button
-                        className="inline-flex items-center gap-2 rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading hover:bg-slate-200"
-                        key={labAssistantId}
-                        onClick={() => onToggleLabAssistant(labAssistantId)}
-                        type="button"
-                      >
-                        {row?.fullName ?? labAssistantId}
-                        <X size={12} />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              <div className="relative mt-3">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/55" size={14} />
-                <Input
-                  className="h-10 pl-8"
-                  onChange={(event) => setLabAssistantSearch(event.target.value)}
-                  placeholder="Search lab assistants"
-                  value={labAssistantSearch}
-                />
-              </div>
-
-              <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
-                {loadingLabAssistants ? (
-                  <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
-                    Loading eligible lab assistants...
-                  </p>
-                ) : filteredLabAssistants.length === 0 ? (
-                  <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
-                    No eligible lab assistants found for this module.
-                  </p>
-                ) : (
-                  filteredLabAssistants.map((labAssistant) => (
-                    <label
-                      className="inline-flex w-full items-start gap-2 rounded-xl border border-border bg-tint px-2.5 py-2 text-sm text-heading"
-                      key={labAssistant.id}
-                    >
-                      <input
-                        checked={assignedLabAssistantIds.includes(labAssistant.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-border"
-                        disabled={saving}
-                        onChange={() => onToggleLabAssistant(labAssistant.id)}
-                        type="checkbox"
-                      />
-                      <span>
-                        <span className="font-semibold">{labAssistant.fullName}</span>
-                        <span className="block text-xs text-text/60">{labAssistant.email}</span>
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
+          </section>
 
           <section className="mt-5 rounded-2xl border border-border bg-white p-4">
-            <p className="text-sm font-semibold text-heading">Current Assignment Summary</p>
+            <p className="text-sm font-semibold text-heading">Offering Settings</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                  Assigned Lecturers
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {assignedLecturerIds.length === 0 ? (
-                    <p className="text-sm text-text/65">No lecturers assigned.</p>
-                  ) : (
-                    assignedLecturerIds.map((lecturerId) => {
-                      const row = lecturerLookup.get(lecturerId);
-                      return (
-                        <span
-                          className="inline-flex items-center rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading"
-                          key={lecturerId}
-                        >
-                          {row?.fullName ?? lecturerId}
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Syllabus Version
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving}
+                  onChange={(event) =>
+                    onSyllabusVersionChange(event.target.value === "OLD" ? "OLD" : "NEW")
+                  }
+                  value={form.syllabusVersion}
+                >
+                  <option value="OLD">OLD</option>
+                  <option value="NEW">NEW</option>
+                </Select>
               </div>
+
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                  Assigned Lab Assistants
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {assignedLabAssistantIds.length === 0 ? (
-                    <p className="text-sm text-text/65">No lab assistants assigned.</p>
-                  ) : (
-                    assignedLabAssistantIds.map((labAssistantId) => {
-                      const row = labAssistantLookup.get(labAssistantId);
-                      return (
-                        <span
-                          className="inline-flex items-center rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading"
-                          key={labAssistantId}
-                        >
-                          {row?.fullName ?? labAssistantId}
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Status
+                </label>
+                <Select
+                  className="h-11"
+                  disabled={saving}
+                  onChange={(event) =>
+                    onStatusChange(event.target.value === "INACTIVE" ? "INACTIVE" : "ACTIVE")
+                  }
+                  value={form.status}
+                >
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                </Select>
               </div>
             </div>
           </section>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <StaffSection
+              assignedIds={form.assignedLecturerIds}
+              eligibleItems={eligibleLecturers}
+              emptyMessage="No eligible lecturers found for this module"
+              loading={loadingLecturers}
+              lookup={lecturerLookup}
+              onSearchChange={setLecturerSearch}
+              onToggle={onToggleLecturer}
+              saving={saving}
+              searchValue={lecturerSearch}
+              title="Lecturers"
+            />
+
+            <StaffSection
+              assignedIds={form.assignedLabAssistantIds}
+              eligibleItems={eligibleLabAssistants}
+              emptyMessage="No eligible lab assistants found for this module"
+              loading={loadingLabAssistants}
+              lookup={labAssistantLookup}
+              onSearchChange={setLabAssistantSearch}
+              onToggle={onToggleLabAssistant}
+              saving={saving}
+              searchValue={labAssistantSearch}
+              title="Lab Assistants"
+            />
+          </div>
         </div>
 
         <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
@@ -424,11 +510,7 @@ export default function EditOfferingModal({
               disabled={saving}
               onClick={onSave}
             >
-              {saving ? (
-                <Loader2 className="animate-spin" size={16} />
-              ) : (
-                <Save size={16} />
-              )}
+              {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
               Save
             </Button>
           </div>

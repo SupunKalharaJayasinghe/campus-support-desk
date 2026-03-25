@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   sanitizeDateField,
   sanitizeIntakeId,
@@ -7,7 +7,7 @@ import {
   sanitizeToggle,
   updateIntakeSchedule,
   type TermCode,
-} from "@/lib/intake-store";
+} from "@/models/intake-store";
 
 export async function PUT(
   request: Request,

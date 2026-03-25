@@ -1,5 +1,5 @@
 import Card from "@/components/ui/Card";
-import { foundItemsSeed, lostItemReports } from "@/lib/mockData";
+import { foundItemsSeed, lostItemReports } from "@/models/mockData";
 
 export default function LostItemsDashboardPage() {
   const pending = lostItemReports.filter((item) => item.status === "Pending Review").length;
@@ -29,3 +29,4 @@ export default function LostItemsDashboardPage() {
     </div>
   );
 }
+

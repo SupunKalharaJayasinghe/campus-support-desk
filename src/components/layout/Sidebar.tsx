@@ -17,9 +17,9 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
-import { NAV_BY_ROLE } from "@/lib/nav";
-import type { NavIcon, NavItem } from "@/lib/nav";
-import { readStoredRole } from "@/lib/rbac";
+import { NAV_BY_ROLE } from "@/models/nav";
+import type { NavIcon, NavItem } from "@/models/nav";
+import { readStoredRole } from "@/models/rbac";
 
 interface SidebarProps {
   open: boolean;
@@ -123,3 +123,4 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     </>
   );
 }
+

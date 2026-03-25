@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   buildLabAssistantEmailLocalPart,
   createLabAssistantInMemory,
@@ -18,9 +18,9 @@ import {
   type LabAssistantPersistedRecord,
   type LabAssistantSort,
   type LabAssistantStatus,
-} from "@/lib/lab-assistant-store";
-import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/lib/student-registration";
-import { hashStaffPassword, resolveDefaultStaffPassword } from "@/lib/staff-auth";
+} from "@/models/lab-assistant-store";
+import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/models/student-registration";
+import { hashStaffPassword, resolveDefaultStaffPassword } from "@/models/staff-auth";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { UserModel } from "@/models/User";
 
@@ -341,3 +341,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

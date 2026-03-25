@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import "@/models/Module";
-import { connectMongoose } from "@/lib/mongoose";
-import { findDegreeProgram } from "@/lib/degree-program-store";
-import { findFaculty } from "@/lib/faculty-store";
+import { connectMongoose } from "@/models/mongoose";
+import { findDegreeProgram } from "@/models/degree-program-store";
+import { findFaculty } from "@/models/faculty-store";
 import {
   createModule,
   findModuleByCode,
@@ -15,7 +15,7 @@ import {
   type ModuleOutlineTemplateItem,
   type ModuleSort,
   type SyllabusVersion,
-} from "@/lib/module-store";
+} from "@/models/module-store";
 
 function parsePageParam(value: string | null, fallback: number) {
   const parsed = Number(value);
@@ -222,3 +222,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Failed to create module" }, { status: 500 });
   }
 }
+

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { notificationsByRole } from "@/lib/mockData";
+import { notificationsByRole } from "@/models/mockData";
 
 export default function LostItemsNotificationsPage() {
   const [readMap, setReadMap] = useState<Record<string, boolean>>({});
@@ -57,3 +57,4 @@ export default function LostItemsNotificationsPage() {
     </div>
   );
 }
+

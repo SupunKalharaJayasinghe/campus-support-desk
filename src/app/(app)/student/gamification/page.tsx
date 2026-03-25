@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
-import { studentActivity, studentLeaderboard, studentProfile } from "@/lib/mockData";
+import { studentActivity, studentLeaderboard, studentProfile } from "@/models/mockData";
 
 function levelVariant(level: string) {
   if (level === "Champion") {
@@ -137,3 +137,4 @@ export default function StudentGamificationPage() {
     </div>
   );
 }
+

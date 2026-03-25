@@ -3,391 +3,37 @@ import { NextResponse } from "next/server";
 import "@/models/LabAssistant";
 import "@/models/Lecturer";
 import "@/models/ModuleOffering";
-import { findDegreeProgram } from "@/lib/degree-program-store";
-import { findFaculty } from "@/lib/faculty-store";
-import { findIntakeById, sanitizeTermCode } from "@/lib/intake-store";
+import { connectMongoose } from "@/models/mongoose";
 import {
-  listLabAssistantsInMemory,
-  toLabAssistantPersistedRecordFromUnknown,
-  type LabAssistantPersistedRecord,
-} from "@/lib/lab-assistant-store";
-import {
-  listLecturersInMemory,
-  toLecturerPersistedRecordFromUnknown,
-  type LecturerPersistedRecord,
-} from "@/lib/lecturer-store";
-import { connectMongoose } from "@/lib/mongoose";
+  normalizeDbOffering,
+  resolveAssigneeMaps,
+  resolveOfferingContext,
+  sanitizeId,
+  sanitizeIdList,
+  sanitizeOfferingStatus,
+  sanitizeSyllabusVersion,
+  toApiOfferingItem,
+  validateLabAssistantAssignments,
+  validateLecturerAssignments,
+} from "@/models/module-offering-api";
 import {
   deleteModuleOffering,
   findModuleOfferingById,
   hasModuleOfferingProgress,
+  listModuleOfferings,
   updateModuleOffering,
-  type ModuleOfferingRecord,
   type ModuleOfferingStatus,
   type SyllabusVersion,
-} from "@/lib/module-offering-store";
-import { findModuleById } from "@/lib/module-store";
-import { isStaffEligibleForOffering } from "@/lib/staff-eligibility";
-import { LabAssistantModel } from "@/models/LabAssistant";
-import { LecturerModel } from "@/models/Lecturer";
+} from "@/models/module-offering-store";
+import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
-interface AssigneeDisplayItem {
-  id: string;
-  fullName: string;
-  email: string;
-  status: string;
-}
-
-interface OfferingScope {
-  facultyId: string;
-  degreeProgramId: string;
-  moduleId: string;
-}
-
-function normalizeAcademicCode(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .slice(0, 6);
-}
-
-function sanitizeSyllabus(value: unknown): SyllabusVersion {
-  return value === "OLD" ? "OLD" : "NEW";
-}
-
-function sanitizeStatus(value: unknown): ModuleOfferingStatus {
-  return value === "INACTIVE" ? "INACTIVE" : "ACTIVE";
-}
-
-function sanitizeIdList(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
+function isDuplicateMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
   }
 
-  return Array.from(
-    new Set(
-      value
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function toIsoDate(value: unknown) {
-  const raw = String(value ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toISOString();
-}
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function normalizeDbOffering(value: unknown): ModuleOfferingRecord | null {
-  const row = asObject(value);
-  if (!row) {
-    return null;
-  }
-
-  const id = String(row._id ?? row.id ?? "").trim();
-  const intakeId = String(row.intakeId ?? "").trim();
-  const moduleId = String(row.moduleId ?? "").trim();
-  if (!id || !intakeId || !moduleId) {
-    return null;
-  }
-
-  const intake = findIntakeById(intakeId);
-  const moduleRecord = findModuleById(moduleId);
-  const assignedLecturerIds = sanitizeIdList(
-    row.assignedLecturerIds ?? row.assignedLecturers
-  );
-  const createdAt = toIsoDate(row.createdAt);
-  const updatedAt = toIsoDate(row.updatedAt);
-  const now = new Date().toISOString();
-
-  return {
-    id,
-    facultyId: normalizeAcademicCode(row.facultyId ?? intake?.facultyCode),
-    degreeProgramId: normalizeAcademicCode(
-      row.degreeProgramId ?? intake?.degreeCode
-    ),
-    intakeId,
-    termCode: sanitizeTermCode(row.termCode),
-    moduleId,
-    moduleCode:
-      String(row.moduleCode ?? moduleRecord?.code ?? "")
-        .trim()
-        .toUpperCase() || moduleId.toUpperCase(),
-    moduleName:
-      String(row.moduleName ?? moduleRecord?.name ?? "").trim() ||
-      String(moduleRecord?.code ?? moduleId).trim(),
-    syllabusVersion: sanitizeSyllabus(row.syllabusVersion),
-    assignedLecturerIds,
-    assignedLabAssistantIds: sanitizeIdList(row.assignedLabAssistantIds),
-    status: sanitizeStatus(row.status),
-    assignedLecturers: assignedLecturerIds,
-    outlineWeeks: [],
-    outlinePending: row.outlinePending === true,
-    hasGrades: row.hasGrades === true,
-    hasAttendance: row.hasAttendance === true,
-    hasContent: row.hasContent === true,
-    createdAt: createdAt || updatedAt || now,
-    updatedAt: updatedAt || createdAt || now,
-    isDeleted: row.isDeleted === true,
-  };
-}
-
-function toApiItem(
-  offering: ModuleOfferingRecord,
-  assignees: {
-    lecturerMap: Map<string, AssigneeDisplayItem>;
-    labAssistantMap: Map<string, AssigneeDisplayItem>;
-  }
-) {
-  const faculty = findFaculty(offering.facultyId);
-  const degree = findDegreeProgram(offering.degreeProgramId);
-  const intake = findIntakeById(offering.intakeId);
-  const moduleRecord = findModuleById(offering.moduleId);
-
-  const lecturers = offering.assignedLecturerIds.map((id) => {
-    const row = assignees.lecturerMap.get(id);
-    return {
-      _id: id,
-      id,
-      fullName: row?.fullName ?? "Unknown Lecturer",
-      email: row?.email ?? "",
-      status: row?.status ?? "INACTIVE",
-    };
-  });
-
-  const labAssistants = offering.assignedLabAssistantIds.map((id) => {
-    const row = assignees.labAssistantMap.get(id);
-    return {
-      _id: id,
-      id,
-      fullName: row?.fullName ?? "Unknown Lab Assistant",
-      email: row?.email ?? "",
-      status: row?.status ?? "INACTIVE",
-    };
-  });
-
-  return {
-    id: offering.id,
-    _id: offering.id,
-    facultyId: offering.facultyId,
-    degreeProgramId: offering.degreeProgramId,
-    intakeId: offering.intakeId,
-    termCode: offering.termCode,
-    moduleId: offering.moduleId,
-    moduleCode: offering.moduleCode || moduleRecord?.code || "",
-    moduleName: offering.moduleName || moduleRecord?.name || "",
-    syllabusVersion: offering.syllabusVersion,
-    status: offering.status,
-    assignedLecturerIds: offering.assignedLecturerIds,
-    assignedLabAssistantIds: offering.assignedLabAssistantIds,
-    assignedLecturers: offering.assignedLecturerIds,
-    lecturers,
-    labAssistants,
-    lecturerCount: lecturers.length,
-    labAssistantCount: labAssistants.length,
-    module: {
-      id: offering.moduleId,
-      code: offering.moduleCode || moduleRecord?.code || "",
-      name: offering.moduleName || moduleRecord?.name || "",
-    },
-    faculty: {
-      code: offering.facultyId,
-      name: faculty?.name ?? "",
-    },
-    degree: {
-      code: offering.degreeProgramId,
-      name: degree?.name ?? "",
-    },
-    intake: {
-      id: offering.intakeId,
-      name: intake?.name ?? "",
-      currentTerm: intake?.currentTerm ?? "",
-    },
-    createdAt: offering.createdAt,
-    updatedAt: offering.updatedAt,
-  };
-}
-
-async function loadLecturersByIds(
-  ids: string[],
-  mongooseConnection: typeof mongoose | null
-) {
-  const map = new Map<string, LecturerPersistedRecord>();
-  listLecturersInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
-
-  if (mongooseConnection) {
-    const objectIds = ids
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id));
-    if (objectIds.length > 0) {
-      const rows = (await LecturerModel.find({
-        _id: { $in: objectIds },
-      })
-        .lean()
-        .exec()
-        .catch(() => [])) as unknown[];
-
-      rows
-        .map((row) => toLecturerPersistedRecordFromUnknown(row))
-        .filter((row): row is LecturerPersistedRecord => Boolean(row))
-        .forEach((row) => {
-          map.set(row.id, row);
-        });
-    }
-  }
-
-  return map;
-}
-
-async function loadLabAssistantsByIds(
-  ids: string[],
-  mongooseConnection: typeof mongoose | null
-) {
-  const map = new Map<string, LabAssistantPersistedRecord>();
-  listLabAssistantsInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
-
-  if (mongooseConnection) {
-    const objectIds = ids
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id));
-    if (objectIds.length > 0) {
-      const rows = (await LabAssistantModel.find({
-        _id: { $in: objectIds },
-      })
-        .lean()
-        .exec()
-        .catch(() => [])) as unknown[];
-
-      rows
-        .map((row) => toLabAssistantPersistedRecordFromUnknown(row))
-        .filter((row): row is LabAssistantPersistedRecord => Boolean(row))
-        .forEach((row) => {
-          map.set(row.id, row);
-        });
-    }
-  }
-
-  return map;
-}
-
-function isEligibleByScope(
-  row: {
-    facultyIds: string[];
-    degreeProgramIds: string[];
-    moduleIds: string[];
-  },
-  scope: OfferingScope
-) {
-  return isStaffEligibleForOffering(row, {
-    facultyId: scope.facultyId,
-    degreeProgramId: scope.degreeProgramId,
-    moduleId: scope.moduleId,
-  });
-}
-
-async function validateLecturerAssignments(
-  input: {
-    ids: string[];
-    scope: OfferingScope;
-    mongooseConnection: typeof mongoose | null;
-  }
-) {
-  const map = await loadLecturersByIds(input.ids, input.mongooseConnection);
-
-  for (const lecturerId of input.ids) {
-    const row = map.get(lecturerId);
-    if (!row) {
-      throw new Error(`Lecturer not found: ${lecturerId}`);
-    }
-    if (row.status !== "ACTIVE") {
-      throw new Error(`Lecturer is inactive: ${row.fullName}`);
-    }
-    if (!isEligibleByScope(row, input.scope)) {
-      throw new Error(`Lecturer is not eligible for this offering: ${row.fullName}`);
-    }
-  }
-}
-
-async function validateLabAssistantAssignments(
-  input: {
-    ids: string[];
-    scope: OfferingScope;
-    mongooseConnection: typeof mongoose | null;
-  }
-) {
-  const map = await loadLabAssistantsByIds(input.ids, input.mongooseConnection);
-
-  for (const labAssistantId of input.ids) {
-    const row = map.get(labAssistantId);
-    if (!row) {
-      throw new Error(`Lab assistant not found: ${labAssistantId}`);
-    }
-    if (row.status !== "ACTIVE") {
-      throw new Error(`Lab assistant is inactive: ${row.fullName}`);
-    }
-    if (!isEligibleByScope(row, input.scope)) {
-      throw new Error(`Lab assistant is not eligible for this offering: ${row.fullName}`);
-    }
-  }
-}
-
-async function resolveDisplayAssignees(
-  offering: Pick<ModuleOfferingRecord, "assignedLecturerIds" | "assignedLabAssistantIds">,
-  mongooseConnection: typeof mongoose | null
-) {
-  const lecturers = await loadLecturersByIds(
-    offering.assignedLecturerIds,
-    mongooseConnection
-  );
-  const labAssistants = await loadLabAssistantsByIds(
-    offering.assignedLabAssistantIds,
-    mongooseConnection
-  );
-
-  const lecturerMap = new Map<string, AssigneeDisplayItem>();
-  lecturers.forEach((row) => {
-    lecturerMap.set(row.id, {
-      id: row.id,
-      fullName: row.fullName,
-      email: row.email,
-      status: row.status,
-    });
-  });
-
-  const labAssistantMap = new Map<string, AssigneeDisplayItem>();
-  labAssistants.forEach((row) => {
-    labAssistantMap.set(row.id, {
-      id: row.id,
-      fullName: row.fullName,
-      email: row.email,
-      status: row.status,
-    });
-  });
-
-  return { lecturerMap, labAssistantMap };
+  return /already assigned/i.test(error.message);
 }
 
 export async function GET(
@@ -395,31 +41,45 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const offeringId = String(params.id ?? "").trim();
+  const offeringId = sanitizeId(params.id);
   if (!offeringId) {
     return NextResponse.json({ message: "Module offering id is required" }, { status: 400 });
   }
-
-  let offering: ModuleOfferingRecord | null = null;
 
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
     const dbRow = await ModuleOfferingModel.findById(offeringId)
       .lean()
       .exec()
       .catch(() => null);
-    offering = normalizeDbOffering(dbRow);
+    const normalized = normalizeDbOffering(dbRow);
+
+    if (normalized && !normalized.isDeleted) {
+      const assignees = await resolveAssigneeMaps(
+        {
+          lecturerIds: normalized.assignedLecturerIds,
+          labAssistantIds: normalized.assignedLabAssistantIds,
+        },
+        mongooseConnection
+      );
+
+      return NextResponse.json(toApiOfferingItem(normalized, assignees));
+    }
   }
 
-  if (!offering) {
-    offering = findModuleOfferingById(offeringId);
-  }
-
+  const offering = findModuleOfferingById(offeringId);
   if (!offering || offering.isDeleted) {
     return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
   }
 
-  const assignees = await resolveDisplayAssignees(offering, mongooseConnection);
-  return NextResponse.json(toApiItem(offering, assignees));
+  const assignees = await resolveAssigneeMaps(
+    {
+      lecturerIds: offering.assignedLecturerIds,
+      labAssistantIds: offering.assignedLabAssistantIds,
+    },
+    null
+  );
+
+  return NextResponse.json(toApiOfferingItem(offering, assignees));
 }
 
 export async function PUT(
@@ -427,25 +87,31 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const offeringId = String(params.id ?? "").trim();
+    const offeringId = sanitizeId(params.id);
     if (!offeringId) {
       return NextResponse.json({ message: "Module offering id is required" }, { status: 400 });
     }
 
     const body = (await request.json()) as Partial<{
+      facultyCode: string;
+      degreeCode: string;
+      intakeName: string;
+      moduleCode: string;
+      facultyId: string;
+      degreeProgramId: string;
+      intakeId: string;
+      termCode: string;
+      moduleId: string;
       syllabusVersion: SyllabusVersion;
       status: ModuleOfferingStatus;
       assignedLecturerIds: string[];
       assignedLabAssistantIds: string[];
       assignedLecturers: string[];
     }>;
-    const nextSyllabusVersion =
-      body.syllabusVersion === undefined ? undefined : sanitizeSyllabus(body.syllabusVersion);
-    const nextStatus = body.status === undefined ? undefined : sanitizeStatus(body.status);
+
     const hasLecturerPayload =
       body.assignedLecturerIds !== undefined || body.assignedLecturers !== undefined;
     const hasLabPayload = body.assignedLabAssistantIds !== undefined;
-
     const mongooseConnection = await connectMongoose().catch(() => null);
 
     if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
@@ -454,54 +120,135 @@ export async function PUT(
         return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
       }
 
-      const intake = findIntakeById(String(row.intakeId));
+      const existingLecturerIds = sanitizeIdList(
+        row.assignedLecturerIds ?? row.assignedLecturers
+      );
+      const existingLabAssistantIds = sanitizeIdList(row.assignedLabAssistantIds);
+
+      const context = resolveOfferingContext({
+        facultyCode: body.facultyCode ?? row.facultyCode ?? row.facultyId,
+        degreeCode: body.degreeCode ?? row.degreeCode ?? row.degreeProgramId,
+        intakeName: body.intakeName ?? row.intakeName,
+        moduleCode: body.moduleCode ?? row.moduleCode,
+        facultyId: body.facultyId ?? row.facultyId ?? row.facultyCode,
+        degreeProgramId:
+          body.degreeProgramId ?? row.degreeProgramId ?? row.degreeCode,
+        intakeId: body.intakeId ?? row.intakeId,
+        termCode: body.termCode ?? row.termCode,
+        moduleId: body.moduleId ?? row.moduleId,
+      });
+
+      const nextSyllabusVersion =
+        body.syllabusVersion === undefined
+          ? sanitizeSyllabusVersion(row.syllabusVersion)
+          : sanitizeSyllabusVersion(body.syllabusVersion);
+      const nextStatus =
+        body.status === undefined
+          ? sanitizeOfferingStatus(row.status)
+          : sanitizeOfferingStatus(body.status);
       const nextLecturerIds = hasLecturerPayload
         ? sanitizeIdList(body.assignedLecturerIds ?? body.assignedLecturers)
-        : sanitizeIdList(row.assignedLecturerIds ?? row.assignedLecturers);
+        : existingLecturerIds;
       const nextLabAssistantIds = hasLabPayload
         ? sanitizeIdList(body.assignedLabAssistantIds)
-        : sanitizeIdList(row.assignedLabAssistantIds);
-      const scope: OfferingScope = {
-        facultyId: normalizeAcademicCode(row.facultyId ?? intake?.facultyCode),
-        degreeProgramId: normalizeAcademicCode(
-          row.degreeProgramId ?? intake?.degreeCode
-        ),
-        moduleId: String(row.moduleId ?? "").trim(),
-      };
+        : existingLabAssistantIds;
 
-      try {
-        await validateLecturerAssignments({
-          ids: nextLecturerIds,
-          scope,
-          mongooseConnection,
-        });
-        await validateLabAssistantAssignments({
-          ids: nextLabAssistantIds,
-          scope,
-          mongooseConnection,
-        });
-      } catch (error) {
-        return NextResponse.json(
+      await validateLecturerAssignments({
+        ids: nextLecturerIds,
+        scope: {
+          facultyCode: context.facultyCode,
+          degreeCode: context.degreeCode,
+          moduleCode: context.moduleCode,
+          moduleId: context.moduleId,
+        },
+        mongooseConnection,
+      });
+      await validateLabAssistantAssignments({
+        ids: nextLabAssistantIds,
+        scope: {
+          facultyCode: context.facultyCode,
+          degreeCode: context.degreeCode,
+          moduleCode: context.moduleCode,
+          moduleId: context.moduleId,
+        },
+        mongooseConnection,
+      });
+
+      const assignees = await resolveAssigneeMaps(
+        {
+          lecturerIds: nextLecturerIds,
+          labAssistantIds: nextLabAssistantIds,
+        },
+        mongooseConnection
+      );
+      const lecturerSnapshots = nextLecturerIds.map((id) => {
+        const rowItem = assignees.lecturerMap.get(id);
+        return {
+          lecturerId: id,
+          name: rowItem?.fullName ?? "",
+          email: rowItem?.email ?? "",
+        };
+      });
+      const labAssistantSnapshots = nextLabAssistantIds.map((id) => {
+        const rowItem = assignees.labAssistantMap.get(id);
+        return {
+          assistantId: id,
+          name: rowItem?.fullName ?? "",
+          email: rowItem?.email ?? "",
+        };
+      });
+
+      const duplicate = await ModuleOfferingModel.exists({
+        _id: { $ne: row._id },
+        termCode: context.termCode,
+        $or: [
           {
-            message:
-              error instanceof Error
-                ? error.message
-                : "Invalid staff assignment",
+            intakeName: context.intakeName,
+            moduleCode: context.moduleCode,
           },
-          { status: 400 }
+          {
+            intakeId: context.intakeId,
+            moduleId: context.moduleId,
+          },
+        ],
+      }).catch(() => null);
+
+      if (duplicate) {
+        return NextResponse.json(
+          { message: "Module is already assigned for this intake term" },
+          { status: 409 }
         );
       }
 
-      if (nextSyllabusVersion) {
-        row.syllabusVersion = nextSyllabusVersion;
-      }
-      if (nextStatus) {
-        row.status = nextStatus;
-      }
+      row.facultyCode = context.facultyCode;
+      row.degreeCode = context.degreeCode;
+      row.intakeName = context.intakeName;
+      row.moduleCode = context.moduleCode;
+      row.moduleName = context.moduleName;
+      row.facultyId = context.facultyCode;
+      row.degreeProgramId = context.degreeCode;
+      row.intakeId = context.intakeId;
+      row.termCode = context.termCode;
+      row.moduleId = context.moduleId;
+      row.syllabusVersion = nextSyllabusVersion;
+      row.status = nextStatus;
       row.assignedLecturerIds = nextLecturerIds;
-      row.assignedLecturers = nextLecturerIds;
+      row.assignedLecturers = lecturerSnapshots;
       row.assignedLabAssistantIds = nextLabAssistantIds;
-      await row.save();
+      row.assignedLabAssistants = labAssistantSnapshots;
+
+      try {
+        await row.save();
+      } catch (error) {
+        if (isMongoDuplicateKeyError(error)) {
+          return NextResponse.json(
+            { message: "Module is already assigned for this intake term" },
+            { status: 409 }
+          );
+        }
+
+        throw error;
+      }
 
       const normalized = normalizeDbOffering(row.toObject());
       if (!normalized) {
@@ -511,51 +258,86 @@ export async function PUT(
         );
       }
 
-      const assignees = await resolveDisplayAssignees(normalized, mongooseConnection);
-      return NextResponse.json(toApiItem(normalized, assignees));
+      return NextResponse.json(toApiOfferingItem(normalized, assignees));
     }
 
     const existing = findModuleOfferingById(offeringId);
     if (!existing) {
       return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
     }
+
+    const context = resolveOfferingContext({
+      facultyCode: body.facultyCode ?? existing.facultyCode ?? existing.facultyId,
+      degreeCode: body.degreeCode ?? existing.degreeCode ?? existing.degreeProgramId,
+      intakeName: body.intakeName ?? existing.intakeName,
+      moduleCode: body.moduleCode ?? existing.moduleCode,
+      facultyId: body.facultyId ?? existing.facultyId ?? existing.facultyCode,
+      degreeProgramId:
+        body.degreeProgramId ?? existing.degreeProgramId ?? existing.degreeCode,
+      intakeId: body.intakeId ?? existing.intakeId,
+      termCode: body.termCode ?? existing.termCode,
+      moduleId: body.moduleId ?? existing.moduleId,
+    });
+
+    const nextSyllabusVersion =
+      body.syllabusVersion === undefined
+        ? existing.syllabusVersion
+        : sanitizeSyllabusVersion(body.syllabusVersion);
+    const nextStatus =
+      body.status === undefined
+        ? existing.status
+        : sanitizeOfferingStatus(body.status);
     const nextLecturerIds = hasLecturerPayload
       ? sanitizeIdList(body.assignedLecturerIds ?? body.assignedLecturers)
-      : existing.assignedLecturerIds;
+      : sanitizeIdList(existing.assignedLecturerIds ?? existing.assignedLecturers);
     const nextLabAssistantIds = hasLabPayload
       ? sanitizeIdList(body.assignedLabAssistantIds)
-      : existing.assignedLabAssistantIds;
+      : sanitizeIdList(existing.assignedLabAssistantIds);
 
-    try {
-      await validateLecturerAssignments({
-        ids: nextLecturerIds,
-        scope: {
-          facultyId: existing.facultyId,
-          degreeProgramId: existing.degreeProgramId,
-          moduleId: existing.moduleId,
-        },
-        mongooseConnection: null,
-      });
-      await validateLabAssistantAssignments({
-        ids: nextLabAssistantIds,
-        scope: {
-          facultyId: existing.facultyId,
-          degreeProgramId: existing.degreeProgramId,
-          moduleId: existing.moduleId,
-        },
-        mongooseConnection: null,
-      });
-    } catch (error) {
+    await validateLecturerAssignments({
+      ids: nextLecturerIds,
+      scope: {
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
+        moduleId: context.moduleId,
+      },
+      mongooseConnection: null,
+    });
+    await validateLabAssistantAssignments({
+      ids: nextLabAssistantIds,
+      scope: {
+        facultyCode: context.facultyCode,
+        degreeCode: context.degreeCode,
+        moduleCode: context.moduleCode,
+        moduleId: context.moduleId,
+      },
+      mongooseConnection: null,
+    });
+
+    const duplicateInStore = listModuleOfferings({
+      intakeName: context.intakeName,
+      termCode: context.termCode,
+      moduleCode: context.moduleCode,
+    }).some((offering) => offering.id !== offeringId && !offering.isDeleted);
+
+    if (duplicateInStore) {
       return NextResponse.json(
-        {
-          message:
-            error instanceof Error ? error.message : "Invalid staff assignment",
-        },
-        { status: 400 }
+        { message: "Module is already assigned for this intake term" },
+        { status: 409 }
       );
     }
 
     const updated = updateModuleOffering(offeringId, {
+      facultyCode: context.facultyCode,
+      degreeCode: context.degreeCode,
+      intakeName: context.intakeName,
+      moduleCode: context.moduleCode,
+      facultyId: context.facultyCode,
+      degreeProgramId: context.degreeCode,
+      intakeId: context.intakeId,
+      termCode: context.termCode,
+      moduleId: context.moduleId,
       syllabusVersion: nextSyllabusVersion,
       status: nextStatus,
       assignedLecturerIds: hasLecturerPayload ? nextLecturerIds : undefined,
@@ -565,15 +347,28 @@ export async function PUT(
       return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
     }
 
-    const assignees = await resolveDisplayAssignees(updated, null);
-    return NextResponse.json(toApiItem(updated, assignees));
+    const assignees = await resolveAssigneeMaps(
+      {
+        lecturerIds: updated.assignedLecturerIds,
+        labAssistantIds: updated.assignedLabAssistantIds,
+      },
+      null
+    );
+
+    return NextResponse.json(toApiOfferingItem(updated, assignees));
   } catch (error) {
+    if (isDuplicateMessage(error)) {
+      return NextResponse.json(
+        { message: "Module is already assigned for this intake term" },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       {
-        message:
-          error instanceof Error ? error.message : "Failed to update module offering",
+        message: error instanceof Error ? error.message : "Failed to update module offering",
       },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }
@@ -583,7 +378,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const offeringId = String(params.id ?? "").trim();
+  const offeringId = sanitizeId(params.id);
+
+  if (!offeringId) {
+    return NextResponse.json({ message: "Module offering id is required" }, { status: 400 });
+  }
 
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
     const dbOffering = (await ModuleOfferingModel.findById(offeringId)

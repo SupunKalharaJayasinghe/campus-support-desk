@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import { UserModel } from "@/models/User";
 
 export async function POST(request: Request) {
@@ -71,3 +71,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

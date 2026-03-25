@@ -12,7 +12,7 @@ import {
   University,
   Users,
 } from "lucide-react";
-import type { AppRole } from "@/lib/rbac";
+import type { AppRole } from "@/models/rbac";
 
 export type AdminNavItem = {
   label: string;
@@ -192,3 +192,4 @@ export function resolveActiveAdminRoute(
     activeSection,
   };
 }
+

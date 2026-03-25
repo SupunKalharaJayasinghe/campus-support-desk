@@ -8,8 +8,8 @@ import {
   isDemoModeEnabled,
   readStoredRole,
   readStoredUser,
-} from "@/lib/rbac";
-import type { AppRole } from "@/lib/rbac";
+} from "@/models/rbac";
+import type { AppRole } from "@/models/rbac";
 
 export default function RoleGuard({
   allowedRole,
@@ -57,3 +57,4 @@ export default function RoleGuard({
 
   return <>{children}</>;
 }
+

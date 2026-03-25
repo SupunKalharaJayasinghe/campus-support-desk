@@ -1,0 +1,10 @@
+{
+  "/page": "app/page.js",
+  "/api/modules/route": "app/api/modules/route.js",
+  "/api/faculties/route": "app/api/faculties/route.js",
+  "/api/degree-programs/route": "app/api/degree-programs/route.js",
+  "/(app)/admin/page": "app/(app)/admin/page.js",
+  "/(app)/admin/users/lecturers/page": "app/(app)/admin/users/lecturers/page.js",
+  "/(app)/admin/academics/module-offerings/page": "app/(app)/admin/academics/module-offerings/page.js",
+  "/(app)/admin/academics/modules/page": "app/(app)/admin/academics/modules/page.js"
+}

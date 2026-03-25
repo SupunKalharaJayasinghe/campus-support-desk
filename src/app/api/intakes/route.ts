@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import "@/models/Intake";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectMongoose } from "@/models/mongoose";
 import {
   createIntake,
   hasInvalidTermScheduleRange,
@@ -17,8 +17,8 @@ import {
   type IntakeStatus,
   type IntakeRecord,
   type IntakeTermScheduleRecord,
-} from "@/lib/intake-store";
-import type { IntakeTermScheduleInput } from "@/lib/intake-store";
+} from "@/models/intake-store";
+import type { IntakeTermScheduleInput } from "@/models/intake-store";
 
 function parsePageParam(value: string | null, fallback: number) {
   const parsed = Number(value);
@@ -275,3 +275,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

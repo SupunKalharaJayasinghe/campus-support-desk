@@ -1,7 +1,7 @@
 "use client";
 
 import Card from "@/components/ui/Card";
-import { lecturerBookingRequests, lecturerPosts, notificationsByRole } from "@/lib/mockData";
+import { lecturerBookingRequests, lecturerPosts, notificationsByRole } from "@/models/mockData";
 
 export default function LecturerDashboardPage() {
   const pendingRequests = lecturerBookingRequests.filter((item) => item.status === "Pending").length;
@@ -31,3 +31,4 @@ export default function LecturerDashboardPage() {
     </div>
   );
 }
+

@@ -2,21 +2,22 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Lecturer";
 import "@/models/ModuleOffering";
-import { findIntakeById } from "@/lib/intake-store";
+import { findIntakeById } from "@/models/intake-store";
 import {
   listLecturersInMemory,
   toLecturerPersistedRecordFromUnknown,
   type LecturerPersistedRecord,
-} from "@/lib/lecturer-store";
-import { connectMongoose } from "@/lib/mongoose";
-import { findModuleOfferingById } from "@/lib/module-offering-store";
+} from "@/models/lecturer-store";
+import { connectMongoose } from "@/models/mongoose";
+import { findModuleOfferingById } from "@/models/module-offering-store";
 import {
   isStaffEligibleForOffering,
   normalizeAcademicCode,
   sanitizeId,
   staffEligibilityMongoFilter,
   type OfferingEligibilityScope,
-} from "@/lib/staff-eligibility";
+} from "@/models/staff-eligibility";
+import { findModuleByCode, findModuleById } from "@/models/module-store";
 import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
@@ -46,25 +47,40 @@ function getScopeFromDbRow(value: unknown): OfferingEligibilityScope | null {
 
   const intakeId = sanitizeId(row.intakeId);
   const moduleId = sanitizeId(row.moduleId);
-  if (!intakeId || !moduleId) {
+  const moduleCode = normalizeModuleCode(row.moduleCode);
+  const moduleRecord = findModuleByCode(moduleCode) ?? findModuleById(moduleId);
+  const resolvedModuleId = moduleRecord?.id ?? moduleId;
+  const resolvedModuleCode = moduleRecord?.code ?? moduleCode;
+  if (!intakeId || (!resolvedModuleId && !resolvedModuleCode)) {
     return null;
   }
   const intake = findIntakeById(intakeId);
 
-  const facultyId = normalizeAcademicCode(row.facultyId ?? intake?.facultyCode);
-  const degreeProgramId = normalizeAcademicCode(
-    row.degreeProgramId ?? intake?.degreeCode
+  const facultyCode = normalizeAcademicCode(
+    row.facultyCode ?? row.facultyId ?? intake?.facultyCode
+  );
+  const degreeCode = normalizeAcademicCode(
+    row.degreeCode ?? row.degreeProgramId ?? intake?.degreeCode
   );
 
-  if (!facultyId || !degreeProgramId) {
+  if (!facultyCode || !degreeCode) {
     return null;
   }
 
   return {
-    facultyId,
-    degreeProgramId,
-    moduleId,
+    facultyCode,
+    degreeCode,
+    moduleCode: resolvedModuleCode,
+    moduleId: resolvedModuleId,
   };
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
 }
 
 export async function GET(
@@ -82,9 +98,12 @@ export async function GET(
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
     const offeringRow = await ModuleOfferingModel.findById(offeringId)
       .select({
+        facultyCode: 1,
         facultyId: 1,
+        degreeCode: 1,
         degreeProgramId: 1,
         intakeId: 1,
+        moduleCode: 1,
         moduleId: 1,
       })
       .lean()
@@ -97,8 +116,9 @@ export async function GET(
     const offering = findModuleOfferingById(offeringId);
     if (offering) {
       scope = {
-        facultyId: offering.facultyId,
-        degreeProgramId: offering.degreeProgramId,
+        facultyCode: offering.facultyCode ?? offering.facultyId,
+        degreeCode: offering.degreeCode ?? offering.degreeProgramId,
+        moduleCode: offering.moduleCode,
         moduleId: offering.moduleId,
       };
     }
