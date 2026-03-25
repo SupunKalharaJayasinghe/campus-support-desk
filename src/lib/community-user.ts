@@ -26,6 +26,14 @@ function normalizeEmail(username: string, email: string, name: string) {
     .replace(/^\.+|\.+$/g, "")}@demo.local`;
 }
 
+function leanDocId(doc: unknown): string | undefined {
+  if (doc == null || Array.isArray(doc) || typeof doc !== "object") {
+    return undefined;
+  }
+  const id = (doc as { _id?: unknown })._id;
+  return id != null ? String(id) : undefined;
+}
+
 function normalizeUsername(username: string, email: string, name: string) {
   if (username) {
     return username.toUpperCase();
@@ -65,8 +73,9 @@ export async function resolveCommunityActorId(input: ResolveActorInput) {
     const byEmail = await UserModel.findOne({ email, status: "ACTIVE" })
       .select({ _id: 1 })
       .lean();
-    if (byEmail?._id) {
-      return String(byEmail._id);
+    const byEmailId = leanDocId(byEmail);
+    if (byEmailId) {
+      return byEmailId;
     }
   }
 
@@ -77,8 +86,9 @@ export async function resolveCommunityActorId(input: ResolveActorInput) {
     })
       .select({ _id: 1 })
       .lean();
-    if (byUsername?._id) {
-      return String(byUsername._id);
+    const byUsernameId = leanDocId(byUsername);
+    if (byUsernameId) {
+      return byUsernameId;
     }
   }
 
@@ -89,8 +99,9 @@ export async function resolveCommunityActorId(input: ResolveActorInput) {
   })
     .select({ _id: 1 })
     .lean();
-  if (existingByNormalizedEmail?._id) {
-    return String(existingByNormalizedEmail._id);
+  const existingId = leanDocId(existingByNormalizedEmail);
+  if (existingId) {
+    return existingId;
   }
 
   const baseUsername = normalizeUsername(username, normalizedEmail, name);

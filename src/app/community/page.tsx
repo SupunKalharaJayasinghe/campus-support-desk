@@ -835,7 +835,7 @@ export default function CommunityPage() {
                                                 <div className="mt-3 flex justify-end">
                                                     <Button
                                                         type="submit"
-                                                        variant="dark"
+                                                        variant="primary"
                                                         className="gap-2 bg-blue-700 hover:bg-blue-800"
                                                         disabled={!newReplyContent.trim()}
                                                     >

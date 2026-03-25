@@ -1,27 +1,36 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-    ArrowLeft,
+    Archive,
     Award,
     BookMarked,
     CalendarDays,
     CheckCircle2,
+    CirclePlus,
     Eye,
+    FilePenLine,
     FileText,
     Flame,
+    Home,
+    LogOut,
+    Menu,
     MessageSquare,
+    Search,
+    Settings,
+    Settings2,
     Star,
     ThumbsUp,
     User,
     Users,
 } from "lucide-react";
-import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
+import CommunityPostComposer from "@/components/community/CommunityPostComposer";
 import communityBackground from "@/app/images/community/community2.jpg";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
-import { readStoredUser } from "@/lib/rbac";
+import { clearDemoSession, readStoredUser } from "@/lib/rbac";
 
 const PROFILE_FALLBACK = {
     reputation: 1250,
@@ -41,7 +50,11 @@ const PROFILE_FALLBACK = {
     ],
     recentReplies: [
         { id: 1, postTitle: "Best resources for learning Next.js 14?", content: "I strongly recommend the official Next.js documentation...", time: "1 day ago" },
-    ]
+    ],
+    archivedPosts: [
+        { id: 101, title: "Old notice: lab hours during midterms", category: "academic_question", time: "3 months ago", likes: 8, replies: 2 },
+        { id: 102, title: "Textbook swap — Calculus II", category: "study_material", time: "5 months ago", likes: 15, replies: 6 },
+    ],
 };
 
 function roleToCommunityLabel(role: string | undefined) {
@@ -52,6 +65,11 @@ function roleToCommunityLabel(role: string | undefined) {
 }
 
 export default function CommunityProfilePage() {
+    const router = useRouter();
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+
     const profileData = useMemo(() => {
         const storedUser = readStoredUser();
         const settings = readCommunityProfileSettings();
@@ -68,34 +86,180 @@ export default function CommunityProfilePage() {
         };
     }, []);
 
+    const filteredRecentPosts = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return profileData.recentPosts;
+        return profileData.recentPosts.filter((p) => p.title.toLowerCase().includes(q));
+    }, [profileData.recentPosts, searchQuery]);
+
+    const filteredArchivedPosts = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return profileData.archivedPosts;
+        return profileData.archivedPosts.filter((p) => p.title.toLowerCase().includes(q));
+    }, [profileData.archivedPosts, searchQuery]);
+
+    const filteredRecentReplies = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return profileData.recentReplies;
+        return profileData.recentReplies.filter(
+            (r) =>
+                r.postTitle.toLowerCase().includes(q) || r.content.toLowerCase().includes(q)
+        );
+    }, [profileData.recentReplies, searchQuery]);
+
+    const handleLogout = () => {
+        clearDemoSession();
+        setIsProfileMenuOpen(false);
+        router.push("/student");
+    };
+
+    /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
+    const closeSidebarIfMobile = useCallback(() => {
+        if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+            setSidebarOpen(false);
+        }
+    }, []);
+
     return (
         <main
-            className="relative min-h-screen py-10 lg:py-14"
+            className="relative h-screen overflow-hidden text-[#0f0f0f]"
             style={{
                 backgroundImage: `url(${communityBackground.src})`,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
             }}
         >
-            <div className="absolute inset-0 bg-slate-100/78" />
-            <Container size="6xl">
-                <div className="relative z-10 rounded-3xl border border-blue-200 bg-slate-50/90 p-5 shadow-shadow md:p-8">
-                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                        <Link
-                            className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50"
-                            href="/community"
-                        >
-                            <ArrowLeft size={16} />
-                            Back to Community
-                        </Link>
-                        <Link
-                            href="/community/Settings"
-                            className="rounded-full bg-blue-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-800"
-                        >
-                            Edit Profile
-                        </Link>
-                    </div>
+            <div className="absolute inset-0 bg-slate-100/70" />
+            <div className="relative z-10 h-full">
+                <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
+                    <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setSidebarOpen((prev) => !prev)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-blue-100"
+                                aria-label="Toggle sidebar"
+                            >
+                                <Menu size={22} />
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
+                                <span className="text-lg font-bold tracking-tight text-slate-800">Profile</span>
+                            </div>
+                        </div>
+                        
 
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <Link
+                                href="/community/post/create"
+                                className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
+                                onClick={closeSidebarIfMobile}
+                            >
+                                <CirclePlus size={18} />
+                                <span className="hidden sm:inline">Create</span>
+                            </Link>
+                            <div className="relative">
+                            <button
+                                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-700 text-white"
+                            >
+                                <User size={18} />
+                            </button>
+                            </div>
+
+                            
+                        </div>
+                    </div>
+                </header>
+
+                <div className="flex h-full pt-16">
+                    {sidebarOpen && (
+                        <button
+                            type="button"
+                            className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+                            aria-label="Close sidebar"
+                            onClick={() => setSidebarOpen(false)}
+                        />
+                    )}
+
+                    <aside
+                        className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:top-16 lg:translate-x-0 ${
+                            sidebarOpen ? "translate-x-0" : "-translate-x-full lg:hidden"
+                        }`}
+                    >
+                        <nav aria-label="Profile sections" className="flex h-full flex-col">
+                            <div className="space-y-1">
+                                <Link
+                                    href="/community"
+                                    className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <Home size={18} /> Home
+                                </Link>
+                                <Link
+                                    href="/community/profile"
+                                    className="flex items-center gap-3 rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <User size={18} /> Profile
+                                </Link>
+                            </div>
+
+                            <div className="my-3 h-px bg-blue-100" />
+
+                            <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    On this page
+                                </p>
+                                <a
+                                    href="#create-post"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <CirclePlus size={18} /> Create post
+                                </a>
+                                <a
+                                    href="#current-posts"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <FileText size={18} /> Current posts
+                                </a>
+                                <a
+                                    href="#archive-posts"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <Archive size={18} /> Archive posts
+                                </a>
+                                <a
+                                    href="#draft-posts"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <FilePenLine size={18} /> Draft posts
+                                </a>
+                            </div>
+
+                            <div className="my-3 h-px bg-blue-100" />
+
+                            <div className="space-y-1">
+                                <Link
+                                    href="/community/Settings"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <Settings2 size={18} /> Edit profile
+                                </Link>
+                            </div>
+
+                           
+                        </nav>
+                    </aside>
+
+                    <section className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
+                        <div className="rounded-2xl border border-blue-200 bg-slate-50/90 p-4 shadow-shadow sm:rounded-3xl md:p-5 lg:p-6">
+                            <div className="space-y-5">
                     <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-white to-blue-50 p-6 md:p-7">
                         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
                             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
@@ -225,13 +389,33 @@ export default function CommunityProfilePage() {
                         </Card>
                     </div>
 
+                    <div id="create-post" className="mt-10 scroll-mt-6">
+                        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+                            <CirclePlus size={20} className="text-blue-700" /> Create post
+                        </h2>
+                        <p className="mb-4 text-sm text-slate-600">
+                            Use the same composer as the full create page. Save draft, then post — you will be taken to the community feed when it succeeds.
+                        </p>
+                        <CommunityPostComposer compact className="shadow-shadow" />
+                        <p className="mt-4 text-center text-sm text-slate-600">
+                            Prefer a dedicated page?{" "}
+                            <Link
+                                href="/community/post/create"
+                                className="font-semibold text-blue-700 underline-offset-2 hover:underline"
+                                onClick={closeSidebarIfMobile}
+                            >
+                                Open create post page
+                            </Link>
+                        </p>
+                    </div>
+
                     <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                        <div>
+                        <div id="current-posts" className="scroll-mt-6">
                             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
-                                <FileText size={20} className="text-blue-700" /> Recent Posts
+                                <FileText size={20} className="text-blue-700" /> Current posts
                             </h2>
                             <div className="space-y-4">
-                                {profileData.recentPosts.map((post) => (
+                                {filteredRecentPosts.map((post) => (
                                     <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                                         <div className="mb-3 flex items-start justify-between gap-2">
                                             <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
@@ -259,12 +443,12 @@ export default function CommunityProfilePage() {
                             </div>
                         </div>
 
-                        <div>
+                        <div className="scroll-mt-6">
                             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
-                                <MessageSquare size={20} className="text-blue-700" /> Recent Replies
+                                <MessageSquare size={20} className="text-blue-700" /> Recent replies
                             </h2>
                             <div className="space-y-4">
-                                {profileData.recentReplies.map((reply) => (
+                                {filteredRecentReplies.map((reply) => (
                                     <Card key={reply.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                                         <p className="text-xs font-semibold text-slate-500">
                                             Replying to <span className="text-slate-700">{reply.postTitle}</span>
@@ -285,11 +469,62 @@ export default function CommunityProfilePage() {
                         </div>
                     </div>
 
+                    <div id="archive-posts" className="mt-10 scroll-mt-6">
+                        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+                            <Archive size={20} className="text-blue-700" /> Archive posts
+                        </h2>
+                        <p className="mb-4 text-sm text-slate-600">
+                            Older threads you have archived stay here for your reference.
+                        </p>
+                        <div className="space-y-4">
+                            {filteredArchivedPosts.map((post) => (
+                                <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                                    <div className="mb-3 flex items-start justify-between gap-2">
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                                            {post.category.replace("_", " ")}
+                                        </span>
+                                        <span className="text-xs text-slate-500">{post.time}</span>
+                                    </div>
+                                    <h3 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
+                                    <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <ThumbsUp size={14} /> {post.likes}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <MessageSquare size={14} /> {post.replies}
+                                        </span>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div id="draft-posts" className="mt-10 scroll-mt-6">
+                        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+                            <FilePenLine size={20} className="text-blue-700" /> Draft posts
+                        </h2>
+                        <Card className="rounded-2xl border border-dashed border-blue-200 bg-white/90 p-6 shadow-none">
+                            <p className="text-sm text-slate-600">
+                                Use <strong>Save draft</strong> in the create section above before posting. A list of saved drafts will show here when draft storage is connected to your account.
+                            </p>
+                            <a
+                                href="#create-post"
+                                className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
+                            >
+                                <CirclePlus size={16} />
+                                Go to composer
+                            </a>
+                        </Card>
+                    </div>
+
                     <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-100/60 p-4 text-sm text-blue-900">
                         Keep helping others, and your mentor badge progression will update automatically based on community contributions.
                     </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-            </Container>
+            </div>
         </main>
     );
 }
