@@ -11,6 +11,10 @@ import { LecturerModel } from "@/models/Lecturer";
 import { StudentModel } from "@/models/Student";
 import { UserModel } from "@/models/User";
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -44,12 +48,24 @@ export async function POST(request: Request) {
     }
 
     const normalizedIdentifier = identifier.toLowerCase();
+    const escapedIdentifier = escapeRegex(identifier);
     const userRow = await UserModel.findOne({
-      status: "ACTIVE",
-      $or: [
-        { username: identifier },
-        { username: identifier.toUpperCase() },
-        { email: normalizedIdentifier },
+      $and: [
+        {
+          $or: [
+            { status: "ACTIVE" },
+            { status: "active" },
+            { status: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { username: identifier },
+            { username: identifier.toUpperCase() },
+            { username: { $regex: `^${escapedIdentifier}$`, $options: "i" } },
+            { email: normalizedIdentifier },
+          ],
+        },
       ],
     })
       .lean()
@@ -61,12 +77,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
     }
 
-    const passwordHash = String(user.passwordHash ?? "");
-    if (!passwordHash) {
-      return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
+    const passwordHash = String(user.passwordHash ?? "").trim();
+    const legacyPassword = String(user.password ?? "").trim();
+
+    let valid = false;
+    if (passwordHash) {
+      valid = await bcrypt.compare(password, passwordHash);
+    } else if (legacyPassword) {
+      valid = password === legacyPassword;
     }
 
-    const valid = await bcrypt.compare(password, passwordHash);
     if (!valid) {
       return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
     }
