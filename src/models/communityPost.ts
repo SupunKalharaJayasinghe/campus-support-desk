@@ -48,6 +48,13 @@ const CommunityPostSchema = new Schema(
     enum: ["open", "resolved", "archived"],
     default: "open",
   },
+
+    status2: {
+    type: String,
+    enum: ["resolved", "not_resolved"],
+    default: "not_resolved",
+  },
+  
 },
 { timestamps: true }
 );

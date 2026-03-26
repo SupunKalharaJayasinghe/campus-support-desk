@@ -49,3 +49,45 @@ export async function DELETE(
     return Response.json({ error: "Failed to delete post" }, { status: 500 });
   }
 }
+
+type UpdatePostPayload = {
+  status?: unknown;
+};
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await connectDB();
+
+    if (!mongoose.Types.ObjectId.isValid(params.id)) {
+      return Response.json({ error: "Invalid post id" }, { status: 400 });
+    }
+
+    const body = (await req.json().catch(() => ({}))) as UpdatePostPayload;
+    const nextStatus = typeof body.status === "string" ? body.status.trim() : "";
+
+    if (!["open", "resolved", "archived"].includes(nextStatus)) {
+      return Response.json(
+        { error: "Valid status is required" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await CommunityPost.findByIdAndUpdate(
+      params.id,
+      { $set: { status: nextStatus } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return Response.json({ error: "Post not found" }, { status: 404 });
+    }
+
+    return Response.json(updated);
+  } catch (error) {
+    console.error("community-posts/[id] PATCH failed", error);
+    return Response.json({ error: "Failed to update post" }, { status: 500 });
+  }
+}
