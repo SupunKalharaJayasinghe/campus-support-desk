@@ -2,6 +2,7 @@ import mongoose, { Types } from "mongoose";
 import "@/models/ModuleOffering";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleById } from "@/lib/module-store";
+import { checkAllMilestones } from "@/lib/milestone-checker";
 import {
   calculateCumulativeGPA,
   calculateSemesterGPA,
@@ -1001,6 +1002,18 @@ export async function awardPointsForGrade(gradeId: string): Promise<AwardResult>
 
     result.studentId = readId(studentObjectId);
     await awardPointsForGradeRecord(gradeRecord, result);
+    try {
+      const milestoneResult = await checkAllMilestones(result.studentId);
+      if (milestoneResult.newTrophiesAwarded.length > 0) {
+        result.milestonesUnlocked.push(
+          ...milestoneResult.newTrophiesAwarded.map(
+            (award) => `${award.trophyIcon} ${award.trophyName}`
+          )
+        );
+      }
+    } catch (error) {
+      console.error("checkAllMilestones after grade award error", error);
+    }
     await refreshTotalXP(result, studentObjectId);
     return result;
   } catch (error) {
@@ -1071,6 +1084,18 @@ export async function awardPointsForSemester(
       allGrades,
       result
     );
+    try {
+      const milestoneResult = await checkAllMilestones(result.studentId);
+      if (milestoneResult.newTrophiesAwarded.length > 0) {
+        result.milestonesUnlocked.push(
+          ...milestoneResult.newTrophiesAwarded.map(
+            (award) => `${award.trophyIcon} ${award.trophyName}`
+          )
+        );
+      }
+    } catch (error) {
+      console.error("checkAllMilestones after semester award error", error);
+    }
     await refreshTotalXP(result, studentObjectId);
     return result;
   } catch (error) {
