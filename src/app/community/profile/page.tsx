@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
     BookMarked,
     CalendarDays,
     CheckCircle2,
+    ChevronDown,
     CirclePlus,
     Eye,
     FilePenLine,
@@ -211,30 +212,37 @@ export default function CommunityProfilePage() {
                                 <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                                     On this page
                                 </p>
+                                 <a
+                                    href="#Profile details"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <User size={18} /> Profile Details
+                                </a>
                                 <a
                                     href="#create-post"
-                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <CirclePlus size={18} /> Create post
                                 </a>
                                 <a
                                     href="#current-posts"
-                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <FileText size={18} /> Current posts
                                 </a>
                                 <a
                                     href="#archive-posts"
-                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <Archive size={18} /> Archive posts
                                 </a>
                                 <a
                                     href="#draft-posts"
-                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <FilePenLine size={18} /> Draft posts
@@ -246,19 +254,30 @@ export default function CommunityProfilePage() {
                             <div className="space-y-1">
                                 <Link
                                     href="/community/Settings"
-                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-50"
+                                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-blue-100"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <Settings2 size={18} /> Edit profile
                                 </Link>
                             </div>
+                            
 
+                            <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-200"
+                        >
+                            
+                            <LogOut size={18} /> Logout
+                            </button>
+                        
+                            
                            
                         </nav>
                     </aside>
 
                     <section className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
-                        <div className="rounded-2xl border border-blue-200 bg-slate-50/90 p-4 shadow-shadow sm:rounded-3xl md:p-5 lg:p-6">
+                        <div id="Profile details" className="rounded-2xl border border-blue-200 bg-slate-50/90 p-4 shadow-shadow sm:rounded-3xl md:p-5 lg:p-6">
                             <div className="space-y-5">
                     <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-white to-blue-50 p-6 md:p-7">
                         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
