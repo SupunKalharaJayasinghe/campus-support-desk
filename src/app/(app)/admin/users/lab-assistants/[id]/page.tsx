@@ -371,7 +371,14 @@ export default function LabAssistantProfilePage() {
     [degrees]
   );
   const moduleMap = useMemo(
-    () => new Map(modules.map((item) => [item.id, `${item.code} - ${item.name}`])),
+    () => {
+      const map = new Map<string, string>();
+      modules.forEach((item) => {
+        map.set(item.id, `${item.code} - ${item.name}`);
+        map.set(item.code, `${item.code} - ${item.name}`);
+      });
+      return map;
+    },
     [modules]
   );
 
@@ -431,7 +438,7 @@ export default function LabAssistantProfilePage() {
             <div className="border-b border-border pb-4">
               <p className="text-lg font-semibold text-heading">Support Eligibility</p>
               <p className="text-sm text-text/65">
-                Faculties, degrees, and modules this assistant is eligible to support.
+                Faculties, degrees, and modules this assistant is eligible to support. This is not the assignment source.
               </p>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -472,7 +479,7 @@ export default function LabAssistantProfilePage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Modules</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Eligible Modules</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {profile.moduleIds.length === 0 ? (
                     <p className="text-sm text-text/68">No modules selected.</p>

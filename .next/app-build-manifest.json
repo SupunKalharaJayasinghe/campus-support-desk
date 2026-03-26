@@ -26,20 +26,30 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/layout.js"
     ],
-    "/(app)/admin/users/lecturers/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/users/lecturers/page.js"
-    ],
     "/(app)/admin/academics/module-offerings/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/admin/academics/module-offerings/page.js"
     ],
-    "/(app)/admin/academics/modules/page": [
+    "/(app)/admin/users/lecturers/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/academics/modules/page.js"
+      "static/chunks/app/(app)/admin/users/lecturers/page.js"
+    ],
+    "/(app)/admin/users/lab-assistants/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/users/lab-assistants/page.js"
+    ],
+    "/(app)/admin/users/students/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/users/students/page.js"
+    ],
+    "/(app)/admin/academics/intakes/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/academics/intakes/page.js"
     ],
     "/(app)/admin/academics/subgroups/page": [
       "static/chunks/webpack.js",

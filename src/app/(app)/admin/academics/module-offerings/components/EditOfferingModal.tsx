@@ -70,11 +70,25 @@ export interface OfferingModuleOption {
   defaultSyllabusVersion: SyllabusVersion;
 }
 
+export interface ModuleAssignmentSnapshot {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+  facultyId: string;
+  degreeProgramId: string;
+  intakeName: string;
+  termCode: string;
+  lecturers: OfferingStaffItem[];
+  labAssistants: OfferingStaffItem[];
+  status: OfferingStatus;
+}
+
 interface EditOfferingModalProps {
   mode: "add" | "edit";
   open: boolean;
   saving: boolean;
   loadingModules: boolean;
+  loadingModuleAssignments: boolean;
   loadingLecturers: boolean;
   loadingLabAssistants: boolean;
   offering: EditOfferingContext | null;
@@ -84,6 +98,7 @@ interface EditOfferingModalProps {
   intakeOptions: OfferingIntakeOption[];
   moduleOptions: OfferingModuleOption[];
   termOptions: string[];
+  moduleAssignments: ModuleAssignmentSnapshot[];
   eligibleLecturers: OfferingStaffItem[];
   eligibleLabAssistants: OfferingStaffItem[];
   onFacultyChange: (value: string) => void;
@@ -228,6 +243,7 @@ export default function EditOfferingModal({
   open,
   saving,
   loadingModules,
+  loadingModuleAssignments,
   loadingLecturers,
   loadingLabAssistants,
   offering,
@@ -237,6 +253,7 @@ export default function EditOfferingModal({
   intakeOptions,
   moduleOptions,
   termOptions,
+  moduleAssignments,
   eligibleLecturers,
   eligibleLabAssistants,
   onFacultyChange,
@@ -267,6 +284,7 @@ export default function EditOfferingModal({
   const selectedDegree = degreeOptions.find((item) => item.code === form.degreeProgramId) ?? null;
   const selectedIntake = intakeOptions.find((item) => item.id === form.intakeId) ?? null;
   const selectedModule = moduleOptions.find((item) => item.id === form.moduleId) ?? null;
+  const contextLocked = mode === "edit";
 
   if (!open) {
     return null;
@@ -316,7 +334,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving}
+                  disabled={saving || contextLocked}
                   onChange={(event) => onFacultyChange(event.target.value)}
                   value={form.facultyId}
                 >
@@ -335,7 +353,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.facultyId}
+                  disabled={saving || contextLocked || !form.facultyId}
                   onChange={(event) => onDegreeChange(event.target.value)}
                   value={form.degreeProgramId}
                 >
@@ -354,7 +372,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.degreeProgramId}
+                  disabled={saving || contextLocked || !form.degreeProgramId}
                   onChange={(event) => onIntakeChange(event.target.value)}
                   value={form.intakeId}
                 >
@@ -373,7 +391,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving}
+                  disabled={saving || contextLocked}
                   onChange={(event) => onTermChange(event.target.value)}
                   value={form.termCode}
                 >
@@ -391,7 +409,13 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.facultyId || !form.degreeProgramId || !form.termCode}
+                  disabled={
+                    saving ||
+                    contextLocked ||
+                    !form.facultyId ||
+                    !form.degreeProgramId ||
+                    !form.termCode
+                  }
                   onChange={(event) => onModuleChange(event.target.value)}
                   value={form.moduleId}
                 >
@@ -424,7 +448,69 @@ export default function EditOfferingModal({
               <p className="mt-1">
                 Module: <span className="font-semibold">{selectedModule ? `${selectedModule.code} - ${selectedModule.name}` : "—"}</span>
               </p>
+              {contextLocked ? (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Context fields are locked in edit mode. Update module applicability from Modules page.
+                </p>
+              ) : null}
             </div>
+
+            {form.moduleId ? (
+              <div className="mt-4 rounded-2xl border border-border bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-heading">
+                    Existing Assignments For Selected Module
+                  </p>
+                  <Badge variant="primary">{moduleAssignments.length}</Badge>
+                </div>
+                {loadingModuleAssignments ? (
+                  <p className="mt-2 text-sm text-text/65">Loading module assignment snapshot...</p>
+                ) : moduleAssignments.length === 0 ? (
+                  <p className="mt-2 text-sm text-text/65">
+                    No module offerings found for this module yet.
+                  </p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[860px] text-left text-xs">
+                      <thead className="border-b border-border bg-tint">
+                        <tr className="font-semibold uppercase tracking-[0.08em] text-text/60">
+                          <th className="px-2 py-2">Faculty</th>
+                          <th className="px-2 py-2">Degree</th>
+                          <th className="px-2 py-2">Intake</th>
+                          <th className="px-2 py-2">Term</th>
+                          <th className="px-2 py-2">Lecturers</th>
+                          <th className="px-2 py-2">Lab Assistants</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {moduleAssignments.map((item) => {
+                          const lecturerNames = item.lecturers.slice(0, 2).map((row) => row.fullName);
+                          const labNames = item.labAssistants.slice(0, 2).map((row) => row.fullName);
+                          return (
+                            <tr className="border-b border-border/70" key={item.id}>
+                              <td className="px-2 py-2 text-text/75">{item.facultyId || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.degreeProgramId || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.intakeName || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.termCode || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">
+                                {lecturerNames.length > 0
+                                  ? `${lecturerNames.join(", ")}${item.lecturers.length > 2 ? ` +${item.lecturers.length - 2}` : ""}`
+                                  : "—"}
+                              </td>
+                              <td className="px-2 py-2 text-text/75">
+                                {labNames.length > 0
+                                  ? `${labNames.join(", ")}${item.labAssistants.length > 2 ? ` +${item.labAssistants.length - 2}` : ""}`
+                                  : "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </section>
 
           <section className="mt-5 rounded-2xl border border-border bg-white p-4">

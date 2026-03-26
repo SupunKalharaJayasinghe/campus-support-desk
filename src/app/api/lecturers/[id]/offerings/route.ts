@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
 import { findDegreeProgram } from "@/models/degree-program-store";
 import { findFaculty } from "@/models/faculty-store";
-import { findIntakeById } from "@/models/intake-store";
+import { findIntakeById, listIntakes } from "@/models/intake-store";
 import { connectMongoose } from "@/models/mongoose";
 import { listModuleOfferingsByLecturerId, type ModuleOfferingRecord } from "@/models/module-offering-store";
-import { findModuleById } from "@/models/module-store";
+import { findModuleByCode, findModuleById } from "@/models/module-store";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -56,6 +56,7 @@ function toApiOffering(item: {
   facultyId: string;
   degreeProgramId: string;
   intakeId: string;
+  intakeName: string;
   termCode: string;
   moduleId: string;
   moduleCode: string;
@@ -67,7 +68,7 @@ function toApiOffering(item: {
   const faculty = findFaculty(item.facultyId);
   const degree = findDegreeProgram(item.degreeProgramId);
   const intake = findIntakeById(item.intakeId);
-  const moduleRecord = findModuleById(item.moduleId);
+  const moduleRecord = findModuleById(item.moduleId) ?? findModuleByCode(item.moduleCode);
 
   return {
     id: item.id,
@@ -76,7 +77,7 @@ function toApiOffering(item: {
     degreeProgramId: item.degreeProgramId,
     degreeProgramName: degree?.name ?? "",
     intakeId: item.intakeId,
-    intakeName: intake?.name ?? "",
+    intakeName: item.intakeName || intake?.name || "",
     termCode: item.termCode,
     moduleId: item.moduleId,
     moduleCode: item.moduleCode || moduleRecord?.code || "",
@@ -95,23 +96,45 @@ function normalizeDbOffering(value: unknown) {
   }
 
   const id = String(row._id ?? row.id ?? "").trim();
-  const intakeId = String(row.intakeId ?? "").trim();
-  const moduleId = String(row.moduleId ?? "").trim();
-  if (!id || !intakeId || !moduleId) {
+  if (!id) {
     return null;
   }
 
-  const intake = findIntakeById(intakeId);
-  const moduleRecord = findModuleById(moduleId);
+  const intakeId = String(row.intakeId ?? "").trim();
+  const intakeNameFromRow = String(row.intakeName ?? "").trim();
+  const intakeById = intakeId ? findIntakeById(intakeId) : null;
+  const intakeByName =
+    !intakeById && intakeNameFromRow
+      ? listIntakes().find(
+          (item) => item.name.toLowerCase() === intakeNameFromRow.toLowerCase()
+        ) ?? null
+      : null;
+  const intake = intakeById ?? intakeByName;
+
+  const moduleId = String(row.moduleId ?? "").trim();
+  const moduleCodeFromRow = String(row.moduleCode ?? "").trim().toUpperCase();
+  const moduleById = moduleId ? findModuleById(moduleId) : null;
+  const moduleByCode = !moduleById && moduleCodeFromRow ? findModuleByCode(moduleCodeFromRow) : null;
+  const moduleRecord = moduleById ?? moduleByCode;
+  const resolvedModuleCode = moduleCodeFromRow || moduleRecord?.code || moduleId.toUpperCase();
+
+  if (!resolvedModuleCode) {
+    return null;
+  }
+
+  const resolvedModuleId = moduleId || moduleRecord?.id || resolvedModuleCode;
+  const resolvedIntakeId = intakeId || intake?.id || intakeNameFromRow;
+  const resolvedIntakeName = intakeNameFromRow || intake?.name || resolvedIntakeId;
 
   return {
     id,
     facultyId: normalizeAcademicCode(row.facultyId ?? intake?.facultyCode),
     degreeProgramId: normalizeAcademicCode(row.degreeProgramId ?? intake?.degreeCode),
-    intakeId,
+    intakeId: resolvedIntakeId,
+    intakeName: resolvedIntakeName,
     termCode: String(row.termCode ?? "").trim().toUpperCase(),
-    moduleId,
-    moduleCode: String(row.moduleCode ?? moduleRecord?.code ?? "").trim().toUpperCase(),
+    moduleId: resolvedModuleId,
+    moduleCode: resolvedModuleCode,
     moduleName: String(row.moduleName ?? moduleRecord?.name ?? "").trim(),
     syllabusVersion: String(row.syllabusVersion ?? "NEW").trim().toUpperCase(),
     status: String(row.status ?? "ACTIVE").trim().toUpperCase(),
@@ -126,6 +149,7 @@ function toApiFromMemory(item: ModuleOfferingRecord) {
     facultyId: item.facultyId,
     degreeProgramId: item.degreeProgramId,
     intakeId: item.intakeId,
+    intakeName: item.intakeName,
     termCode: item.termCode,
     moduleId: item.moduleId,
     moduleCode: item.moduleCode,
@@ -176,6 +200,7 @@ export async function GET(
         facultyId: row.facultyId,
         degreeProgramId: row.degreeProgramId,
         intakeId: row.intakeId,
+        intakeName: row.intakeName,
         termCode: row.termCode,
         moduleId: row.moduleId,
         moduleCode: row.moduleCode,

@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import ConfirmDeleteOfferingModal from "./components/ConfirmDeleteOfferingModal";
 import EditOfferingModal, {
   type EditOfferingContext,
+  type ModuleAssignmentSnapshot,
   type OfferingDegreeOption,
   type OfferingFacultyOption,
   type OfferingFormState,
@@ -185,6 +186,7 @@ export default function ModuleOfferingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoadingModules, setIsLoadingModules] = useState(false);
+  const [isLoadingModuleAssignments, setIsLoadingModuleAssignments] = useState(false);
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false);
   const [isLoadingLabAssistants, setIsLoadingLabAssistants] = useState(false);
 
@@ -208,6 +210,7 @@ export default function ModuleOfferingsPage() {
   const [modalDegrees, setModalDegrees] = useState<DegreeOption[]>([]);
   const [modalIntakes, setModalIntakes] = useState<IntakeOption[]>([]);
   const [modalModules, setModalModules] = useState<OfferingModuleOption[]>([]);
+  const [moduleAssignments, setModuleAssignments] = useState<ModuleAssignmentSnapshot[]>([]);
   const [eligibleLecturers, setEligibleLecturers] = useState<OfferingStaffItem[]>([]);
   const [eligibleLabAssistants, setEligibleLabAssistants] = useState<OfferingStaffItem[]>([]);
 
@@ -285,6 +288,47 @@ export default function ModuleOfferingsPage() {
     }
   }, []);
 
+  const loadModuleAssignments = useCallback(async (moduleCodeOrId: string) => {
+    const moduleCode = sid(moduleCodeOrId).toUpperCase();
+    if (!moduleCode) {
+      setModuleAssignments([]);
+      return;
+    }
+
+    setIsLoadingModuleAssignments(true);
+    try {
+      const params = new URLSearchParams({
+        moduleCode,
+        page: "1",
+        pageSize: "100",
+        sort: "term",
+      });
+      const parsed = parseOfferings(
+        await readJson<unknown>(
+          await fetch(`/api/module-offerings?${params.toString()}`, { cache: "no-store" })
+        )
+      );
+      setModuleAssignments(
+        parsed.items.map((item) => ({
+          id: item.id,
+          moduleCode: item.moduleCode,
+          moduleName: item.moduleName,
+          facultyId: item.facultyId,
+          degreeProgramId: item.degreeProgramId,
+          intakeName: item.intakeName || item.intakeId,
+          termCode: item.termCode,
+          lecturers: item.lecturers,
+          labAssistants: item.labAssistants,
+          status: item.status,
+        }))
+      );
+    } catch {
+      setModuleAssignments([]);
+    } finally {
+      setIsLoadingModuleAssignments(false);
+    }
+  }, []);
+
   const loadOfferings = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -345,20 +389,21 @@ export default function ModuleOfferingsPage() {
 
   const closeModal = () => {
     if (isSaving) return;
-    setModalMode(null); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalMode(null); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); setIsLoadingModuleAssignments(false);
   };
 
-  const openAddModal = () => { setModalMode("add"); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]); };
+  const openAddModal = () => { setModalMode("add"); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); setIsLoadingModuleAssignments(false); };
 
   const openEditModal = (offering: OfferingRecord) => {
     setModalMode("edit");
     setEditTarget(offering);
     setForm({ facultyId: offering.facultyId, degreeProgramId: offering.degreeProgramId, intakeId: offering.intakeId, termCode: offering.termCode, moduleId: offering.moduleId, syllabusVersion: offering.syllabusVersion, status: offering.status, assignedLecturerIds: offering.lecturers.map((r) => r.id), assignedLabAssistantIds: offering.labAssistants.map((r) => r.id) });
-    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     void loadDegrees(offering.facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
     void loadIntakes(offering.facultyId, offering.degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
     setIsLoadingModules(true);
     void loadModules(offering.facultyId, offering.degreeProgramId, offering.termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
+    void loadModuleAssignments(offering.moduleId);
     void loadEligible("lecturers", offering.facultyId, offering.degreeProgramId, offering.moduleId);
     void loadEligible("lab-assistants", offering.facultyId, offering.degreeProgramId, offering.moduleId);
   };
@@ -366,14 +411,14 @@ export default function ModuleOfferingsPage() {
   const handleFacultyChange = (value: string) => {
     const facultyId = code(value);
     setForm((p) => ({ ...p, facultyId, degreeProgramId: "", intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (facultyId) void loadDegrees(facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
   };
 
   const handleDegreeChange = (value: string) => {
     const degreeProgramId = code(value);
     setForm((p) => ({ ...p, degreeProgramId, intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (!form.facultyId || !degreeProgramId) return;
     void loadIntakes(form.facultyId, degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
     setIsLoadingModules(true);
@@ -383,7 +428,7 @@ export default function ModuleOfferingsPage() {
   const handleTermChange = (value: string) => {
     const termCode = String(value ?? "").trim().toUpperCase();
     setForm((p) => ({ ...p, termCode, moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (!form.facultyId || !form.degreeProgramId || !termCode) return;
     setIsLoadingModules(true);
     void loadModules(form.facultyId, form.degreeProgramId, termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
@@ -393,7 +438,8 @@ export default function ModuleOfferingsPage() {
     const moduleId = sid(value);
     const selected = modalModules.find((m) => m.id === moduleId) ?? null;
     setForm((p) => ({ ...p, moduleId, assignedLecturerIds: [], assignedLabAssistantIds: [], syllabusVersion: modalMode === "add" && selected ? selected.defaultSyllabusVersion : p.syllabusVersion }));
-    if (!form.facultyId || !form.degreeProgramId || !moduleId) { setEligibleLecturers([]); setEligibleLabAssistants([]); return; }
+    if (!form.facultyId || !form.degreeProgramId || !moduleId) { setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); return; }
+    void loadModuleAssignments(moduleId);
     void loadEligible("lecturers", form.facultyId, form.degreeProgramId, moduleId);
     void loadEligible("lab-assistants", form.facultyId, form.degreeProgramId, moduleId);
   };
@@ -500,6 +546,7 @@ export default function ModuleOfferingsPage() {
         mode={modalMode ?? "add"}
         saving={isSaving}
         loadingModules={isLoadingModules}
+        loadingModuleAssignments={isLoadingModuleAssignments}
         loadingLecturers={isLoadingLecturers}
         loadingLabAssistants={isLoadingLabAssistants}
         offering={editTarget ? { ...editTarget, lecturers: editTarget.lecturers.map((r) => ({ ...r, fullName: staffChipLabel(contextLecturers, r.id) })), labAssistants: editTarget.labAssistants.map((r) => ({ ...r, fullName: staffChipLabel(contextLab, r.id) })) } : null}
@@ -509,6 +556,7 @@ export default function ModuleOfferingsPage() {
         intakeOptions={modalIntakeOptions}
         moduleOptions={modalModules}
         termOptions={TERM_OPTIONS}
+        moduleAssignments={moduleAssignments}
         eligibleLecturers={eligibleLecturers}
         eligibleLabAssistants={eligibleLabAssistants}
         onFacultyChange={handleFacultyChange}
