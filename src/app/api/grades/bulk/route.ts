@@ -10,6 +10,10 @@ import { calculateFullGrade } from "@/lib/grade-utils";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleOfferingById } from "@/lib/module-offering-store";
 import {
+  awardPointsForGrade,
+  revokePointsForGrade,
+} from "@/lib/points-engine";
+import {
   findStudentInMemoryById,
   listEnrollmentRecordsInMemory,
 } from "@/lib/student-registration";
@@ -463,6 +467,114 @@ export async function POST(request: Request) {
       { $set: { hasGrades: true } }
     ).catch(() => null);
 
+    let xpAwarded:
+      | {
+          processedGrades: number;
+          totalPointsAwarded: number;
+          awardsCount: number;
+          milestonesUnlocked: string[];
+          failed: number;
+          errors: string[];
+        }
+      | null = null;
+
+    try {
+      const savedRows = (await GradeModel.find({
+        moduleOfferingId: moduleOfferingObjectId,
+        studentId: { $in: studentObjectIds },
+      })
+        .select("_id")
+        .lean()
+        .exec()
+        .catch(() => [])) as unknown[];
+
+      const savedGradeIds = Array.from(
+        new Set(
+          savedRows
+            .map((row) => {
+              const doc = asObject(row);
+              return readId(doc?._id);
+            })
+            .filter(Boolean)
+        )
+      );
+
+      if (savedGradeIds.length > 0) {
+        const revokeResults = await Promise.allSettled(
+          savedGradeIds.map((gradeId) =>
+            revokePointsForGrade(gradeId, "Grade updated via bulk save")
+          )
+        );
+
+        revokeResults.forEach((entry, index) => {
+          if (entry.status === "rejected") {
+            console.error("Failed to revoke points during bulk grade save", {
+              gradeId: savedGradeIds[index],
+              error: entry.reason,
+            });
+            return;
+          }
+
+          if (!entry.value.success) {
+            console.error("Failed to revoke points during bulk grade save", {
+              gradeId: savedGradeIds[index],
+            });
+          }
+        });
+
+        const awardResults = await Promise.allSettled(
+          savedGradeIds.map((gradeId) => awardPointsForGrade(gradeId))
+        );
+
+        const summary = {
+          processedGrades: savedGradeIds.length,
+          totalPointsAwarded: 0,
+          awardsCount: 0,
+          milestonesUnlocked: [] as string[],
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        awardResults.forEach((entry, index) => {
+          if (entry.status === "rejected") {
+            summary.failed += 1;
+            summary.errors.push(
+              `Failed to auto-award points for grade ${savedGradeIds[index]}`
+            );
+            console.error("Failed to auto-award points during bulk grade save", {
+              gradeId: savedGradeIds[index],
+              error: entry.reason,
+            });
+            return;
+          }
+
+          summary.totalPointsAwarded += entry.value.totalPointsAwarded;
+          summary.awardsCount += entry.value.pointsAwarded.length;
+          summary.milestonesUnlocked.push(...entry.value.milestonesUnlocked);
+
+          if (!entry.value.success && entry.value.errors.length > 0) {
+            summary.failed += 1;
+            summary.errors.push(...entry.value.errors);
+            console.error("Failed to auto-award points during bulk grade save", {
+              gradeId: savedGradeIds[index],
+              errors: entry.value.errors,
+            });
+          }
+        });
+
+        if (
+          summary.totalPointsAwarded > 0 ||
+          summary.awardsCount > 0 ||
+          summary.milestonesUnlocked.length > 0 ||
+          summary.failed > 0
+        ) {
+          xpAwarded = summary;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to process XP side-effects for bulk grade save", error);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -470,6 +582,7 @@ export async function POST(request: Request) {
         updated,
         total: parsedRows.length,
       },
+      ...(xpAwarded ? { xpAwarded } : {}),
     });
   } catch (error) {
     return NextResponse.json(

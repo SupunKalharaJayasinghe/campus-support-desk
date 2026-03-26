@@ -20,6 +20,7 @@ import {
   isMongoDuplicateKeyError,
   listEnrollmentRecordsInMemory,
 } from "@/lib/student-registration";
+import { awardPointsForGrade } from "@/lib/points-engine";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { GradeModel } from "@/models/Grade";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -649,10 +650,32 @@ export async function POST(request: Request) {
       );
     }
 
+    let xpAwarded: Awaited<ReturnType<typeof awardPointsForGrade>> | null = null;
+    try {
+      const awardResult = await awardPointsForGrade(createdId);
+      if (
+        awardResult.pointsAwarded.length > 0 ||
+        awardResult.milestonesUnlocked.length > 0 ||
+        awardResult.errors.length > 0
+      ) {
+        xpAwarded = awardResult;
+      }
+
+      if (!awardResult.success && awardResult.errors.length > 0) {
+        console.error("Failed to auto-award points for created grade", {
+          gradeId: createdId,
+          errors: awardResult.errors,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to auto-award points for created grade", error);
+    }
+
     return NextResponse.json(
       {
         success: true,
         data: createdGrade,
+        ...(xpAwarded ? { xpAwarded } : {}),
       },
       { status: 201 }
     );

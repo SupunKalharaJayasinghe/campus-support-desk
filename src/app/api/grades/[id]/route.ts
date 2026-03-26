@@ -14,6 +14,10 @@ import { findLecturerInMemoryById } from "@/lib/lecturer-store";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleOfferingById } from "@/lib/module-offering-store";
 import { findModuleById } from "@/lib/module-store";
+import {
+  awardPointsForGrade,
+  revokePointsForGrade,
+} from "@/lib/points-engine";
 import { findStudentInMemoryById } from "@/lib/student-registration";
 import { GradeModel } from "@/models/Grade";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -456,9 +460,40 @@ export async function PUT(
       );
     }
 
+    let xpAwarded: Awaited<ReturnType<typeof awardPointsForGrade>> | null = null;
+    if (shouldRecalculate) {
+      try {
+        const revokeResult = await revokePointsForGrade(gradeId, "Grade updated");
+        if (!revokeResult.success) {
+          console.error("Failed to revoke points for updated grade", {
+            gradeId,
+          });
+        }
+
+        const awardResult = await awardPointsForGrade(gradeId);
+        if (
+          awardResult.pointsAwarded.length > 0 ||
+          awardResult.milestonesUnlocked.length > 0 ||
+          awardResult.errors.length > 0
+        ) {
+          xpAwarded = awardResult;
+        }
+
+        if (!awardResult.success && awardResult.errors.length > 0) {
+          console.error("Failed to auto-award points for updated grade", {
+            gradeId,
+            errors: awardResult.errors,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to refresh points for updated grade", error);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: updatedGrade,
+      ...(xpAwarded ? { xpAwarded } : {}),
     });
   } catch (error) {
     return NextResponse.json(
@@ -530,6 +565,17 @@ export async function DELETE(
             { $set: { hasGrades: false } }
           ).catch(() => null);
         }
+      }
+
+      try {
+        const revokeResult = await revokePointsForGrade(gradeId, "Grade deleted");
+        if (!revokeResult.success) {
+          console.error("Failed to revoke points for deleted grade", {
+            gradeId,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to revoke points for deleted grade", error);
       }
     }
 
