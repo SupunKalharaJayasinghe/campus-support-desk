@@ -28,7 +28,10 @@ import {
     Users,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
-import CommunityPostComposer from "@/components/community/CommunityPostComposer";
+import CommunityPostComposer, {
+    type CommunityPostDraftInput,
+    type CommunityPostDraft,
+} from "@/components/community/CommunityPostComposer";
 import communityBackground from "@/app/images/community/community2.jpg";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import { clearDemoSession, readStoredUser } from "@/lib/rbac";
@@ -96,6 +99,10 @@ export default function CommunityProfilePage() {
     const [resolvingPostId, setResolvingPostId] = useState<string | null>(null);
     const [acceptingReplyId, setAcceptingReplyId] = useState<string | null>(null);
     const [expandedResolvedReplies, setExpandedResolvedReplies] = useState<Record<string, boolean>>({});
+    const [draftPosts, setDraftPosts] = useState<CommunityPostDraft[]>([]);
+    const [editingDraft, setEditingDraft] = useState<CommunityPostDraft | null>(null);
+    const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
+    const [draftActionError, setDraftActionError] = useState<string | null>(null);
 
     const profileData = useMemo(() => {
         const storedUser = readStoredUser();
@@ -141,6 +148,44 @@ export default function CommunityProfilePage() {
             }
         }
         load();
+        return () => {
+            cancelled = true;
+        };
+    }, [profileData.userId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadDrafts() {
+            try {
+                setDraftActionError(null);
+                const userId = profileData.userId;
+                if (!userId) {
+                    setDraftPosts([]);
+                    return;
+                }
+                const res = await fetch(
+                    `/api/community-drafts?userId=${encodeURIComponent(userId)}`
+                );
+                if (!res.ok) {
+                    const body = (await res.json().catch(() => null)) as
+                        | { error?: string }
+                        | null;
+                    throw new Error(body?.error || "Failed to load drafts");
+                }
+                const data = (await res.json()) as CommunityPostDraft[];
+                if (!cancelled) {
+                    setDraftPosts(Array.isArray(data) ? data : []);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setDraftPosts([]);
+                    setDraftActionError(
+                        error instanceof Error ? error.message : "Failed to load drafts"
+                    );
+                }
+            }
+        }
+        loadDrafts();
         return () => {
             cancelled = true;
         };
@@ -292,6 +337,177 @@ export default function CommunityProfilePage() {
             [postId]: !prev[postId],
         }));
     }, []);
+
+    const handleDraftSaved = useCallback(
+        async (draft: CommunityPostDraftInput) => {
+            const storedUser = readStoredUser();
+            const profileSettings = readCommunityProfileSettings();
+            const authorDisplayName =
+                profileSettings.displayName.trim() ||
+                storedUser?.name?.trim() ||
+                "Current User";
+
+            const payload = {
+                title: draft.title,
+                description: draft.description,
+                category: draft.category,
+                tags: draft.tags,
+                attachments: draft.attachments,
+                status: draft.status,
+                author: storedUser?.id,
+                authorName: authorDisplayName,
+                authorUsername: storedUser?.username ?? "",
+                authorEmail: storedUser?.email ?? "",
+                authorDisplayName,
+                userId: storedUser?.id ?? "",
+            };
+
+            const endpoint = draft.id
+                ? `/api/community-drafts/${encodeURIComponent(draft.id)}`
+                : "/api/community-drafts";
+            const method = draft.id ? "PATCH" : "POST";
+
+            const res = await fetch(endpoint, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            if (!res.ok) {
+                const body = (await res.json().catch(() => null)) as
+                    | { error?: string }
+                    | null;
+                const message = body?.error || "Failed to save draft";
+                setDraftActionError(message);
+                throw new Error(message);
+            }
+
+            const savedDraft = (await res.json()) as CommunityPostDraft;
+            setDraftPosts((prev) => {
+                const exists = prev.some((item) => item.id === savedDraft.id);
+                const next = exists
+                    ? prev.map((item) => (item.id === savedDraft.id ? savedDraft : item))
+                    : [savedDraft, ...prev];
+                return next.sort(
+                    (a, b) =>
+                        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+                );
+            });
+            setDraftActionError(null);
+            if (draft.id) {
+                setEditingDraft(savedDraft);
+            } else {
+                setEditingDraft(null);
+            }
+            document
+                .getElementById("draft-posts")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            return savedDraft;
+        },
+        []
+    );
+
+    const handleDraftDeleted = useCallback(
+        async (draftId: string) => {
+            const userId = profileData.userId;
+            if (!userId) return;
+
+            const res = await fetch(
+                `/api/community-drafts/${encodeURIComponent(
+                    draftId
+                )}?userId=${encodeURIComponent(userId)}`,
+                { method: "DELETE" }
+            );
+
+            if (!res.ok) {
+                const body = (await res.json().catch(() => null)) as
+                    | { error?: string }
+                    | null;
+                const message = body?.error || "Failed to delete draft";
+                setDraftActionError(message);
+                throw new Error(message);
+            }
+
+            setDraftPosts((prev) => prev.filter((draft) => draft.id !== draftId));
+            setDraftActionError(null);
+            setEditingDraft((prev) => (prev?.id === draftId ? null : prev));
+        },
+        [profileData.userId]
+    );
+
+    const handleDraftPostedFromComposer = useCallback(
+        async (draftId?: string) => {
+            if (!draftId) return;
+            try {
+                await handleDraftDeleted(draftId);
+            } catch {
+                // Keep post success flow even if draft cleanup fails.
+            }
+        },
+        [handleDraftDeleted]
+    );
+
+    const handleDraftUpdate = useCallback((draft: CommunityPostDraft) => {
+        setEditingDraft(draft);
+        setDraftActionError(null);
+        document
+            .getElementById("create-post")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, []);
+
+    const handleDraftPostNow = useCallback(
+        async (draft: CommunityPostDraft) => {
+            try {
+                setPostingDraftId(draft.id);
+                setDraftActionError(null);
+                const storedUser = readStoredUser();
+                const profileSettings = readCommunityProfileSettings();
+                const authorDisplayName =
+                    profileSettings.displayName.trim() ||
+                    storedUser?.name?.trim() ||
+                    "Current User";
+
+                const res = await fetch("/api/community-posts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: draft.title,
+                        description: draft.description,
+                        category: draft.category,
+                        tags: draft.tags,
+                        attachments: draft.attachments,
+                        status: draft.status,
+                        author: storedUser?.id,
+                        authorName: authorDisplayName,
+                        authorUsername: storedUser?.username ?? "",
+                        authorEmail: storedUser?.email ?? "",
+                        authorDisplayName,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const data = (await res.json().catch(() => null)) as
+                        | { error?: string }
+                        | null;
+                    throw new Error(data?.error ?? "Failed to post draft.");
+                }
+
+                try {
+                    await handleDraftDeleted(draft.id);
+                } catch {
+                    // Keep post success flow even if draft cleanup fails.
+                }
+                router.push("/community");
+            } catch (error) {
+                setDraftActionError(
+                    error instanceof Error ? error.message : "Failed to post draft."
+                );
+            } finally {
+                setPostingDraftId(null);
+            }
+        },
+        [handleDraftDeleted, router]
+    );
 
     /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
     const closeSidebarIfMobile = useCallback(() => {
@@ -549,7 +765,18 @@ export default function CommunityProfilePage() {
                         <p className="mb-4 text-sm text-slate-600">
                             Use the same composer as the full create page. Save draft, then post — you will be taken to the community feed when it succeeds.
                         </p>
-                        <CommunityPostComposer compact className="shadow-shadow" />
+                        <CommunityPostComposer
+                            compact
+                            className="shadow-shadow"
+                            resetAfterDraftSave
+                            draftToEdit={editingDraft}
+                            onDraftSaved={handleDraftSaved}
+                        onDraftDeleted={(draftId) => {
+                            handleDraftDeleted(draftId).catch(() => undefined);
+                        }}
+                            onDraftEditCancel={() => setEditingDraft(null)}
+                            onPostSuccess={handleDraftPostedFromComposer}
+                        />
                         <p className="mt-4 text-center text-sm text-slate-600">
                             Prefer a dedicated page?{" "}
                             <Link
@@ -893,18 +1120,81 @@ export default function CommunityProfilePage() {
                         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
                             <FilePenLine size={20} className="text-blue-700" /> Draft posts
                         </h2>
-                        <Card className="rounded-2xl border border-dashed border-blue-200 bg-white/90 p-6 shadow-none">
-                            <p className="text-sm text-slate-600">
-                                Use <strong>Save draft</strong> in the create section above before posting. A list of saved drafts will show here when draft storage is connected to your account.
-                            </p>
-                            <a
-                                href="#create-post"
-                                className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
-                            >
-                                <CirclePlus size={16} />
-                                Go to composer
-                            </a>
-                        </Card>
+                        {draftActionError && (
+                            <Card className="mb-4 rounded-2xl border border-red-200 bg-white p-4 text-sm text-red-700 shadow-none">
+                                {draftActionError}
+                            </Card>
+                        )}
+                        {draftPosts.length === 0 ? (
+                            <Card className="rounded-2xl border border-dashed border-blue-200 bg-white/90 p-6 shadow-none">
+                                <p className="text-sm text-slate-600">
+                                    Save a draft from the create section above. Your saved drafts will appear here for quick update, delete, or post actions.
+                                </p>
+                                <a
+                                    href="#create-post"
+                                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
+                                >
+                                    <CirclePlus size={16} />
+                                    Go to composer
+                                </a>
+                            </Card>
+                        ) : (
+                            <div className="space-y-4">
+                                {draftPosts.map((draft) => (
+                                    <Card
+                                        key={draft.id}
+                                        className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none"
+                                    >
+                                        <div className="mb-2 flex items-start justify-between gap-2">
+                                            <h3 className="text-base font-semibold leading-snug text-slate-800">
+                                                {draft.title}
+                                            </h3>
+                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                                                {String(draft.category).replace("_", " ")}
+                                            </span>
+                                        </div>
+                                        <p className="line-clamp-2 text-sm text-slate-700">
+                                            {draft.description}
+                                        </p>
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            Updated{" "}
+                                            {new Date(draft.updatedAt).toLocaleString()}
+                                        </p>
+                                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                className="rounded-full bg-blue-700 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-800"
+                                                onClick={() => handleDraftUpdate(draft)}
+                                            >
+                                                Update
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="rounded-full bg-red-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                                                onClick={() => {
+                                                    handleDraftDeleted(draft.id).catch(
+                                                        () => undefined
+                                                    );
+                                                }}
+                                                disabled={postingDraftId === draft.id}
+                                            >
+                                                Delete
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                                onClick={() => handleDraftPostNow(draft)}
+                                                disabled={postingDraftId === draft.id}
+                                            >
+                                                {postingDraftId === draft.id
+                                                    ? "Posting..."
+                                                    : "Post"}
+                                            </button>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-100/60 p-4 text-sm text-blue-900">

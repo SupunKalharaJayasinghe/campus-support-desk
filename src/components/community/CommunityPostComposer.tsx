@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, Plus, Tag, X } from "lucide-react";
 import Card from "@/components/ui/Card";
@@ -24,9 +24,49 @@ export type CommunityPostComposerProps = {
     className?: string;
     /** Tighter header when embedded on profile */
     compact?: boolean;
+    resetAfterDraftSave?: boolean;
+    draftToEdit?: CommunityPostDraft | null;
+    onDraftSaved?: (
+        draft: CommunityPostDraftInput
+    ) => Promise<CommunityPostDraft | null> | CommunityPostDraft | null;
+    onDraftDeleted?: (draftId: string) => void;
+    /** Called when user cancels editing — clears form without deleting the draft in storage */
+    onDraftEditCancel?: () => void;
+    onPostSuccess?: (draftId?: string) => void;
 };
 
-export default function CommunityPostComposer({ className, compact }: CommunityPostComposerProps) {
+export type CommunityPostDraftInput = {
+    id?: string;
+    title: string;
+    description: string;
+    category: "lost_item" | "study_material" | "academic_question";
+    tags: string[];
+    attachments: string[];
+    status: "open" | "resolved";
+};
+
+export type CommunityPostDraft = {
+    id: string;
+    title: string;
+    description: string;
+    category: "lost_item" | "study_material" | "academic_question";
+    tags: string[];
+    attachments: string[];
+    status: "open" | "resolved";
+    createdAt: string;
+    updatedAt: string;
+};
+
+export default function CommunityPostComposer({
+    className,
+    compact,
+    resetAfterDraftSave,
+    draftToEdit,
+    onDraftSaved,
+    onDraftDeleted,
+    onDraftEditCancel,
+    onPostSuccess,
+}: CommunityPostComposerProps) {
     const router = useRouter();
 
     const [title, setTitle] = useState("");
@@ -37,8 +77,24 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
     const [attachments, setAttachments] = useState<string[]>([]);
     const [attachmentInput, setAttachmentInput] = useState("");
     const [status, setStatus] = useState<"open" | "resolved">("open");
+    const [draftId, setDraftId] = useState<string | null>(null);
 
     const [isDraftSaved, setIsDraftSaved] = useState(false);
+    useEffect(() => {
+        if (!draftToEdit) return;
+        setDraftId(draftToEdit.id);
+        setTitle(draftToEdit.title);
+        setDescription(draftToEdit.description);
+        setCategory(draftToEdit.category);
+        setTags(draftToEdit.tags);
+        setTagInput("");
+        setAttachments(draftToEdit.attachments);
+        setAttachmentInput("");
+        setStatus(draftToEdit.status);
+        setIsDraftSaved(true);
+        setSubmitError("");
+    }, [draftToEdit]);
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
 
@@ -84,12 +140,40 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
         }
     };
 
-    const handleSaveDraft = () => {
+    const handleSaveDraft = async () => {
         if (!title.trim() || !description.trim()) return;
+        const nextDraft: CommunityPostDraftInput = {
+            id: draftId ?? undefined,
+            title: title.trim(),
+            description: description.trim(),
+            category: category as CommunityPostDraft["category"],
+            tags,
+            attachments,
+            status,
+        };
+        const savedDraft = (await onDraftSaved?.(nextDraft)) ?? null;
+        if (savedDraft?.id) {
+            setDraftId(savedDraft.id);
+        }
+        if (resetAfterDraftSave) {
+            setDraftId(null);
+            setTitle("");
+            setDescription("");
+            setCategory("study_material");
+            setTags([]);
+            setTagInput("");
+            setAttachments([]);
+            setAttachmentInput("");
+            setStatus("open");
+            setIsDraftSaved(false);
+            setSubmitError("");
+            return;
+        }
         setIsDraftSaved(true);
     };
 
-    const handleDeleteDraft = () => {
+    const handleComposerCancel = () => {
+        setDraftId(null);
         setTitle("");
         setDescription("");
         setCategory("study_material");
@@ -100,6 +184,14 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
         setStatus("open");
         setIsDraftSaved(false);
         setSubmitError("");
+        onDraftEditCancel?.();
+    };
+
+    const handleDeleteDraft = () => {
+        if (draftId) {
+            onDraftDeleted?.(draftId);
+        }
+        handleComposerCancel();
     };
 
     const handlePost = async (e: React.FormEvent) => {
@@ -140,6 +232,7 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
             }
 
             router.push("/community");
+            onPostSuccess?.(draftId ?? undefined);
         } catch {
             setSubmitError("Unable to connect to the server.");
         } finally {
@@ -148,6 +241,7 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
     };
 
     const isFormValid = title.trim().length > 0 && description.trim().length > 0;
+    const saveDraftLabel = draftId ? "Update Draft" : "Save Draft";
 
     return (
         <Card
@@ -328,7 +422,7 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
                     </div>
                 </div>
 
-                <div className="flex justify-end gap-3 border-t border-blue-100 pt-4">
+                <div className="border-t border-blue-100 pt-4">
                     {!isDraftSaved ? (
                         <div className="flex w-full items-center justify-between gap-3">
                             <Button
@@ -338,36 +432,45 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
                                 onClick={handleSaveDraft}
                                 disabled={!isFormValid}
                             >
-                                Save Draft
+                                {saveDraftLabel}
                             </Button>
                             <Button
                                 type="button"
-                                variant="primary"
-                                className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
-                                onClick={handleDeleteDraft}
+                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100"
+                                onClick={handleComposerCancel}
                                 disabled={isSubmitting}
                             >
                                 Cancel
                             </Button>
                         </div>
                     ) : (
-                        <>
+                        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-wrap gap-3">
+                                <Button
+                                    type="button"
+                                    className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
+                                    onClick={handleDeleteDraft}
+                                    disabled={isSubmitting}
+                                >
+                                    Delete
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? "Posting..." : "Post"}
+                                </Button>
+                            </div>
                             <Button
                                 type="button"
-                                className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
-                                onClick={handleDeleteDraft}
+                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100"
+                                onClick={handleComposerCancel}
                                 disabled={isSubmitting}
                             >
-                                Delete
+                                Cancel
                             </Button>
-                            <Button
-                                type="submit"
-                                className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? "Posting..." : "Post"}
-                            </Button>
-                        </>
+                        </div>
                     )}
                 </div>
 
