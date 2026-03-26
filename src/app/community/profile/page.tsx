@@ -33,6 +33,26 @@ import communityBackground from "@/app/images/community/community2.jpg";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import { clearDemoSession, readStoredUser } from "@/lib/rbac";
 
+type DbCommunityReply = {
+    _id: string;
+    postId: string;
+    authorDisplayName?: string;
+    message: string;
+    createdAt?: string;
+};
+
+type DbCommunityPost = {
+    _id: string;
+    title: string;
+    description: string;
+    category: "lost_item" | "study_material" | "academic_question";
+    status?: "open" | "resolved" | "archived";
+    createdAt?: string;
+    likesCount?: number;
+    repliesCount?: number;
+    replies?: DbCommunityReply[];
+};
+
 const PROFILE_FALLBACK = {
     reputation: 1250,
     joined: "Aug 2024",
@@ -70,6 +90,8 @@ export default function CommunityProfilePage() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [userPosts, setUserPosts] = useState<DbCommunityPost[] | null>(null);
+    const [userPostsError, setUserPostsError] = useState<string | null>(null);
 
     const profileData = useMemo(() => {
         const storedUser = readStoredUser();
@@ -84,8 +106,41 @@ export default function CommunityProfilePage() {
             email: settings.email || storedUser?.email || "-",
             faculty: settings.faculty,
             studyYear: settings.studyYear,
+            userId: storedUser?.id || "",
         };
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function load() {
+            try {
+                setUserPostsError(null);
+                const userId = profileData.userId;
+                if (!userId) {
+                    setUserPosts([]);
+                    return;
+                }
+                const res = await fetch(`/api/community-user-posts?userId=${encodeURIComponent(userId)}`);
+                if (!res.ok) {
+                    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+                    throw new Error(body?.error || "Failed to load posts");
+                }
+                const data = (await res.json()) as DbCommunityPost[];
+                if (!cancelled) {
+                    setUserPosts(Array.isArray(data) ? data : []);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setUserPosts([]);
+                    setUserPostsError(err instanceof Error ? err.message : "Failed to load posts");
+                }
+            }
+        }
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [profileData.userId]);
 
     const filteredRecentPosts = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -376,62 +431,109 @@ export default function CommunityProfilePage() {
                         </p>
                     </div>
 
-                    <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="mt-7 grid grid-cols-1 gap-6">
                         <div id="current-posts" className="scroll-mt-6">
                             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
                                 <FileText size={20} className="text-blue-700" /> Current posts
                             </h2>
                             <div className="space-y-4">
-                                {filteredRecentPosts.map((post) => (
-                                    <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
-                                        <div className="mb-3 flex items-start justify-between gap-2">
-                                            <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
-                                                {post.category.replace("_", " ")}
-                                            </span>
-                                            <span className="text-xs text-slate-500">{post.time}</span>
-                                        </div>
-                                        <h3 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
-                                        <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
-                                            <span className="inline-flex items-center gap-1.5">
-                                                <ThumbsUp size={14} /> {post.likes}
-                                            </span>
-                                            <span className="inline-flex items-center gap-1.5">
-                                                <MessageSquare size={14} /> {post.replies}
-                                            </span>
-                                        </div>
+                                <div id="current post" />
+                                {userPostsError && (
+                                    <Card className="rounded-2xl border border-red-200 bg-white p-4 text-sm text-red-700 shadow-none">
+                                        {userPostsError}
                                     </Card>
-                                ))}
-                                <button className="w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100">
-                                    <span className="inline-flex items-center gap-2">
+                                )}
+                                {userPosts === null ? (
+                                    <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+                                        Loading your posts…
+                                    </Card>
+                                ) : userPosts.length === 0 ? (
+                                    <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+                                        No posts yet.
+                                    </Card>
+                                ) : (
+                                    userPosts
+                                        .filter((post) => {
+                                            const q = searchQuery.trim().toLowerCase();
+                                            if (!q) return true;
+                                            return (
+                                                post.title?.toLowerCase().includes(q) ||
+                                                post.description?.toLowerCase().includes(q)
+                                            );
+                                        })
+                                        .slice(0, 1)
+                                        .map((post) => (
+                                            <Card
+                                                key={post._id}
+                                                className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none"
+                                            >
+                                                <div className="mb-3 flex items-start justify-between gap-2">
+                                                    <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                                                        {String(post.category).replace("_", " ")}
+                                                    </span>
+                                                    <span className="text-xs text-slate-500">
+                                                        {post.createdAt
+                                                            ? new Date(post.createdAt).toLocaleString()
+                                                            : ""}
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-base font-semibold leading-snug text-slate-800">
+                                                    {post.title}
+                                                </h3>
+                                                <p className="mt-2 line-clamp-3 text-sm text-slate-700">
+                                                    {post.description}
+                                                </p>
+                                                <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <ThumbsUp size={14} /> {post.likesCount ?? 0}
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <MessageSquare size={14} /> {post.repliesCount ?? 0}
+                                                    </span>
+                                                </div>
+
+                                                {(post.replies?.length ?? 0) > 0 && (
+                                                    <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3">
+                                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                            Replies
+                                                        </p>
+                                                        {post.replies!.slice(0, 5).map((reply) => (
+                                                            <div
+                                                                key={reply._id}
+                                                                className="rounded-lg bg-white p-3 text-sm text-slate-700"
+                                                            >
+                                                                <p className="text-xs font-semibold text-slate-500">
+                                                                    {reply.authorDisplayName || "Community User"}
+                                                                    {reply.createdAt ? (
+                                                                        <span className="font-normal">
+                                                                            {" "}
+                                                                            ·{" "}
+                                                                            {new Date(
+                                                                                reply.createdAt
+                                                                            ).toLocaleString()}
+                                                                        </span>
+                                                                    ) : null}
+                                                                </p>
+                                                                <p className="mt-1 whitespace-pre-wrap">
+                                                                    {reply.message}
+                                                                </p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </Card>
+                                        ))
+                                )}
+                                <Link
+                                    href="/community/profile/posts"
+                                    className="block w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-center text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
+                                    onClick={closeSidebarIfMobile}
+                                >
+                                    <span className="inline-flex items-center justify-center gap-2">
                                         <Eye size={15} />
                                         View all posts
                                     </span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="scroll-mt-6">
-                            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
-                                <MessageSquare size={20} className="text-blue-700" /> Recent replies
-                            </h2>
-                            <div className="space-y-4">
-                                {filteredRecentReplies.map((reply) => (
-                                    <Card key={reply.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
-                                        <p className="text-xs font-semibold text-slate-500">
-                                            Replying to <span className="text-slate-700">{reply.postTitle}</span>
-                                        </p>
-                                        <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-                                            {reply.content}
-                                        </p>
-                                        <p className="mt-2 text-xs text-slate-500">{reply.time}</p>
-                                    </Card>
-                                ))}
-                                <button className="w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100">
-                                    <span className="inline-flex items-center gap-2">
-                                        <Eye size={15} />
-                                        View all replies
-                                    </span>
-                                </button>
+                                </Link>
                             </div>
                         </div>
                     </div>

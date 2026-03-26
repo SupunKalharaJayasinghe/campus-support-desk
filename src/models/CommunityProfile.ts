@@ -16,17 +16,6 @@ const CommunityProfileSchema = new Schema(
       maxLength: 30,
     },
 
-    bio: {
-      type: String,
-      maxLength: 150,
-      default: "",
-    },
-
-    avatar: {
-      type: String, // image URL
-      default: "",
-    },
-
     points: {
       type: Number,
       default: 0,
@@ -36,6 +25,12 @@ const CommunityProfileSchema = new Schema(
       type: String,
       enum: ["BEGINNER", "HELPER", "EXPERT"],
       default: "BEGINNER",
+    },
+
+    status : {
+      type: String,
+      enum: ["PUBLIC", "PRIVATE"],
+      default: "PUBLIC",
     },
   },
   { timestamps: true }
