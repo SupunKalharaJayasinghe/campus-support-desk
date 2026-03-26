@@ -8,6 +8,7 @@ import {
     ChevronUp,
     CirclePlus,
     Clock,
+    BookOpen,
     Home,
     LogOut,
     Menu,
@@ -25,6 +26,10 @@ import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import { clearDemoSession, readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
+import {
+    COMMUNITY_POST_REPORT_REASONS,
+    type CommunityPostReportReasonKey,
+} from "@/lib/community-post-report-reasons";
 import communityBackground from "@/app/images/community/community2.jpg";
 
 type Reply = {
@@ -188,13 +193,20 @@ export default function CommunityPage() {
     const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("all");
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-    const [isMembersVisible, setIsMembersVisible] = useState(true);
-    const [isRecentVisible, setIsRecentVisible] = useState(true);
+    const [isMembersVisible, setIsMembersVisible] = useState(false);
+    const [isRecentVisible, setIsRecentVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
     const [newReplyContent, setNewReplyContent] = useState("");
     const [actionError, setActionError] = useState("");
+    const [reportDialogPostId, setReportDialogPostId] = useState<string | null>(null);
+    const [reportSelectedReason, setReportSelectedReason] =
+        useState<CommunityPostReportReasonKey>("spam");
+    const [reportOtherText, setReportOtherText] = useState("");
+    const [reportDialogError, setReportDialogError] = useState("");
+    const [reportSubmitting, setReportSubmitting] = useState(false);
+    const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
     const recentPosts = useMemo(() => posts.slice(0, 5), [posts]);
 
     const filteredPosts = useMemo(() => {
@@ -406,48 +418,70 @@ export default function CommunityPage() {
         }
     };
 
-    const handleReportPost = async (postId: string) => {
+    const openReportDialog = (postId: string) => {
         if (!currentUser?.id) {
             setActionError("Please login to report posts.");
             return;
         }
+        setActionError("");
+        setReportDialogPostId(postId);
+        setReportSelectedReason("spam");
+        setReportOtherText("");
+        setReportDialogError("");
+    };
 
-        const reason = window.prompt("Please enter report reason");
-        if (!reason || !reason.trim()) {
+    const closeReportDialog = () => {
+        if (reportSubmitting) return;
+        setReportDialogPostId(null);
+        setReportDialogError("");
+    };
+
+    const submitPostReport = async () => {
+        if (!reportDialogPostId || !currentUser?.id) return;
+
+        if (reportSelectedReason === "other" && !reportOtherText.trim()) {
+            setReportDialogError("Please describe what is wrong.");
             return;
         }
 
+        setReportDialogError("");
+        setReportSubmitting(true);
         setActionError("");
+
         try {
             const res = await fetch("/api/community-post-reports", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    postId,
+                    postId: reportDialogPostId,
                     userId: currentUser.id,
                     username: currentUser.username,
                     email: currentUser.email,
                     name: currentUser.name,
-                    reason: reason.trim(),
+                    reasonKey: reportSelectedReason,
+                    ...(reportSelectedReason === "other"
+                        ? { details: reportOtherText.trim() }
+                        : {}),
                 }),
             });
-            const payload = (await res.json().catch(() => null)) as
-                | { error?: string }
-                | null;
+            const payload = (await res.json().catch(() => null)) as { error?: string } | null;
             if (!res.ok) {
                 setActionError(payload?.error ?? "Failed to report post.");
+                setReportSubmitting(false);
                 return;
             }
 
+            const reportedId = reportDialogPostId;
+            setReportDialogPostId(null);
             setPosts((prevPosts) =>
                 prevPosts.map((post) =>
-                    post.id === postId
-                        ? { ...post, reportedByCurrentUser: true }
-                        : post
+                    post.id === reportedId ? { ...post, reportedByCurrentUser: true } : post
                 )
             );
         } catch {
             setActionError("Unable to report this post right now.");
+        } finally {
+            setReportSubmitting(false);
         }
     };
 
@@ -633,8 +667,13 @@ export default function CommunityPage() {
                             <Link href="/community/profile" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
                                 <User size={18} /> Profile
                             </Link>
-                            
-                            
+                            <button
+                                type="button"
+                                onClick={() => setIsInstructionsOpen(true)}
+                                className="flex w-full items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-left text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
+                            >
+                                <BookOpen size={18} /> Instructions
+                            </button>
                         </div>
 
                         <div className="my-3 h-px bg-blue-100" />
@@ -787,7 +826,7 @@ export default function CommunityPage() {
                                                 <MessageSquare size={16} /> Reply
                                             </button>
                                             <button
-                                                onClick={() => handleReportPost(post.id)}
+                                                onClick={() => openReportDialog(post.id)}
                                                 disabled={post.reportedByCurrentUser}
                                                 className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm text-slate-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-400"
                                             >
@@ -852,6 +891,173 @@ export default function CommunityPage() {
                 </section>
             </div>
             </div>
+
+            {isInstructionsOpen ? (
+                <>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-[62] bg-black/40"
+                        aria-label="Close instructions"
+                        onClick={() => setIsInstructionsOpen(false)}
+                    />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="community-instructions-title"
+                        className="fixed left-1/2 top-1/2 z-[72] w-[min(100%,26rem)] max-h-[min(90vh,36rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-blue-100 bg-white p-5 shadow-xl"
+                    >
+                        <div className="flex items-start justify-between gap-2">
+                            <h2 id="community-instructions-title" className="text-base font-semibold text-slate-800">
+                                Community — demo instructions
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={() => setIsInstructionsOpen(false)}
+                                className="rounded-full p-1 text-slate-500 hover:bg-blue-50"
+                                aria-label="Close"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700">
+                            <li>Use the category chips to filter posts (All, Lost Items, Study Material, Academic Questions).</li>
+                            <li>
+                                Search narrows the feed; the header search looks at titles and content in the list view.
+                            </li>
+                            <li>Sign in to like posts, reply, and report content. Guests can still browse.</li>
+                            <li>
+                                Open <strong className="font-semibold text-slate-800">Reply</strong> under a post to read
+                                threads and add a comment.
+                            </li>
+                            <li>
+                                Use <strong className="font-semibold text-slate-800">Create</strong> in the top bar (or your
+                                profile) to add a new community post.
+                            </li>
+                            <li>
+                                <strong className="font-semibold text-slate-800">Report</strong> opens a short form—pick a
+                                reason and, if you choose Other, describe the issue.
+                            </li>
+                            <li>
+                                Expand <strong className="font-semibold text-slate-800">Members Details</strong> and{" "}
+                                <strong className="font-semibold text-slate-800">Recent Posts</strong> in the sidebar when you
+                                need them.
+                            </li>
+                        </ul>
+                        <div className="mt-6 flex justify-end">
+                            <Button
+                                type="button"
+                                variant="primary"
+                                className="bg-blue-700 hover:bg-blue-800"
+                                onClick={() => setIsInstructionsOpen(false)}
+                            >
+                                OK
+                            </Button>
+                        </div>
+                    </div>
+                </>
+            ) : null}
+
+            {reportDialogPostId ? (
+                <>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-[60] bg-black/40"
+                        aria-label="Close report dialog"
+                        onClick={closeReportDialog}
+                    />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="report-post-title"
+                        className="fixed left-1/2 top-1/2 z-[70] w-[min(100%,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-blue-100 bg-white p-5 shadow-xl"
+                    >
+                        <div className="flex items-start justify-between gap-2">
+                            <h2 id="report-post-title" className="text-base font-semibold text-slate-800">
+                                Report this post
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={closeReportDialog}
+                                disabled={reportSubmitting}
+                                className="rounded-full p-1 text-slate-500 hover:bg-blue-50 disabled:opacity-50"
+                                aria-label="Close"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                            Why are you reporting this? Moderators will review your report.
+                        </p>
+
+                        <fieldset className="mt-4 space-y-2">
+                            <legend className="sr-only">Report reason</legend>
+                            {COMMUNITY_POST_REPORT_REASONS.map((option) => (
+                                <label
+                                    key={option.key}
+                                    className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                                        reportSelectedReason === option.key
+                                            ? "border-blue-500 bg-blue-50"
+                                            : "border-blue-100 hover:bg-slate-50"
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="report-reason"
+                                        className="mt-1"
+                                        checked={reportSelectedReason === option.key}
+                                        onChange={() => {
+                                            setReportSelectedReason(option.key);
+                                            setReportDialogError("");
+                                        }}
+                                    />
+                                    <span className="text-slate-800">{option.label}</span>
+                                </label>
+                            ))}
+                        </fieldset>
+
+                        {reportSelectedReason === "other" ? (
+                            <div className="mt-3">
+                                <label htmlFor="report-other-details" className="text-xs font-medium text-slate-600">
+                                    Please explain
+                                </label>
+                                <Textarea
+                                    id="report-other-details"
+                                    value={reportOtherText}
+                                    onChange={(e) => {
+                                        setReportOtherText(e.target.value);
+                                        setReportDialogError("");
+                                    }}
+                                    placeholder="Describe the issue…"
+                                    className="mt-1 min-h-[88px] border-blue-200 bg-white text-sm"
+                                />
+                            </div>
+                        ) : null}
+
+                        {reportDialogError ? (
+                            <p className="mt-3 text-sm text-red-600">{reportDialogError}</p>
+                        ) : null}
+
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeReportDialog}
+                                disabled={reportSubmitting}
+                                className="rounded-full border border-blue-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-blue-50 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void submitPostReport()}
+                                disabled={reportSubmitting}
+                                className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                            >
+                                {reportSubmitting ? "Submitting…" : "Submit report"}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            ) : null}
         </main>
     );
 }

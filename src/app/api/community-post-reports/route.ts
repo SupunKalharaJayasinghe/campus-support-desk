@@ -1,5 +1,10 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
+import {
+  buildStoredReportReason,
+  isCommunityPostReportReasonKey,
+  type CommunityPostReportReasonKey,
+} from "@/lib/community-post-report-reasons";
 import CommunityPost from "@/models/communityPost";
 import CommunityPostReport from "@/models/communityPostReport";
 import mongoose from "mongoose";
@@ -8,11 +13,29 @@ export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
-    const { postId, userId, username, email, name, reason } = body;
+    const { postId, userId, username, email, name, reason, reasonKey, details } = body;
 
-    if (!postId || !userId || !reason) {
+    if (!postId || !userId) {
       return Response.json(
-        { error: "postId, userId, and reason are required" },
+        { error: "postId and userId are required" },
+        { status: 400 }
+      );
+    }
+
+    let normalizedReason = "";
+    let resolvedReasonKey: CommunityPostReportReasonKey | undefined;
+
+    const rawReasonKey = typeof reasonKey === "string" ? reasonKey : "";
+    if (rawReasonKey && isCommunityPostReportReasonKey(rawReasonKey)) {
+      resolvedReasonKey = rawReasonKey;
+      normalizedReason = buildStoredReportReason(rawReasonKey, details);
+    } else if (reason !== undefined && reason !== null && String(reason).trim()) {
+      normalizedReason = String(reason).trim();
+    }
+
+    if (!normalizedReason) {
+      return Response.json(
+        { error: "A report reason is required (choose a category or enter details for Other)." },
         { status: 400 }
       );
     }
@@ -39,15 +62,19 @@ export async function POST(req: Request) {
       return Response.json({ error: "Post not found" }, { status: 404 });
     }
 
-    const normalizedReason = String(reason).trim();
-    if (!normalizedReason) {
-      return Response.json({ error: "Reason is required" }, { status: 400 });
-    }
+    const detailsTrimmed =
+      details !== undefined && details !== null ? String(details).trim().slice(0, 2000) : undefined;
 
     const report = await CommunityPostReport.create({
       postId,
       userId: validUserId,
       reason: normalizedReason,
+      ...(resolvedReasonKey
+        ? {
+            reasonKey: resolvedReasonKey,
+            ...(resolvedReasonKey === "other" && detailsTrimmed ? { details: detailsTrimmed } : {}),
+          }
+        : {}),
       status: "OPEN",
     });
 

@@ -19,6 +19,17 @@ const CommunityPostReportSchema = new Schema(
       required: true,
       trim: true,
     },
+    reasonKey: {
+      type: String,
+      enum: ["spam", "harassment", "misinformation", "inappropriate", "copyright", "other"],
+      required: false,
+      index: true,
+    },
+    details: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+    },
     status: {
       type: String,
       enum: ["OPEN", "REVIEWED", "DISMISSED"],
