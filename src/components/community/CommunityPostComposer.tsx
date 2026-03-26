@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, Plus, Tag, X } from "lucide-react";
+import { Loader2, Paperclip, Plus, Send, Tag, X } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -444,8 +444,8 @@ export default function CommunityPostComposer({
                             </Button>
                         </div>
                     ) : (
-                        <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-wrap gap-3">
+                        <div className="flex w-full flex-wrap items-center gap-3">
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-3">
                                 <Button
                                     type="button"
                                     className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
@@ -455,21 +455,44 @@ export default function CommunityPostComposer({
                                     Delete
                                 </Button>
                                 <Button
-                                    type="submit"
+                                    type="button"
+                                    variant="primary"
                                     className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
-                                    disabled={isSubmitting}
+                                    onClick={handleSaveDraft}
+                                    disabled={!isFormValid || isSubmitting}
                                 >
-                                    {isSubmitting ? "Posting..." : "Post"}
+                                    {saveDraftLabel}
                                 </Button>
                             </div>
-                            <Button
-                                type="button"
-                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100"
-                                onClick={handleComposerCancel}
-                                disabled={isSubmitting}
-                            >
-                                Cancel
-                            </Button>
+                            <div className="flex flex-1 justify-center">
+                                <Button
+                                    type="submit"
+                                    className="inline-flex min-w-[10rem] items-center justify-center gap-2 rounded-full bg-blue-700 px-12 py-2.5 text-base font-semibold text-white hover:bg-blue-800 sm:min-w-[12rem] sm:px-14"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                                            Posting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="h-5 w-5 shrink-0" aria-hidden />
+                                            Post
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                            <div className="flex min-w-0 flex-1 justify-end">
+                                <Button
+                                    type="button"
+                                    className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
+                                    onClick={handleComposerCancel}
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </div>
