@@ -149,10 +149,17 @@ export default function CommunityProfilePage() {
     }, [profileData.recentPosts, searchQuery]);
 
     const filteredArchivedPosts = useMemo(() => {
+        if (!userPosts) return [];
         const q = searchQuery.trim().toLowerCase();
-        if (!q) return profileData.archivedPosts;
-        return profileData.archivedPosts.filter((p) => p.title.toLowerCase().includes(q));
-    }, [profileData.archivedPosts, searchQuery]);
+        return userPosts.filter((post) => {
+            if (post.status !== "archived") return false;
+            if (!q) return true;
+            return (
+                post.title?.toLowerCase().includes(q) ||
+                post.description?.toLowerCase().includes(q)
+            );
+        });
+    }, [userPosts, searchQuery]);
 
     const filteredRecentReplies = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -546,26 +553,55 @@ export default function CommunityProfilePage() {
                             Older threads you have archived stay here for your reference.
                         </p>
                         <div className="space-y-4">
-                            {filteredArchivedPosts.map((post) => (
-                                <Card key={post.id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
-                                    <div className="mb-3 flex items-start justify-between gap-2">
-                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-                                            {post.category.replace("_", " ")}
-                                        </span>
-                                        <span className="text-xs text-slate-500">{post.time}</span>
-                                    </div>
-                                    <h3 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
-                                    <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <ThumbsUp size={14} /> {post.likes}
-                                        </span>
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <MessageSquare size={14} /> {post.replies}
-                                        </span>
-                                    </div>
+                            {userPostsError && (
+                                <Card className="rounded-2xl border border-red-200 bg-white p-4 text-sm text-red-700 shadow-none">
+                                    {userPostsError}
                                 </Card>
-                            ))}
+                            )}
+                            {userPosts === null ? (
+                                <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+                                    Loading archived posts…
+                                </Card>
+                            ) : filteredArchivedPosts.length === 0 ? (
+                                <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+                                    No archived posts yet.
+                                </Card>
+                            ) : (
+                                filteredArchivedPosts.map((post) => (
+                                    <Card key={post._id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                                        <div className="mb-3 flex items-start justify-between gap-2">
+                                            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                                                {String(post.category).replace("_", " ")}
+                                            </span>
+                                            <span className="text-xs text-slate-500">
+                                                {post.createdAt
+                                                    ? new Date(post.createdAt).toLocaleString()
+                                                    : ""}
+                                            </span>
+                                        </div>
+                                        <h3 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
+                                        <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <ThumbsUp size={14} /> {post.likesCount ?? 0}
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <MessageSquare size={14} /> {post.repliesCount ?? 0}
+                                            </span>
+                                        </div>
+                                    </Card>
+                                ))
+                            )}
                         </div>
+                        <Link
+                            href="/community/profile/posts/archived"
+                            className="mt-4 block w-full rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3 text-center text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
+                            onClick={closeSidebarIfMobile}
+                        >
+                            <span className="inline-flex items-center justify-center gap-2">
+                                <Eye size={15} />
+                                View all archived posts
+                            </span>
+                        </Link>
                     </div>
 
                     <div id="draft-posts" className="mt-10 scroll-mt-6">
