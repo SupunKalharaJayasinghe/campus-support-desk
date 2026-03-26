@@ -198,7 +198,7 @@ export default function CommunityProfilePage() {
                                 </Link>
                                 <Link
                                     href="/community/profile"
-                                    className="flex items-center gap-3 rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white"
+                                    className="flex items-center gap-3 rounded-xl bg-blue-800 px-3 py-2.5 text-sm font-semibold text-white"
                                     onClick={closeSidebarIfMobile}
                                 >
                                     <User size={18} /> Profile

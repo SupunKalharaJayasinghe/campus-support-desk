@@ -553,7 +553,7 @@ export default function CommunityPage() {
 
                     <div className="flex items-center gap-2 sm:gap-3">
                         <Link
-                            href="/community/post/create"
+                            href="/community/profile/#create-post"
                             className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
                         >
                             <CirclePlus size={18} />
@@ -627,7 +627,7 @@ export default function CommunityPage() {
                 >
                     <div className="flex h-full flex-col">
                         <div className="space-y-1">
-                            <Link href="/community" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
+                            <Link href="/community" className="flex items-center gap-3 rounded-xl bg-blue-800 px-3 py-2.5 text-sm font-semibold text-white">
                                 <Home size={18} /> Home
                             </Link>
                             <Link href="/community/profile" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
