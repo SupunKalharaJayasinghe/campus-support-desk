@@ -12,6 +12,7 @@ type DbCommunityReply = {
   authorDisplayName?: string;
   message: string;
   createdAt?: string;
+  isAccepted?: boolean;
 };
 
 type DbCommunityPost = {
@@ -31,6 +32,11 @@ export default function CommunityProfilePostsPage() {
   const [posts, setPosts] = useState<DbCommunityPost[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resolvingPostId, setResolvingPostId] = useState<string | null>(null);
+  const [acceptingReplyId, setAcceptingReplyId] = useState<string | null>(null);
+  const openPosts = useMemo(
+    () => (posts ?? []).filter((post) => (post.status ?? "open") === "open"),
+    [posts]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -92,13 +98,49 @@ export default function CommunityProfilePostsPage() {
     }
   }, []);
 
+  const handleMarkReplyAccepted = useCallback(async (postId: string, replyId: string) => {
+    try {
+      setAcceptingReplyId(replyId);
+      setError(null);
+      const res = await fetch(`/api/community-replies/${encodeURIComponent(replyId)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isAccepted: true }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "Failed to mark reply as accepted");
+      }
+      setPosts((prev) =>
+        prev
+          ? prev.map((post) => {
+              if (post._id !== postId) return post;
+              return {
+                ...post,
+                replies: (post.replies ?? []).map((reply) => ({
+                  ...reply,
+                  isAccepted: reply._id === replyId,
+                })),
+              };
+            })
+          : prev
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark reply as accepted");
+    } finally {
+      setAcceptingReplyId(null);
+    }
+  }, []);
+
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-6 sm:px-6">
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <FileText size={20} className="text-blue-700" />
-            <h1 className="text-xl font-bold text-slate-800">All your posts</h1>
+            <h1 className="text-xl font-bold text-slate-800">All your current posts</h1>
           </div>
           <Link
             href="/community/profile#current-posts"
@@ -122,9 +164,13 @@ export default function CommunityProfilePostsPage() {
           <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
             No posts yet.
           </Card>
+        ) : openPosts.length === 0 ? (
+          <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+            No open posts right now.
+          </Card>
         ) : (
           <div className="space-y-4">
-            {posts.map((post) => (
+            {openPosts.map((post) => (
               <Card key={post._id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
@@ -180,15 +226,29 @@ export default function CommunityProfilePostsPage() {
                     </p>
                     {post.replies!.map((reply) => (
                       <div key={reply._id} className="rounded-lg bg-white p-3 text-sm text-slate-700">
-                        <p className="text-xs font-semibold text-slate-500">
-                          {reply.authorDisplayName || "Community User"}
-                          {reply.createdAt ? (
-                            <span className="font-normal">
-                              {" "}
-                              · {new Date(reply.createdAt).toLocaleString()}
-                            </span>
-                          ) : null}
-                        </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-500">
+                            {reply.authorDisplayName || "Community User"}
+                            {reply.createdAt ? (
+                              <span className="font-normal">
+                                {" "}
+                                · {new Date(reply.createdAt).toLocaleString()}
+                              </span>
+                            ) : null}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkReplyAccepted(post._id, reply._id)}
+                            disabled={reply.isAccepted || acceptingReplyId === reply._id}
+                            className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            {acceptingReplyId === reply._id
+                              ? "Updating..."
+                              : reply.isAccepted
+                              ? "Accepted"
+                              : "Mark Accepted"}
+                          </button>
+                        </div>
                         <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
                       </div>
                     ))}

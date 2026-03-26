@@ -330,15 +330,25 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
 
                 <div className="flex justify-end gap-3 border-t border-blue-100 pt-4">
                     {!isDraftSaved ? (
-                        <Button
-                            type="button"
-                            variant="primary"
-                            className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
-                            onClick={handleSaveDraft}
-                            disabled={!isFormValid}
-                        >
-                            Save Draft
-                        </Button>
+                        <div className="flex w-full items-center justify-between gap-3">
+                            <Button
+                                type="button"
+                                variant="primary"
+                                className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
+                                onClick={handleSaveDraft}
+                                disabled={!isFormValid}
+                            >
+                                Save Draft
+                            </Button>
+                            <Button
+                                type="button"
+                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100"
+                                onClick={handleDeleteDraft}
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </Button>
+                        </div>
                     ) : (
                         <>
                             <Button

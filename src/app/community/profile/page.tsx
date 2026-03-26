@@ -39,6 +39,7 @@ type DbCommunityReply = {
     authorDisplayName?: string;
     message: string;
     createdAt?: string;
+    isAccepted?: boolean;
 };
 
 type DbCommunityPost = {
@@ -93,6 +94,8 @@ export default function CommunityProfilePage() {
     const [userPosts, setUserPosts] = useState<DbCommunityPost[] | null>(null);
     const [userPostsError, setUserPostsError] = useState<string | null>(null);
     const [resolvingPostId, setResolvingPostId] = useState<string | null>(null);
+    const [acceptingReplyId, setAcceptingReplyId] = useState<string | null>(null);
+    const [expandedResolvedReplies, setExpandedResolvedReplies] = useState<Record<string, boolean>>({});
 
     const profileData = useMemo(() => {
         const storedUser = readStoredUser();
@@ -175,6 +178,20 @@ export default function CommunityProfilePage() {
         });
     }, [userPosts, searchQuery]);
 
+    const filteredCurrentOpenPosts = useMemo(() => {
+        if (!userPosts) return [];
+        const q = searchQuery.trim().toLowerCase();
+        return userPosts
+            .filter((post) => (post.status ?? "open") === "open")
+            .filter((post) => {
+                if (!q) return true;
+                return (
+                    post.title?.toLowerCase().includes(q) ||
+                    post.description?.toLowerCase().includes(q)
+                );
+            });
+    }, [userPosts, searchQuery]);
+
     const filteredRecentReplies = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
         if (!q) return profileData.recentReplies;
@@ -220,6 +237,60 @@ export default function CommunityProfilePage() {
         } finally {
             setResolvingPostId(null);
         }
+    }, []);
+
+    const handleMarkReplyAccepted = useCallback(
+        async (postId: string, replyId: string) => {
+            try {
+                setAcceptingReplyId(replyId);
+                setUserPostsError(null);
+                const res = await fetch(
+                    `/api/community-replies/${encodeURIComponent(replyId)}`,
+                    {
+                        method: "PATCH",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ isAccepted: true }),
+                    }
+                );
+                if (!res.ok) {
+                    const body = (await res.json().catch(() => null)) as
+                        | { error?: string }
+                        | null;
+                    throw new Error(body?.error || "Failed to mark reply as accepted");
+                }
+
+                setUserPosts((prev) =>
+                    prev
+                        ? prev.map((post) => {
+                              if (post._id !== postId) return post;
+                              return {
+                                  ...post,
+                                  replies: (post.replies ?? []).map((reply) => ({
+                                      ...reply,
+                                      isAccepted: reply._id === replyId,
+                                  })),
+                              };
+                          })
+                        : prev
+                );
+            } catch (error) {
+                setUserPostsError(
+                    error instanceof Error ? error.message : "Failed to mark reply as accepted"
+                );
+            } finally {
+                setAcceptingReplyId(null);
+            }
+        },
+        []
+    );
+
+    const toggleResolvedReplies = useCallback((postId: string) => {
+        setExpandedResolvedReplies((prev) => ({
+            ...prev,
+            [postId]: !prev[postId],
+        }));
     }, []);
 
     /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
@@ -511,16 +582,12 @@ export default function CommunityProfilePage() {
                                     <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
                                         No posts yet.
                                     </Card>
+                                ) : filteredCurrentOpenPosts.length === 0 ? (
+                                    <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+                                        No open posts right now.
+                                    </Card>
                                 ) : (
-                                    userPosts
-                                        .filter((post) => {
-                                            const q = searchQuery.trim().toLowerCase();
-                                            if (!q) return true;
-                                            return (
-                                                post.title?.toLowerCase().includes(q) ||
-                                                post.description?.toLowerCase().includes(q)
-                                            );
-                                        })
+                                    filteredCurrentOpenPosts
                                         .slice(0, 1)
                                         .map((post) => (
                                             <Card
@@ -588,18 +655,40 @@ export default function CommunityProfilePage() {
                                                                 key={reply._id}
                                                                 className="rounded-lg bg-white p-3 text-sm text-slate-700"
                                                             >
-                                                                <p className="text-xs font-semibold text-slate-500">
-                                                                    {reply.authorDisplayName || "Community User"}
-                                                                    {reply.createdAt ? (
-                                                                        <span className="font-normal">
-                                                                            {" "}
-                                                                            ·{" "}
-                                                                            {new Date(
-                                                                                reply.createdAt
-                                                                            ).toLocaleString()}
-                                                                        </span>
-                                                                    ) : null}
-                                                                </p>
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <p className="text-xs font-semibold text-slate-500">
+                                                                        {reply.authorDisplayName || "Community User"}
+                                                                        {reply.createdAt ? (
+                                                                            <span className="font-normal">
+                                                                                {" "}
+                                                                                ·{" "}
+                                                                                {new Date(
+                                                                                    reply.createdAt
+                                                                                ).toLocaleString()}
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </p>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            handleMarkReplyAccepted(
+                                                                                post._id,
+                                                                                reply._id
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            reply.isAccepted ||
+                                                                            acceptingReplyId === reply._id
+                                                                        }
+                                                                        className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                                                    >
+                                                                        {acceptingReplyId === reply._id
+                                                                            ? "Updating..."
+                                                                            : reply.isAccepted
+                                                                            ? "Accepted"
+                                                                            : "Mark Accepted"}
+                                                                    </button>
+                                                                </div>
                                                                 <p className="mt-1 whitespace-pre-wrap">
                                                                     {reply.message}
                                                                 </p>
@@ -617,7 +706,7 @@ export default function CommunityProfilePage() {
                                 >
                                     <span className="inline-flex items-center justify-center gap-2">
                                         <Eye size={15} />
-                                        View all posts
+                                        View all current posts
                                     </span>
                                 </Link>
                             </div>
@@ -663,10 +752,78 @@ export default function CommunityProfilePage() {
                                             <span className="inline-flex items-center gap-1.5">
                                                 <ThumbsUp size={14} /> {post.likesCount ?? 0}
                                             </span>
-                                            <span className="inline-flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleResolvedReplies(post._id)}
+                                                className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 transition hover:bg-slate-100"
+                                            >
                                                 <MessageSquare size={14} /> {post.repliesCount ?? 0}
-                                            </span>
+                                                <ChevronDown
+                                                    size={13}
+                                                    className={`transition-transform ${
+                                                        expandedResolvedReplies[post._id] ? "rotate-180" : ""
+                                                    }`}
+                                                />
+                                            </button>
                                         </div>
+                                        {expandedResolvedReplies[post._id] &&
+                                            (post.replies?.length ?? 0) > 0 && (
+                                                <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                        Replies
+                                                    </p>
+                                                    {post.replies!.slice(0, 5).map((reply) => (
+                                                        <div
+                                                            key={reply._id}
+                                                            className="rounded-lg bg-white p-3 text-sm text-slate-700"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <p className="text-xs font-semibold text-slate-500">
+                                                                    {reply.authorDisplayName || "Community User"}
+                                                                    {reply.createdAt ? (
+                                                                        <span className="font-normal">
+                                                                            {" "}
+                                                                            ·{" "}
+                                                                            {new Date(
+                                                                                reply.createdAt
+                                                                            ).toLocaleString()}
+                                                                        </span>
+                                                                    ) : null}
+                                                                </p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        handleMarkReplyAccepted(
+                                                                            post._id,
+                                                                            reply._id
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        reply.isAccepted ||
+                                                                        acceptingReplyId === reply._id
+                                                                    }
+                                                                    className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                                                >
+                                                                    {acceptingReplyId === reply._id
+                                                                        ? "Updating..."
+                                                                        : reply.isAccepted
+                                                                        ? "Accepted"
+                                                                        : "Mark Accepted"}
+                                                                </button>
+                                                            </div>
+                                                            <p className="mt-1 whitespace-pre-wrap">
+                                                                {reply.message}
+                                                            </p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        {expandedResolvedReplies[post._id] &&
+                                            (post.replies?.length ?? 0) === 0 && (
+                                                <p className="mt-3 text-xs text-slate-500">
+                                                    No replies yet.
+                                                </p>
+                                            )}
                                     </Card>
                                 ))
                             )}
