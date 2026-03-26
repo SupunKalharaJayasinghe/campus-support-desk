@@ -74,19 +74,55 @@ function sanitizeStatusFilter(value: string | null): "" | ModuleOfferingStatus {
   return "";
 }
 
+function normalizeLower(value: string) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function mergeOfferingsByKey(rows: ModuleOfferingRecord[]) {
+  const byKey = new Map<string, ModuleOfferingRecord>();
+
+  rows.forEach((row) => {
+    const intakeKey = normalizeLower(row.intakeName || row.intakeId);
+    const moduleKey = normalizeModuleCode(row.moduleCode || row.moduleId);
+    if (!intakeKey || !moduleKey || !row.termCode) {
+      return;
+    }
+
+    const key = `${intakeKey}::${row.termCode}::${moduleKey}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, row);
+      return;
+    }
+
+    if (existing.updatedAt.localeCompare(row.updatedAt) < 0) {
+      byKey.set(key, row);
+    }
+  });
+
+  return Array.from(byKey.values());
+}
+
 function filterAndSortOfferings(
   rows: ModuleOfferingRecord[],
   options: {
     facultyCode: string;
     degreeCode: string;
     intakeName: string;
+    intakeId: string;
     termCode: TermCode | null;
     moduleCode: string;
+    moduleId: string;
     status: "" | ModuleOfferingStatus;
     search: string;
     sort: ModuleOfferingSort;
   }
 ) {
+  const intakeIdNormalized = normalizeLower(options.intakeId);
+  const intakeNameNormalized = normalizeLower(options.intakeName);
+  const moduleIdNormalized = String(options.moduleId ?? "").trim();
+  const moduleCodeFromModuleId = normalizeModuleCode(moduleIdNormalized);
+
   const filtered = rows
     .filter((offering) => !offering.isDeleted)
     .filter((offering) =>
@@ -96,12 +132,24 @@ function filterAndSortOfferings(
       options.degreeCode ? offering.degreeCode === options.degreeCode : true
     )
     .filter((offering) =>
-      options.intakeName
-        ? offering.intakeName.toLowerCase() === options.intakeName.toLowerCase()
+      intakeNameNormalized
+        ? normalizeLower(offering.intakeName) === intakeNameNormalized
+        : true
+    )
+    .filter((offering) =>
+      intakeIdNormalized
+        ? normalizeLower(offering.intakeId) === intakeIdNormalized ||
+          normalizeLower(offering.intakeName) === intakeIdNormalized
         : true
     )
     .filter((offering) => (options.termCode ? offering.termCode === options.termCode : true))
     .filter((offering) => (options.moduleCode ? offering.moduleCode === options.moduleCode : true))
+    .filter((offering) =>
+      moduleIdNormalized
+        ? offering.moduleId === moduleIdNormalized ||
+          offering.moduleCode === moduleCodeFromModuleId
+        : true
+    )
     .filter((offering) => (options.status ? offering.status === options.status : true))
     .filter((offering) => {
       if (!options.search) {
@@ -164,9 +212,8 @@ export async function GET(request: Request) {
       searchParams.get("degreeProgramId") ??
       searchParams.get("degreeId")
   );
-  const intakeName = normalizeIntakeName(
-    searchParams.get("intakeName") ?? searchParams.get("intakeId")
-  );
+  const intakeName = normalizeIntakeName(searchParams.get("intakeName"));
+  const intakeId = sanitizeId(searchParams.get("intakeId"));
   const termCodeRaw = sanitizeId(searchParams.get("termCode"));
   const termCode = termCodeRaw ? parseTermCodeStrict(termCodeRaw) : null;
   if (termCodeRaw && !termCode) {
@@ -176,9 +223,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const moduleCode = normalizeModuleCode(
-    searchParams.get("moduleCode") ?? searchParams.get("moduleId")
-  );
+  const moduleCode = normalizeModuleCode(searchParams.get("moduleCode"));
+  const moduleId = sanitizeId(searchParams.get("moduleId"));
   const search = String(searchParams.get("search") ?? "").trim().toLowerCase();
   const sort = sanitizeSort(searchParams.get("sort"));
   const status = sanitizeStatusFilter(searchParams.get("status"));
@@ -188,13 +234,22 @@ export async function GET(request: Request) {
   );
   const page = parsePageParam(searchParams.get("page"), 1);
 
-  let allItems: ModuleOfferingRecord[] = [];
-  let shouldUseStoreFallback = true;
+  const filterOptions = {
+    facultyCode,
+    degreeCode,
+    intakeName,
+    intakeId,
+    termCode,
+    moduleCode,
+    moduleId,
+    status,
+    search,
+    sort,
+  } satisfies Parameters<typeof filterAndSortOfferings>[1];
+
+  let dbRows: ModuleOfferingRecord[] = [];
 
   if (mongooseConnection) {
-    const hasAnyDbRows = Boolean(await ModuleOfferingModel.exists({}).catch(() => null));
-    shouldUseStoreFallback = !hasAnyDbRows;
-
     const query: Record<string, unknown> = {};
     if (termCode) {
       query.termCode = termCode;
@@ -208,35 +263,22 @@ export async function GET(request: Request) {
       .exec()
       .catch(() => [])) as unknown[];
 
-    allItems = filterAndSortOfferings(
-      rows
-        .map((row) => normalizeDbOffering(row))
-        .filter((row): row is ModuleOfferingRecord => Boolean(row)),
-      {
-        facultyCode,
-        degreeCode,
-        intakeName,
-        termCode,
-        moduleCode,
-        status,
-        search,
-        sort,
-      }
-    );
+    dbRows = rows
+      .map((row) => normalizeDbOffering(row))
+      .filter((row): row is ModuleOfferingRecord => Boolean(row));
   }
 
-  if (shouldUseStoreFallback) {
-    allItems = listModuleOfferings({
-      facultyCode,
-      degreeCode,
-      intakeName,
-      termCode: termCode ?? undefined,
-      moduleCode,
-      status,
-      search,
-      sort,
-    });
-  }
+  const storeRows = listModuleOfferings({
+    termCode: termCode ?? undefined,
+    status,
+    search,
+    sort,
+  });
+
+  const allItems = filterAndSortOfferings(
+    mergeOfferingsByKey([...dbRows, ...storeRows]),
+    filterOptions
+  );
 
   const total = allItems.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));

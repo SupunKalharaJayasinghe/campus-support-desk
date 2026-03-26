@@ -6,12 +6,13 @@ import { findDegreeProgram } from "@/models/degree-program-store";
 import { findFaculty } from "@/models/faculty-store";
 import { findIntakeById } from "@/models/intake-store";
 import {
-  listModuleOfferingsByModuleId,
+  listModuleOfferings,
   type ModuleOfferingRecord,
 } from "@/models/module-offering-store";
 import { connectMongoose } from "@/models/mongoose";
 import { IntakeModel } from "@/models/Intake";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
+import { findModuleByCode, findModuleById } from "@/models/module-store";
 
 interface ModuleDependencyItem {
   offeringId: string;
@@ -37,8 +38,13 @@ interface IntakeLookup {
 interface NormalizedDbOffering {
   offeringId: string;
   intakeId: string;
+  intakeName: string;
+  facultyCode: string;
+  degreeCode: string;
   termCode: string;
   syllabusVersion: string;
+  moduleId: string;
+  moduleCode: string;
   assignedLecturerIds: string[];
   updatedAt: string;
 }
@@ -147,7 +153,8 @@ function normalizeDbOfferings(value: unknown): NormalizedDbOffering[] {
         normalizedRow._id ?? normalizedRow.id ?? ""
       ).trim();
       const intakeId = String(normalizedRow.intakeId ?? "").trim();
-      if (!offeringId || !intakeId) {
+      const intakeName = String(normalizedRow.intakeName ?? "").trim();
+      if (!offeringId || (!intakeId && !intakeName)) {
         return null;
       }
 
@@ -160,8 +167,15 @@ function normalizeDbOfferings(value: unknown): NormalizedDbOffering[] {
       return {
         offeringId,
         intakeId,
+        intakeName,
+        facultyCode: normalizeAcademicCode(normalizedRow.facultyCode ?? normalizedRow.facultyId),
+        degreeCode: normalizeAcademicCode(
+          normalizedRow.degreeCode ?? normalizedRow.degreeProgramId
+        ),
         termCode: String(normalizedRow.termCode ?? "").trim(),
         syllabusVersion: String(normalizedRow.syllabusVersion ?? "NEW"),
+        moduleId: String(normalizedRow.moduleId ?? "").trim(),
+        moduleCode: String(normalizedRow.moduleCode ?? "").trim().toUpperCase(),
         assignedLecturerIds,
         updatedAt: toIsoDate(normalizedRow.updatedAt),
       } satisfies NormalizedDbOffering;
@@ -224,9 +238,10 @@ function buildStoreDependencies(offerings: ModuleOfferingRecord[]): ModuleDepend
     return toDependencyItem({
       offeringId: offering.id,
       intakeId: offering.intakeId,
-      intakeName: intakeLookup?.intakeName ?? "",
-      facultyCode: intakeLookup?.facultyCode ?? "",
-      degreeCode: intakeLookup?.degreeCode ?? "",
+      intakeName: intakeLookup?.intakeName ?? offering.intakeName ?? "",
+      facultyCode: intakeLookup?.facultyCode ?? offering.facultyCode ?? offering.facultyId,
+      degreeCode:
+        intakeLookup?.degreeCode ?? offering.degreeCode ?? offering.degreeProgramId,
       termCode: offering.termCode,
       syllabusVersion: offering.syllabusVersion,
       assignedLecturerIds:
@@ -240,10 +255,10 @@ function buildStoreDependencies(offerings: ModuleOfferingRecord[]): ModuleDepend
 }
 
 async function buildMongooseDependencies(
-  moduleId: string
+  module: { id: string; code: string }
 ): Promise<ModuleDependencyItem[]> {
   const rows = (await ModuleOfferingModel.find({
-    moduleId,
+    $or: [{ moduleId: module.id }, { moduleCode: module.code }],
   })
     .sort({ updatedAt: -1 })
     .lean()
@@ -266,9 +281,9 @@ async function buildMongooseDependencies(
     return toDependencyItem({
       offeringId: offering.offeringId,
       intakeId: offering.intakeId,
-      intakeName: intakeLookup?.intakeName ?? "",
-      facultyCode: intakeLookup?.facultyCode ?? "",
-      degreeCode: intakeLookup?.degreeCode ?? "",
+      intakeName: intakeLookup?.intakeName ?? offering.intakeName,
+      facultyCode: intakeLookup?.facultyCode ?? offering.facultyCode,
+      degreeCode: intakeLookup?.degreeCode ?? offering.degreeCode,
       termCode: offering.termCode,
       syllabusVersion: offering.syllabusVersion,
       assignedLecturerIds: offering.assignedLecturerIds,
@@ -282,21 +297,34 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const moduleId = String(params.id ?? "").trim();
-  if (!moduleId) {
+  const moduleParam = String(params.id ?? "").trim();
+  if (!moduleParam) {
     return NextResponse.json({ message: "Module id is required" }, { status: 400 });
   }
+  const moduleRecord = findModuleById(moduleParam) ?? findModuleByCode(moduleParam);
+  if (!moduleRecord) {
+    return NextResponse.json({ message: "Module not found" }, { status: 404 });
+  }
+
+  const storeRows = listModuleOfferings().filter(
+    (offering) =>
+      !offering.isDeleted &&
+      (offering.moduleId === moduleRecord.id || offering.moduleCode === moduleRecord.code)
+  );
 
   const mongooseDependencies = mongooseConnection
-    ? await buildMongooseDependencies(moduleId)
+    ? await buildMongooseDependencies({
+        id: moduleRecord.id,
+        code: moduleRecord.code,
+      })
     : [];
   const items =
     mongooseDependencies.length > 0
       ? mongooseDependencies
-      : buildStoreDependencies(listModuleOfferingsByModuleId(moduleId));
+      : buildStoreDependencies(storeRows);
 
   return NextResponse.json({
-    moduleId,
+    moduleId: moduleRecord.id,
     totalOfferings: items.length,
     items,
   });

@@ -177,6 +177,10 @@ function normalizeCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
 }
 
+function normalizeModuleCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+}
+
 function collapseSpaces(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -745,11 +749,8 @@ export default function IntakesPage() {
                   cache: "no-store",
                 }),
                 fetch(
-                  `/api/module-offerings?${new URLSearchParams({
-                    intakeId: options.intakeId,
+                  `/api/intakes/${encodeURIComponent(options.intakeId)}/offerings?${new URLSearchParams({
                     termCode,
-                    page: "1",
-                    pageSize: "100",
                   }).toString()}`,
                   { cache: "no-store" }
                 ),
@@ -794,6 +795,19 @@ export default function IntakesPage() {
             const moduleId = String((item as { moduleId?: unknown }).moduleId ?? "").trim();
             if (moduleId) {
               offeringIds.add(moduleId);
+              return;
+            }
+
+            const moduleCode = normalizeModuleCode(
+              String((item as { moduleCode?: unknown }).moduleCode ?? "")
+            );
+            if (!moduleCode) {
+              return;
+            }
+
+            const matched = parsedModules.find((moduleItem) => moduleItem.code === moduleCode);
+            if (matched) {
+              offeringIds.add(matched.id);
             }
           });
         }

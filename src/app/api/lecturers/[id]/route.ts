@@ -264,16 +264,21 @@ export async function DELETE(
     const lecturerObjectId = mongoose.Types.ObjectId.isValid(lecturerId)
       ? new mongoose.Types.ObjectId(lecturerId)
       : null;
-    await UserModel.updateMany(
+    const normalizedEmail = String(deletedRow.email ?? "").trim().toLowerCase();
+    await UserModel.deleteMany(
       lecturerObjectId
-        ? { $or: [{ lecturerRef: lecturerObjectId }, { email: deletedRow.email }] }
-        : { email: deletedRow.email },
-      {
-        $set: {
-          status: "INACTIVE",
-          mustChangePassword: false,
-        },
-      }
+        ? {
+            role: "LECTURER",
+            $or: [
+              { lecturerRef: lecturerObjectId },
+              { email: normalizedEmail },
+              { username: normalizedEmail },
+            ],
+          }
+        : {
+            role: "LECTURER",
+            $or: [{ email: normalizedEmail }, { username: normalizedEmail }],
+          }
     ).catch(() => null);
 
     return NextResponse.json({ ok: true });

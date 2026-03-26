@@ -114,11 +114,14 @@ async function reserveUniqueLecturerEmailInDb(
       index === 1
         ? `${baseLocalPart}@${domain}`
         : `${baseLocalPart}${index}@${domain}`;
-    const query = excludeId
+    const lecturerQuery = excludeId
       ? { email: candidateEmail, _id: { $ne: excludeId } }
       : { email: candidateEmail };
-    const exists = await LecturerModel.exists(query).catch(() => null);
-    if (!exists) {
+    const lecturerExists = await LecturerModel.exists(lecturerQuery).catch(() => null);
+    const userExists = await UserModel.exists({
+      $or: [{ email: candidateEmail }, { username: candidateEmail }],
+    }).catch(() => null);
+    if (!lecturerExists && !userExists) {
       return candidateEmail;
     }
   }

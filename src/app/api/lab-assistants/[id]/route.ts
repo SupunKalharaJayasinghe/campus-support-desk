@@ -267,16 +267,21 @@ export async function DELETE(
     const labAssistantObjectId = mongoose.Types.ObjectId.isValid(labAssistantId)
       ? new mongoose.Types.ObjectId(labAssistantId)
       : null;
-    await UserModel.updateMany(
+    const normalizedEmail = String(deletedRow.email ?? "").trim().toLowerCase();
+    await UserModel.deleteMany(
       labAssistantObjectId
-        ? { $or: [{ labAssistantRef: labAssistantObjectId }, { email: deletedRow.email }] }
-        : { email: deletedRow.email },
-      {
-        $set: {
-          status: "INACTIVE",
-          mustChangePassword: false,
-        },
-      }
+        ? {
+            role: "LAB_ASSISTANT",
+            $or: [
+              { labAssistantRef: labAssistantObjectId },
+              { email: normalizedEmail },
+              { username: normalizedEmail },
+            ],
+          }
+        : {
+            role: "LAB_ASSISTANT",
+            $or: [{ email: normalizedEmail }, { username: normalizedEmail }],
+          }
     ).catch(() => null);
 
     return NextResponse.json({ ok: true });

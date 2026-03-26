@@ -40,6 +40,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/admin/academics/modules/page.js"
+    ],
+    "/(app)/admin/academics/subgroups/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/academics/subgroups/page.js"
     ]
   }
 }

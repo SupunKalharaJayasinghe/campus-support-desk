@@ -29,13 +29,20 @@ function hasSameItems(left: string[], right: string[]) {
 }
 
 async function countModuleDependencies(moduleId: string, useMongoose: boolean) {
-  const storeCount = listModuleOfferingsByModuleId(moduleId).length;
+  const moduleRecord = findModuleById(moduleId);
+  if (!moduleRecord) {
+    return 0;
+  }
+
+  const storeCount = listModuleOfferingsByModuleId(moduleRecord.id).length;
 
   if (!useMongoose) {
     return storeCount;
   }
 
-  const dbCount = await ModuleOfferingModel.countDocuments({ moduleId }).catch(() => 0);
+  const dbCount = await ModuleOfferingModel.countDocuments({
+    $or: [{ moduleId: moduleRecord.id }, { moduleCode: moduleRecord.code }],
+  }).catch(() => 0);
 
   return dbCount > 0 ? dbCount : storeCount;
 }

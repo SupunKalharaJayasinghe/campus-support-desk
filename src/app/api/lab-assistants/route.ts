@@ -113,11 +113,16 @@ async function reserveUniqueLabAssistantEmailInDb(
       index === 1
         ? `${baseLocalPart}@${domain}`
         : `${baseLocalPart}${index}@${domain}`;
-    const query = excludeId
+    const labAssistantQuery = excludeId
       ? { email: candidateEmail, _id: { $ne: excludeId } }
       : { email: candidateEmail };
-    const exists = await LabAssistantModel.exists(query).catch(() => null);
-    if (!exists) {
+    const labAssistantExists = await LabAssistantModel.exists(labAssistantQuery).catch(
+      () => null
+    );
+    const userExists = await UserModel.exists({
+      $or: [{ email: candidateEmail }, { username: candidateEmail }],
+    }).catch(() => null);
+    if (!labAssistantExists && !userExists) {
       return candidateEmail;
     }
   }

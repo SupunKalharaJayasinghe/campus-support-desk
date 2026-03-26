@@ -6,7 +6,7 @@ import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   deleteModuleOffering,
   hasModuleOfferingProgress,
-  listModuleOfferingsByModuleId,
+  listModuleOfferings,
 } from "@/models/module-offering-store";
 import { findModuleById } from "@/models/module-store";
 
@@ -89,9 +89,9 @@ export async function POST(
   const dbRows = mongooseConnection
     ? ((await ModuleOfferingModel.find(
         unassignAll
-          ? { moduleId }
+          ? { $or: [{ moduleId: moduleRecord.id }, { moduleCode: moduleRecord.code }] }
           : {
-              moduleId,
+              $or: [{ moduleId: moduleRecord.id }, { moduleCode: moduleRecord.code }],
               _id: { $in: mongooseCandidates ?? [] },
             }
       )
@@ -149,7 +149,11 @@ export async function POST(
     );
   }
 
-  const storeOfferings = listModuleOfferingsByModuleId(moduleId);
+  const storeOfferings = listModuleOfferings().filter(
+    (offering) =>
+      !offering.isDeleted &&
+      (offering.moduleId === moduleRecord.id || offering.moduleCode === moduleRecord.code)
+  );
   const selectedSet = new Set(offeringIds);
   const targets = unassignAll
     ? storeOfferings
