@@ -342,7 +342,8 @@ export default function CommunityPostComposer({ className, compact }: CommunityP
                             </Button>
                             <Button
                                 type="button"
-                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100"
+                                variant="primary"
+                                className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
                                 onClick={handleDeleteDraft}
                                 disabled={isSubmitting}
                             >
