@@ -107,6 +107,8 @@ export default function CommunityProfilePage() {
         id: string;
         title: string;
     } | null>(null);
+    const [draftPostConfirm, setDraftPostConfirm] =
+        useState<CommunityPostDraft | null>(null);
     const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
     const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
     const [draftActionError, setDraftActionError] = useState<string | null>(null);
@@ -474,16 +476,22 @@ export default function CommunityProfilePage() {
     }, [draftDeleteConfirm, handleDraftDeleted]);
 
     useEffect(() => {
-        if (!draftInUpdateModal && !draftDeleteConfirm) return;
+        if (!draftInUpdateModal && !draftDeleteConfirm && !draftPostConfirm) return;
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                setDraftInUpdateModal(null);
-                setDraftDeleteConfirm(null);
+            if (e.key !== "Escape") return;
+            if (
+                draftPostConfirm &&
+                postingDraftId === draftPostConfirm.id
+            ) {
+                return;
             }
+            setDraftInUpdateModal(null);
+            setDraftDeleteConfirm(null);
+            setDraftPostConfirm(null);
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [draftInUpdateModal, draftDeleteConfirm]);
+    }, [draftInUpdateModal, draftDeleteConfirm, draftPostConfirm, postingDraftId]);
 
     const handleDraftPostNow = useCallback(
         async (draft: CommunityPostDraft) => {
@@ -538,6 +546,16 @@ export default function CommunityProfilePage() {
         },
         [handleDraftDeleted, router]
     );
+
+    const confirmDraftPost = useCallback(async () => {
+        const draft = draftPostConfirm;
+        if (!draft) return;
+        try {
+            await handleDraftPostNow(draft);
+        } finally {
+            setDraftPostConfirm(null);
+        }
+    }, [draftPostConfirm, handleDraftPostNow]);
 
     /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
     const closeSidebarIfMobile = useCallback(() => {
@@ -1216,8 +1234,11 @@ export default function CommunityProfilePage() {
                                             <button
                                                 type="button"
                                                 className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                                                onClick={() => handleDraftPostNow(draft)}
-                                                disabled={postingDraftId === draft.id}
+                                                onClick={() => setDraftPostConfirm(draft)}
+                                                disabled={
+                                                    postingDraftId === draft.id ||
+                                                    draftPostConfirm?.id === draft.id
+                                                }
                                             >
                                                 {postingDraftId === draft.id
                                                     ? "Posting..."
@@ -1334,6 +1355,62 @@ export default function CommunityProfilePage() {
                                 disabled={!!deletingDraftId}
                             >
                                 {deletingDraftId ? "Deleting…" : "Delete draft"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {draftPostConfirm && (
+                <div
+                    className="fixed inset-0 z-[102] flex items-center justify-center p-4"
+                    role="presentation"
+                >
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+                        aria-label="Dismiss"
+                        onClick={() =>
+                            postingDraftId !== draftPostConfirm.id &&
+                            setDraftPostConfirm(null)
+                        }
+                    />
+                    <div
+                        className="relative z-10 w-full max-w-md rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="draft-post-confirm-title"
+                    >
+                        <h2
+                            id="draft-post-confirm-title"
+                            className="text-lg font-semibold text-slate-800"
+                        >
+                            Post to the community?
+                        </h2>
+                        <p className="mt-3 text-sm text-slate-600">
+                            This will publish “{draftPostConfirm.title}” to the community feed
+                            for everyone to see. The draft will be removed after it is posted.
+                        </p>
+                        <div className="mt-6 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                onClick={() => setDraftPostConfirm(null)}
+                                disabled={postingDraftId === draftPostConfirm.id}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                onClick={() => {
+                                    confirmDraftPost().catch(() => undefined);
+                                }}
+                                disabled={postingDraftId === draftPostConfirm.id}
+                            >
+                                {postingDraftId === draftPostConfirm.id
+                                    ? "Posting…"
+                                    : "Post"}
                             </button>
                         </div>
                     </div>

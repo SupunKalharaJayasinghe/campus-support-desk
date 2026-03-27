@@ -105,8 +105,11 @@ export async function GET(req: Request) {
 
     const reports = await CommunityPostReport.find(statusFilter)
       .sort({ createdAt: -1 })
-      .populate("postId", "title category")
-      .populate("userId", "username email")
+      .populate({
+        path: "postId",
+        select: "title description category authorDisplayName",
+      })
+      .populate({ path: "userId", select: "username email" })
       .lean();
 
     return Response.json(reports);

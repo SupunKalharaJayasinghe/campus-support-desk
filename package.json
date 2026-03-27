@@ -9,7 +9,8 @@
     "build": "next build",
     "build:clean": "npm run clean:next && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:community-admin": "node scripts/seed-community-admin.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

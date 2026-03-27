@@ -237,6 +237,24 @@ export const notificationsByRole: Record<AppRole, NotificationItem[]> = {
       unread: false,
     },
   ],
+  COMMUNITY_ADMIN: [
+    {
+      id: "n-c-1",
+      type: "System",
+      title: "Community highlights",
+      message: "Review trending posts and reported content.",
+      time: "30m ago",
+      unread: true,
+    },
+    {
+      id: "n-c-2",
+      type: "Announcement",
+      title: "Moderation guidelines",
+      message: "Updated policy reference is available in the admin wiki.",
+      time: "5h ago",
+      unread: false,
+    },
+  ],
 };
 
 export const studentSummary = {

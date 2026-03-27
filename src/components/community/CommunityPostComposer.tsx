@@ -97,6 +97,7 @@ export default function CommunityPostComposer({
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
+    const [postConfirmOpen, setPostConfirmOpen] = useState(false);
 
     const addTag = () => {
         const trimmed = tagInput.trim();
@@ -194,11 +195,19 @@ export default function CommunityPostComposer({
         handleComposerCancel();
     };
 
-    const handlePost = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const isFormValid = title.trim().length > 0 && description.trim().length > 0;
+    const saveDraftLabel = draftId ? "Update Draft" : "Save Draft";
+
+    const openPostConfirm = () => {
+        if (!isDraftSaved || !isFormValid || isSubmitting) return;
+        setPostConfirmOpen(true);
+    };
+
+    const executePost = async () => {
         if (!isDraftSaved) return;
         if (!title.trim() || !description.trim()) return;
 
+        setPostConfirmOpen(false);
         setIsSubmitting(true);
         setSubmitError("");
 
@@ -240,10 +249,19 @@ export default function CommunityPostComposer({
         }
     };
 
-    const isFormValid = title.trim().length > 0 && description.trim().length > 0;
-    const saveDraftLabel = draftId ? "Update Draft" : "Save Draft";
+    useEffect(() => {
+        if (!postConfirmOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !isSubmitting) {
+                setPostConfirmOpen(false);
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [postConfirmOpen, isSubmitting]);
 
     return (
+        <>
         <Card
             className={cn(
                 "rounded-2xl border border-blue-100 bg-white/95 p-5 shadow-none sm:p-6",
@@ -259,7 +277,10 @@ export default function CommunityPostComposer({
                 </p>
             </div>
 
-            <form onSubmit={handlePost} className="space-y-5">
+            <form
+                onSubmit={(e) => e.preventDefault()}
+                className="space-y-5"
+            >
                 <div>
                     <label className="mb-1.5 block text-sm font-medium text-slate-700">
                         Title <span className="text-red-500">*</span>
@@ -466,9 +487,10 @@ export default function CommunityPostComposer({
                             </div>
                             <div className="flex min-w-0 flex-1 justify-center px-1">
                                 <Button
-                                    type="submit"
+                                    type="button"
                                     className="inline-flex min-w-[9rem] shrink-0 items-center justify-center gap-2 rounded-full bg-blue-700 px-8 py-2.5 text-base font-semibold text-white hover:bg-blue-800 sm:min-w-[12rem] sm:px-14"
                                     disabled={isSubmitting}
+                                    onClick={openPostConfirm}
                                 >
                                     {isSubmitting ? (
                                         <>
@@ -500,5 +522,67 @@ export default function CommunityPostComposer({
                 {submitError && <p className="text-sm font-medium text-red-700">{submitError}</p>}
             </form>
         </Card>
+
+            {postConfirmOpen && (
+                <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    role="presentation"
+                >
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+                        aria-label="Dismiss"
+                        onClick={() => !isSubmitting && setPostConfirmOpen(false)}
+                    />
+                    <div
+                        className="relative z-10 w-full max-w-md rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="post-confirm-title"
+                    >
+                        <h2
+                            id="post-confirm-title"
+                            className="text-lg font-semibold text-slate-800"
+                        >
+                            Post to the community?
+                        </h2>
+                        <p className="mt-3 text-sm text-slate-600">
+                            This will publish “{title.trim() || "your post"}” to the community feed for
+                            everyone to see. You can still report or manage it from your profile later.
+                        </p>
+                        <div className="mt-6 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                onClick={() => setPostConfirmOpen(false)}
+                                disabled={isSubmitting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="inline-flex min-w-[8rem] items-center justify-center gap-2 rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                onClick={() => {
+                                    void executePost();
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                                        Posting…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="h-4 w-4 shrink-0" aria-hidden />
+                                        Post
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }
