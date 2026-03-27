@@ -33,21 +33,27 @@ function reportStatusLabel(status: ReportStatus) {
 }
 
 function scrollToReviewedReportsSection() {
-  document.getElementById("reviewed-reports")?.scrollIntoView({
+  (
+    document.getElementById("reviewed-reports") ?? document.getElementById("reports")
+  )?.scrollIntoView({
     behavior: "smooth",
     block: "start",
   });
 }
 
 function scrollToConfirmedReportsSection() {
-  document.getElementById("confirmed-reports")?.scrollIntoView({
+  (
+    document.getElementById("confirmed-reports") ?? document.getElementById("reports")
+  )?.scrollIntoView({
     behavior: "smooth",
     block: "start",
   });
 }
 
 function scrollToDismissedReportsSection() {
-  document.getElementById("dismissed-reports")?.scrollIntoView({
+  (
+    document.getElementById("dismissed-reports") ?? document.getElementById("reports")
+  )?.scrollIntoView({
     behavior: "smooth",
     block: "start",
   });
@@ -63,7 +69,7 @@ export default function CommunityAdminReportedPostsPage() {
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
-  const [reportStatusFilter, setReportStatusFilter] = useState<"" | ReportStatus>("");
+  const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatus>("OPEN");
   const [detailReportId, setDetailReportId] = useState("");
   const [adminReviewAcknowledged, setAdminReviewAcknowledged] = useState(false);
   const [reviewCommentDraft, setReviewCommentDraft] = useState("");
@@ -113,13 +119,11 @@ export default function CommunityAdminReportedPostsPage() {
     };
   }, []);
 
-  /** Default view: pending (OPEN) only so reviewed items leave the queue; explicit filter narrows by status. */
-  const reportQueueFiltered = useMemo(() => {
-    if (!reportStatusFilter) {
-      return reports.filter((r) => r.status === "OPEN");
-    }
-    return reports.filter((r) => r.status === reportStatusFilter);
-  }, [reportStatusFilter, reports]);
+  /** Filtered list for the main report card (matches selected status). */
+  const reportQueueFiltered = useMemo(
+    () => reports.filter((r) => r.status === reportStatusFilter),
+    [reportStatusFilter, reports]
+  );
 
   const reviewedOnly = useMemo(
     () => reports.filter((r) => r.status === "REVIEWED"),
@@ -590,15 +594,14 @@ export default function CommunityAdminReportedPostsPage() {
       <section id="filters" className="scroll-mt-6">
         <Card
           title="Filters"
-          description="The report queue lists open (pending) reports only. Choose a status to filter that list."
+          description="Choose a status to show matching reports in the report list below. Open is the default pending queue."
           className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
         >
           <Select
             value={reportStatusFilter}
-            onChange={(event) => setReportStatusFilter(event.target.value as "" | ReportStatus)}
+            onChange={(event) => setReportStatusFilter(event.target.value as ReportStatus)}
           >
-            <option value="">Open — report queue</option>
-            <option value="OPEN">Open</option>
+            <option value="OPEN">Open — report queue</option>
             <option value="REVIEWED">Reviewed</option>
             <option value="AGREED">Agreed</option>
             <option value="DISMISSED">Dismissed</option>
@@ -608,8 +611,24 @@ export default function CommunityAdminReportedPostsPage() {
 
       <section id="reports" className="scroll-mt-6">
         <Card
-          title="Report queue (open reports)"
-          description="Only the report reason is shown here. After you save an admin review, the report moves to Reviewed report posts below."
+          title={
+            reportStatusFilter === "OPEN"
+              ? "Report queue (open reports)"
+              : reportStatusFilter === "REVIEWED"
+                ? "Reviewed reports"
+                : reportStatusFilter === "AGREED"
+                  ? "Agreed reports"
+                  : "Dismissed reports"
+          }
+          description={
+            reportStatusFilter === "OPEN"
+              ? "Only the report reason is shown here. After you save an admin review, the report moves to Reviewed report posts below."
+              : reportStatusFilter === "REVIEWED"
+                ? "Each row shows the saved admin review. Open a row to update the comment, accept, or dismiss."
+                : reportStatusFilter === "AGREED"
+                  ? "Reports you agreed with—the violation was acknowledged (Agreed)."
+                  : "Reports that were dismissed—the report was rejected."
+          }
           className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
         >
           {reportsError ? (
@@ -624,45 +643,53 @@ export default function CommunityAdminReportedPostsPage() {
             <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
               {reports.length === 0
                 ? "No post reports yet."
-                : !reportStatusFilter
+                : reportStatusFilter === "OPEN"
                   ? "No open reports in the queue."
                   : "No reports match this status filter."}
             </p>
+          ) : reportStatusFilter === "REVIEWED" ? (
+            reviewedReportRowList(reportQueueFiltered)
           ) : (
             reportRowList(reportQueueFiltered)
           )}
         </Card>
       </section>
 
-      <section id="reviewed-reports" className="scroll-mt-6">
-        <Card
-          title="Reviewed report posts"
-          description="Shows each report’s admin review. Open a row to update the comment, accept the report, or dismiss it."
-          className="border-l-[3px] border-l-sky-600 bg-gradient-to-br from-card to-sky-500/[0.05]"
-        >
-          {statusSectionBody(reviewedOnly, "No reviewed reports yet.", "reviewed")}
-        </Card>
-      </section>
+      {reportStatusFilter !== "REVIEWED" ? (
+        <section id="reviewed-reports" className="scroll-mt-6">
+          <Card
+            title="Reviewed report posts"
+            description="Shows each report’s admin review. Open a row to update the comment, accept the report, or dismiss it."
+            className="border-l-[3px] border-l-sky-600 bg-gradient-to-br from-card to-sky-500/[0.05]"
+          >
+            {statusSectionBody(reviewedOnly, "No reviewed reports yet.", "reviewed")}
+          </Card>
+        </section>
+      ) : null}
 
-      <section id="confirmed-reports" className="scroll-mt-6">
-        <Card
-          title="Report confirmed posts"
-          description="Reports you agreed with—the violation was acknowledged (Agreed)."
-          className="border-l-[3px] border-l-emerald-500 bg-gradient-to-br from-card to-emerald-500/[0.05]"
-        >
-          {statusSectionBody(agreedOnly, "No agreed reports yet.")}
-        </Card>
-      </section>
+      {reportStatusFilter !== "AGREED" ? (
+        <section id="confirmed-reports" className="scroll-mt-6">
+          <Card
+            title="Report confirmed posts"
+            description="Reports you agreed with—the violation was acknowledged (Agreed)."
+            className="border-l-[3px] border-l-emerald-500 bg-gradient-to-br from-card to-emerald-500/[0.05]"
+          >
+            {statusSectionBody(agreedOnly, "No agreed reports yet.")}
+          </Card>
+        </section>
+      ) : null}
 
-      <section id="dismissed-reports" className="scroll-mt-6">
-        <Card
-          title="Report dismissed posts"
-          description="Reports that were dismissed—the report was rejected."
-          className="border-l-[3px] border-l-rose-400 bg-gradient-to-br from-card to-rose-500/[0.04]"
-        >
-          {statusSectionBody(dismissedOnly, "No dismissed reports yet.")}
-        </Card>
-      </section>
+      {reportStatusFilter !== "DISMISSED" ? (
+        <section id="dismissed-reports" className="scroll-mt-6">
+          <Card
+            title="Report dismissed posts"
+            description="Reports that were dismissed—the report was rejected."
+            className="border-l-[3px] border-l-rose-400 bg-gradient-to-br from-card to-rose-500/[0.04]"
+          >
+            {statusSectionBody(dismissedOnly, "No dismissed reports yet.")}
+          </Card>
+        </section>
+      ) : null}
 
       {detailReport ? (
         <div
