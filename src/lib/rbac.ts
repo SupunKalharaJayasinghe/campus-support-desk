@@ -67,6 +67,9 @@ export function getExpectedRoleForPath(pathname: string): AppRole | AppRole[] | 
   if (pathname === "/admin/grades" || pathname.startsWith("/admin/grades/")) {
     return ["SUPER_ADMIN", "LECTURER"];
   }
+  if (pathname === "/admin/quizzes" || pathname.startsWith("/admin/quizzes/")) {
+    return ["SUPER_ADMIN", "LECTURER"];
+  }
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return "SUPER_ADMIN";
   }

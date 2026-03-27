@@ -4,6 +4,7 @@ import Container from "@/components/ui/Container";
 
 const STUDENT_LINKS = [
   { label: "Dashboard", href: "/student" },
+  { label: "Quizzes", href: "/student/quizzes" },
   { label: "Performance", href: "/student/performance" },
   { label: "My XP", href: "/student/gamification" },
   { label: "Trophies", href: "/student/trophies" },
