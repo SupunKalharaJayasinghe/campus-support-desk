@@ -6,9 +6,13 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
+  BookOpen,
+  Building2,
   ChevronLeft,
   ChevronRight,
   Crown,
+  GraduationCap,
+  Medal,
   RefreshCw,
   Search,
   Target,
@@ -167,6 +171,10 @@ interface TopResponseData {
   lastUpdated: string;
 }
 
+const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
+const STUDENT_PROFILE_EMPTY_MESSAGE =
+  "Please make sure you're logged in with a valid student account, or contact your administrator.";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -300,6 +308,8 @@ async function resolveStudentRecord(user: DemoUser) {
     .map((value) => collapseSpaces(value))
     .filter(Boolean);
   const seen = new Set<string>();
+  let hadSuccessfulLookup = false;
+  let lastLookupError = "";
 
   for (const candidate of candidates) {
     const normalized = normalizeText(candidate);
@@ -312,10 +322,16 @@ async function resolveStudentRecord(user: DemoUser) {
       `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
       { cache: "no-store" }
     );
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (!response.ok) {
+      lastLookupError =
+        collapseSpaces(payload?.error ?? payload?.message) ||
+        "Failed to look up your student profile.";
       continue;
     }
+    hadSuccessfulLookup = true;
 
     const items = parseStudentItems(payload);
     const match = findBestStudentMatch(items, user);
@@ -328,10 +344,21 @@ async function resolveStudentRecord(user: DemoUser) {
     const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
       cache: "no-store",
     });
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (response.ok) {
+      hadSuccessfulLookup = true;
       return parseStudentItems(payload)[0] ?? null;
     }
+
+    lastLookupError =
+      collapseSpaces(payload?.error ?? payload?.message) ||
+      "Failed to look up your student profile.";
+  }
+
+  if (!hadSuccessfulLookup && lastLookupError) {
+    throw new Error(lastLookupError);
   }
 
   return null;
@@ -449,11 +476,43 @@ async function fetchApiData<T>(url: string) {
   return payload.data;
 }
 
-function getMedal(rank: number) {
-  if (rank === 1) return "🥇";
-  if (rank === 2) return "🥈";
-  if (rank === 3) return "🥉";
+function getPodiumMeta(rank: number): {
+  Icon: typeof Trophy;
+  label: string;
+  className: string;
+} | null {
+  if (rank === 1) {
+    return { Icon: Crown, label: "First place", className: "text-amber-500" };
+  }
+  if (rank === 2) {
+    return { Icon: Medal, label: "Second place", className: "text-slate-400" };
+  }
+  if (rank === 3) {
+    return { Icon: Medal, label: "Third place", className: "text-orange-500" };
+  }
   return null;
+}
+
+function getScopeTabIcon(scope: ScopeKey) {
+  if (scope === "campus") return Building2;
+  if (scope === "faculty") return BookOpen;
+  if (scope === "degree") return GraduationCap;
+  return Users;
+}
+
+function getLevelIcon(levelNumber: number) {
+  if (levelNumber >= 4) return Trophy;
+  if (levelNumber === 3) return GraduationCap;
+  if (levelNumber === 2) return Target;
+  return BookOpen;
+}
+
+function getTopTrophyIconClass(tier?: string | null) {
+  if (tier === "diamond") return "text-cyan-500";
+  if (tier === "platinum") return "text-indigo-500";
+  if (tier === "gold") return "text-yellow-500";
+  if (tier === "silver") return "text-slate-500";
+  return "text-amber-600";
 }
 
 function getInitials(name: string) {
@@ -503,6 +562,35 @@ function LoadingSkeleton() {
   );
 }
 
+function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-4">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+            <Users size={22} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+              Student Portal / Leaderboard
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-heading">
+              {STUDENT_PROFILE_EMPTY_TITLE}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+              {STUDENT_PROFILE_EMPTY_MESSAGE}
+            </p>
+          </div>
+        </div>
+        <Button className="gap-2" onClick={onRetry}>
+          <RefreshCw size={16} />
+          Retry
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export default function StudentLeaderboardPage() {
   const { toast } = useToast();
   const [studentRecord, setStudentRecord] = useState<StudentLookupRecord | null>(null);
@@ -522,6 +610,7 @@ export default function StudentLeaderboardPage() {
   const [tableLoading, setTableLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
   const [warning, setWarning] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -591,6 +680,15 @@ export default function StudentLeaderboardPage() {
     };
   }, [statsData, studentRecord]);
 
+  const heroPodiumMeta = useMemo(
+    () => (heroRank ? getPodiumMeta(heroRank) : null),
+    [heroRank]
+  );
+  const CurrentLevelIcon = useMemo(
+    () => getLevelIcon(currentLevel.level),
+    [currentLevel.level]
+  );
+
   const summaryStats = useMemo(() => {
     const rows = leaderboardData?.leaderboard ?? [];
     const totalXP = rows.reduce((sum, row) => sum + row.totalXP, 0);
@@ -620,14 +718,7 @@ export default function StudentLeaderboardPage() {
               : scope === "degree"
                 ? "Degree"
                 : "Intake",
-        icon:
-          scope === "campus"
-            ? "🏫"
-            : scope === "faculty"
-              ? "🏛️"
-              : scope === "degree"
-                ? "📚"
-                : "👥",
+        Icon: getScopeTabIcon(scope),
         enabled:
           scope === "campus"
             ? true
@@ -653,6 +744,7 @@ export default function StudentLeaderboardPage() {
     setLoading(true);
     setError("");
     setWarning("");
+    setProfileMissing(false);
 
     try {
       const effectiveUser =
@@ -671,11 +763,14 @@ export default function StudentLeaderboardPage() {
 
       const resolvedStudent = await resolveStudentRecord(effectiveUser);
       if (!resolvedStudent) {
-        throw new Error(
-          isDemoModeEnabled()
-            ? "No student records are available yet."
-            : "Unable to resolve your student profile."
-        );
+        setStudentRecord(null);
+        setScopeProfile(null);
+        setLeaderboardData(null);
+        setAroundData(null);
+        setStatsData(null);
+        setTopData(null);
+        setProfileMissing(true);
+        return;
       }
 
       setStudentRecord(resolvedStudent);
@@ -704,6 +799,7 @@ export default function StudentLeaderboardPage() {
         loadError instanceof Error
           ? loadError.message
           : "Failed to load leaderboard";
+      setProfileMissing(false);
       setError(message);
       toast({
         title: "Failed",
@@ -891,6 +987,10 @@ export default function StudentLeaderboardPage() {
     return <LoadingSkeleton />;
   }
 
+  if (profileMissing) {
+    return <StudentProfileEmptyState onRetry={() => void initializePage()} />;
+  }
+
   if (error && !leaderboardData && !statsData && !aroundData && !topData) {
     return (
       <Card className="border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.96),rgba(255,255,255,0.98))]">
@@ -973,9 +1073,9 @@ export default function StudentLeaderboardPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="inline-flex rounded-full bg-white/85 px-3 py-1 text-sm font-semibold text-heading">
                   {heroRank === 1
-                    ? "🏆 Campus Champion"
+                    ? "Campus Champion"
                     : heroRank && heroRank <= 3
-                      ? `${getMedal(heroRank)} Podium Position`
+                      ? "Podium Position"
                       : heroTotalXP > 0
                         ? "Competitive Snapshot"
                         : "Ready to Compete"}
@@ -998,13 +1098,14 @@ export default function StudentLeaderboardPage() {
                   <h2 className="text-6xl font-semibold tracking-tight text-heading">
                     {heroTotalXP > 0 && heroRank ? `#${heroRank}` : "—"}
                   </h2>
-                  {heroRank === 1 ? (
-                    <span className="inline-flex h-16 w-16 items-center justify-center rounded-[22px] bg-white text-amber-600 shadow-[0_16px_40px_rgba(245,158,11,0.18)]">
-                      <Crown size={28} />
-                    </span>
-                  ) : heroRank && heroRank <= 3 ? (
-                    <span className="inline-flex h-16 w-16 items-center justify-center rounded-[22px] bg-white text-4xl shadow-[0_16px_40px_rgba(15,23,42,0.12)]">
-                      {getMedal(heroRank)}
+                  {heroPodiumMeta ? (
+                    <span
+                      className={cn(
+                        "inline-flex h-16 w-16 items-center justify-center rounded-[22px] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.12)]",
+                        heroPodiumMeta.className
+                      )}
+                    >
+                      <heroPodiumMeta.Icon size={28} />
                     </span>
                   ) : null}
                 </div>
@@ -1024,9 +1125,7 @@ export default function StudentLeaderboardPage() {
                     currentBadge.textColor
                   )}
                 >
-                  <span role="img" aria-label={`${currentLevel.name} icon`}>
-                    {currentLevel.icon}
-                  </span>
+                  <CurrentLevelIcon size={16} />
                   {currentLevel.name}
                 </span>
                 <span className="rounded-full bg-white/90 px-3 py-2 text-sm font-semibold text-heading">
@@ -1113,9 +1212,10 @@ export default function StudentLeaderboardPage() {
                 role="tab"
                 type="button"
               >
+                <tab.Icon size={16} />
                 <span>
                   <span className="block text-xs uppercase tracking-[0.18em] text-text/52">
-                    {tab.icon}
+                    Scope
                   </span>
                   <span className="mt-1 block text-sm font-semibold">{tab.label}</span>
                 </span>
@@ -1187,23 +1287,36 @@ export default function StudentLeaderboardPage() {
                   return (
                     <div className={border} key={item.student.id}>
                       <div className="rounded-[28px] border px-5 py-6 text-center shadow-[0_18px_42px_rgba(15,23,42,0.08)]">
-                        <div className="text-4xl" role="img" aria-label={`Rank ${item.rank}`}>
-                          {getMedal(item.rank)}
-                        </div>
+                        {(() => {
+                          const podiumMeta = getPodiumMeta(item.rank);
+                          return podiumMeta ? (
+                            <div
+                              aria-label={podiumMeta.label}
+                              className={cn("flex justify-center", podiumMeta.className)}
+                            >
+                              <podiumMeta.Icon size={32} />
+                            </div>
+                          ) : null;
+                        })()}
                         <div className="mx-auto mt-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-xl font-semibold text-heading shadow-[0_12px_28px_rgba(15,23,42,0.12)]">
                           {getInitials(item.student.name)}
                         </div>
                         <p className="mt-4 text-lg font-semibold text-heading">{item.student.name}</p>
                         <p className="mt-1 text-sm text-text/65">{item.student.registrationNumber}</p>
                         <p className="mt-4 text-3xl font-semibold text-heading">{formatXPDisplay(item.totalXP)}</p>
-                        <span className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-heading">
-                          {item.level.icon} {item.level.name}
+                        <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-heading">
+                          {(() => {
+                            const LevelIcon = getLevelIcon(item.level.number);
+                            return <LevelIcon size={14} />;
+                          })()}
+                          {item.level.name}
                         </span>
                         {item.topTrophy ? (
                           <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-text/72">
-                            <span role="img" aria-label={`${item.topTrophy.name} trophy`}>
-                              {item.topTrophy.icon}
-                            </span>
+                            <Trophy
+                              className={getTopTrophyIconClass(item.topTrophy.tier)}
+                              size={14}
+                            />
                             {item.topTrophy.name}
                           </div>
                         ) : null}
@@ -1220,9 +1333,14 @@ export default function StudentLeaderboardPage() {
                   key={item.student.id}
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-3xl" role="img" aria-label={`Rank ${item.rank}`}>
-                      {getMedal(item.rank)}
-                    </span>
+                    {(() => {
+                      const podiumMeta = getPodiumMeta(item.rank);
+                      return podiumMeta ? (
+                        <span className={podiumMeta.className} aria-label={podiumMeta.label}>
+                          <podiumMeta.Icon size={24} />
+                        </span>
+                      ) : null;
+                    })()}
                     <div className="flex-1">
                       <p className="font-semibold text-heading">{item.student.name}</p>
                       <p className="mt-1 text-sm text-text/65">{item.student.registrationNumber}</p>
@@ -1230,7 +1348,13 @@ export default function StudentLeaderboardPage() {
                     <div className="text-right">
                       <p className="font-semibold text-heading">{formatXPDisplay(item.totalXP)}</p>
                       <p className="mt-1 text-sm text-text/65">
-                        {item.level.icon} {item.level.name}
+                        <span className="inline-flex items-center gap-1">
+                          {(() => {
+                            const LevelIcon = getLevelIcon(item.level.number);
+                            return <LevelIcon size={12} />;
+                          })()}
+                          {item.level.name}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1380,16 +1504,23 @@ export default function StudentLeaderboardPage() {
                         >
                           <td className="border-b border-slate-100 px-4 py-4 align-top">
                             <div className="flex items-center gap-2">
-                              {getMedal(entry.rank) ? (
-                                <span className="text-xl" role="img" aria-label={`Rank ${entry.rank}`}>
-                                  {getMedal(entry.rank)}
+                              {getPodiumMeta(entry.rank) ? (
+                                <span
+                                  className={cn("inline-flex", getPodiumMeta(entry.rank)?.className)}
+                                  aria-label={getPodiumMeta(entry.rank)?.label}
+                                >
+                                  {(() => {
+                                    const podiumMeta = getPodiumMeta(entry.rank);
+                                    return podiumMeta ? <podiumMeta.Icon size={18} /> : null;
+                                  })()}
                                 </span>
                               ) : (
                                 <span className="min-w-[28px] text-sm font-semibold text-heading">#{entry.rank}</span>
                               )}
                               {isCurrentStudent ? (
-                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                                  📍 You
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                                  <Target size={12} />
+                                  You
                                 </span>
                               ) : null}
                             </div>
@@ -1407,7 +1538,10 @@ export default function StudentLeaderboardPage() {
                           </td>
                           <td className="border-b border-slate-100 px-4 py-4 align-top">
                             <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-heading">
-                              <span role="img" aria-label={`${entry.level.name} icon`}>{entry.level.icon}</span>
+                              {(() => {
+                                const LevelIcon = getLevelIcon(entry.level.number);
+                                return <LevelIcon size={14} />;
+                              })()}
                               {entry.level.name}
                             </span>
                           </td>
@@ -1417,7 +1551,10 @@ export default function StudentLeaderboardPage() {
                           <td className="hidden border-b border-slate-100 px-4 py-4 align-top md:table-cell">
                             {entry.topTrophy ? (
                               <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm text-text/72">
-                                <span role="img" aria-label={`${entry.topTrophy.name} trophy`}>{entry.topTrophy.icon}</span>
+                                <Trophy
+                                  className={getTopTrophyIconClass(entry.topTrophy.tier)}
+                                  size={16}
+                                />
                                 <span className="max-w-[180px] truncate">{entry.topTrophy.name}</span>
                               </div>
                             ) : (
@@ -1497,7 +1634,14 @@ export default function StudentLeaderboardPage() {
                         <div className="min-w-0">
                           <p className="font-semibold text-heading">#{entry.rank} {entry.student.name}</p>
                           <p className="mt-1 text-sm text-text/65">
-                            {entry.student.registrationNumber} • {entry.level.icon} {entry.level.name}
+                            <span className="inline-flex items-center gap-1">
+                              {entry.student.registrationNumber} •
+                              {(() => {
+                                const LevelIcon = getLevelIcon(entry.level.number);
+                                return <LevelIcon size={14} />;
+                              })()}
+                              {entry.level.name}
+                            </span>
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-heading">{formatXPDisplay(entry.totalXP)}</p>
@@ -1509,7 +1653,13 @@ export default function StudentLeaderboardPage() {
                 <div className="my-4 rounded-[24px] border-2 border-amber-300 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(255,255,255,0.98))] px-4 py-4 shadow-[0_14px_32px_rgba(245,158,11,0.12)]">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-heading">#{aroundData.student.rank} ★ YOU ★</p>
+                      <p className="inline-flex items-center gap-2 font-semibold text-heading">
+                        #{aroundData.student.rank}
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                          <Target size={12} />
+                          You
+                        </span>
+                      </p>
                       <p className="mt-1 text-sm text-text/65">
                         {aroundData.student.name} • {aroundData.student.registrationNumber}
                       </p>
@@ -1517,7 +1667,13 @@ export default function StudentLeaderboardPage() {
                     <div className="text-right">
                       <p className="font-semibold text-heading">{formatXPDisplay(aroundData.student.totalXP)}</p>
                       <p className="mt-1 text-sm text-text/65">
-                        {aroundData.student.level.icon} {aroundData.student.level.name}
+                        <span className="inline-flex items-center gap-1">
+                          {(() => {
+                            const LevelIcon = getLevelIcon(aroundData.student.level.number);
+                            return <LevelIcon size={14} />;
+                          })()}
+                          {aroundData.student.level.name}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1530,7 +1686,14 @@ export default function StudentLeaderboardPage() {
                         <div className="min-w-0">
                           <p className="font-semibold text-heading">#{entry.rank} {entry.student.name}</p>
                           <p className="mt-1 text-sm text-text/65">
-                            {entry.student.registrationNumber} • {entry.level.icon} {entry.level.name}
+                            <span className="inline-flex items-center gap-1">
+                              {entry.student.registrationNumber} •
+                              {(() => {
+                                const LevelIcon = getLevelIcon(entry.level.number);
+                                return <LevelIcon size={14} />;
+                              })()}
+                              {entry.level.name}
+                            </span>
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-heading">{formatXPDisplay(entry.totalXP)}</p>
@@ -1561,18 +1724,18 @@ export default function StudentLeaderboardPage() {
               <h2 className="text-2xl font-semibold text-heading">Keep Climbing</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-text/72">
                 {heroTotalXP <= 0 || !heroRank || heroTotalStudents <= 0
-                  ? "🚀 Start your journey! Earn XP to appear on the leaderboard!"
+                  ? "Start your journey. Earn XP to appear on the leaderboard."
                   : heroRank === 1
-                    ? "🏆 You're the campus champion! Keep inspiring others!"
+                    ? "You are the campus champion. Keep inspiring others."
                     : heroRank <= 3
-                      ? "🥇 You're on the podium! Can you claim the #1 spot?"
+                      ? "You are on the podium. Can you claim the #1 spot?"
                       : heroRank <= 10
-                        ? "🌟 Top 10! You're among the best. Keep pushing!"
+                        ? "Top 10. You are among the best. Keep pushing."
                         : heroRank / heroTotalStudents <= 0.25
-                          ? "🔥 Great performance! You're in the top quarter!"
+                          ? "Great performance. You are in the top quarter."
                           : heroRank / heroTotalStudents <= 0.5
-                            ? "💪 Above average! Keep climbing the ranks!"
-                            : "📈 Every point counts! Complete modules and quizzes to climb!"}
+                            ? "Above average. Keep climbing the ranks."
+                            : "Every point counts. Complete modules and quizzes to climb."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">

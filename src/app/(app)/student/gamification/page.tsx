@@ -99,6 +99,10 @@ interface GamificationConfigResponse {
   error?: string;
 }
 
+const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
+const STUDENT_PROFILE_EMPTY_MESSAGE =
+  "Please make sure you're logged in with a valid student account, or contact your administrator.";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -275,6 +279,8 @@ async function resolveStudentRecord(user: DemoUser) {
     .map((value) => collapseSpaces(value))
     .filter(Boolean);
   const seen = new Set<string>();
+  let hadSuccessfulLookup = false;
+  let lastLookupError = "";
 
   for (const candidate of candidates) {
     const normalized = normalizeText(candidate);
@@ -287,10 +293,16 @@ async function resolveStudentRecord(user: DemoUser) {
       `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
       { cache: "no-store" }
     );
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (!response.ok) {
+      lastLookupError =
+        collapseSpaces(payload?.error ?? payload?.message) ||
+        "Failed to look up your student profile.";
       continue;
     }
+    hadSuccessfulLookup = true;
 
     const items = parseStudentItems(payload);
     const match = findBestStudentMatch(items, user);
@@ -303,10 +315,21 @@ async function resolveStudentRecord(user: DemoUser) {
     const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
       cache: "no-store",
     });
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (response.ok) {
+      hadSuccessfulLookup = true;
       return parseStudentItems(payload)[0] ?? null;
     }
+
+    lastLookupError =
+      collapseSpaces(payload?.error ?? payload?.message) ||
+      "Failed to look up your student profile.";
+  }
+
+  if (!hadSuccessfulLookup && lastLookupError) {
+    throw new Error(lastLookupError);
   }
 
   return null;
@@ -577,6 +600,34 @@ function LoadingSkeleton() {
   );
 }
 
+function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-4">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+            <BookOpen size={22} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+              Student Portal / Gamification
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+              {STUDENT_PROFILE_EMPTY_TITLE}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+              {STUDENT_PROFILE_EMPTY_MESSAGE}
+            </p>
+          </div>
+        </div>
+        <Button onClick={onRetry} variant="secondary">
+          Retry
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 interface StatCardProps {
   title: string;
   value: string;
@@ -643,6 +694,7 @@ export default function StudentGamificationPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
   const [configError, setConfigError] = useState("");
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [showHowToEarn, setShowHowToEarn] = useState(true);
@@ -750,6 +802,7 @@ export default function StudentGamificationPage() {
 
     setError("");
     setConfigError("");
+    setProfileMissing(false);
 
     try {
       const sessionUser = readStoredUser();
@@ -769,11 +822,10 @@ export default function StudentGamificationPage() {
 
       const studentRecord = await resolveStudentRecord(effectiveUser);
       if (!studentRecord) {
-        throw new Error(
-          isDemoModeEnabled()
-            ? "No student records are available yet."
-            : "Unable to resolve your student profile from the current session."
-        );
+        setSummary(null);
+        setConfig(null);
+        setProfileMissing(true);
+        return;
       }
 
       const [pointsResult, configResult] = await Promise.allSettled([
@@ -825,6 +877,7 @@ export default function StudentGamificationPage() {
         loadError instanceof Error ? loadError.message : "Failed to load rewards data";
       setSummary(null);
       setConfig(null);
+      setProfileMissing(false);
       setError(message);
       if (!initial) {
         toast({
@@ -841,6 +894,10 @@ export default function StudentGamificationPage() {
 
   if (loading) {
     return <LoadingSkeleton />;
+  }
+
+  if (profileMissing) {
+    return <StudentProfileEmptyState onRetry={() => void loadGamification()} />;
   }
 
   if (error || !summary) {

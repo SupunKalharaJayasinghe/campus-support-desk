@@ -124,6 +124,10 @@ interface AnswerDraft {
   answerText?: string;
 }
 
+const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
+const STUDENT_PROFILE_EMPTY_MESSAGE =
+  "Please make sure you're logged in with a valid student account, or contact your administrator.";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -218,6 +222,8 @@ async function resolveStudentRecord(user: DemoUser) {
     .map((value) => collapseSpaces(value))
     .filter(Boolean);
   const seen = new Set<string>();
+  let hadSuccessfulLookup = false;
+  let lastLookupError = "";
 
   for (const candidate of candidates) {
     const normalized = normalizeText(candidate);
@@ -228,8 +234,16 @@ async function resolveStudentRecord(user: DemoUser) {
       `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
       { cache: "no-store" }
     );
-    const payload = await readJson<unknown>(response);
-    if (!response.ok) continue;
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
+    if (!response.ok) {
+      lastLookupError =
+        collapseSpaces(payload?.error ?? payload?.message) ||
+        "Failed to look up your student profile.";
+      continue;
+    }
+    hadSuccessfulLookup = true;
     const match = findBestStudentMatch(parseStudentItems(payload), user);
     if (match) return match;
   }
@@ -238,10 +252,21 @@ async function resolveStudentRecord(user: DemoUser) {
     const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
       cache: "no-store",
     });
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (response.ok) {
+      hadSuccessfulLookup = true;
       return parseStudentItems(payload)[0] ?? null;
     }
+
+    lastLookupError =
+      collapseSpaces(payload?.error ?? payload?.message) ||
+      "Failed to look up your student profile.";
+  }
+
+  if (!hadSuccessfulLookup && lastLookupError) {
+    throw new Error(lastLookupError);
   }
 
   return null;
@@ -262,6 +287,39 @@ function LoadingSkeleton() {
         <Skeleton className="h-[520px] w-full rounded-[28px]" />
       </Card>
     </div>
+  );
+}
+
+function StudentProfileEmptyState({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+  return (
+    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-4">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+            <PlayCircle size={22} />
+          </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+              Student Portal / Quizzes
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+              {STUDENT_PROFILE_EMPTY_TITLE}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+              {STUDENT_PROFILE_EMPTY_MESSAGE}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={onBack} variant="secondary">
+            Back
+          </Button>
+          <Button onClick={onRetry} variant="secondary">
+            Retry
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -324,6 +382,7 @@ export default function StudentQuizAttemptPage() {
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [submission, setSubmission] = useState<SubmissionResult | null>(null);
   const [reviewData, setReviewData] = useState<ReviewAttemptData | null>(null);
@@ -476,6 +535,7 @@ export default function StudentQuizAttemptPage() {
   async function initializePage() {
     setLoading(true);
     setError("");
+    setProfileMissing(false);
 
     try {
       const effectiveUser =
@@ -490,11 +550,14 @@ export default function StudentQuizAttemptPage() {
 
       const resolvedStudent = await resolveStudentRecord(effectiveUser);
       if (!resolvedStudent) {
-        throw new Error(
-          isDemoModeEnabled()
-            ? "No student records are available yet."
-            : "Unable to resolve your student profile."
-        );
+        setStudentRecord(null);
+        setPreviewQuiz(null);
+        setLiveQuiz(null);
+        setAttemptInfo(null);
+        setReviewData(null);
+        setSubmission(null);
+        setProfileMissing(true);
+        return;
       }
 
       setStudentRecord(resolvedStudent);
@@ -524,6 +587,7 @@ export default function StudentQuizAttemptPage() {
       }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load quiz.";
+      setProfileMissing(false);
       setError(message);
       toast({
         title: "Failed",
@@ -690,6 +754,15 @@ export default function StudentQuizAttemptPage() {
 
   if (loading) {
     return <LoadingSkeleton />;
+  }
+
+  if (profileMissing) {
+    return (
+      <StudentProfileEmptyState
+        onBack={() => router.push("/student/quizzes")}
+        onRetry={() => void initializePage()}
+      />
+    );
   }
 
   if (error && !previewQuiz && !liveQuiz && !reviewData && !submission) {

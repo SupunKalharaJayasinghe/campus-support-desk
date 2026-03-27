@@ -163,13 +163,17 @@ interface MilestoneCheckResponse {
 interface TierMeta {
   label: string;
   shortLabel: string;
-  icon: string;
+  Icon: ComponentType<{ className?: string; size?: number }>;
   chip: string;
   card: string;
   glow: string;
   mutedCard: string;
   progress: string;
 }
+
+const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
+const STUDENT_PROFILE_EMPTY_MESSAGE =
+  "Please make sure you're logged in with a valid student account, or contact your administrator.";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -345,6 +349,8 @@ async function resolveStudentRecord(user: DemoUser) {
     .map((value) => collapseSpaces(value))
     .filter(Boolean);
   const seen = new Set<string>();
+  let hadSuccessfulLookup = false;
+  let lastLookupError = "";
 
   for (const candidate of candidates) {
     const normalized = normalizeText(candidate);
@@ -357,10 +363,16 @@ async function resolveStudentRecord(user: DemoUser) {
       `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
       { cache: "no-store" }
     );
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (!response.ok) {
+      lastLookupError =
+        collapseSpaces(payload?.error ?? payload?.message) ||
+        "Failed to look up your student profile.";
       continue;
     }
+    hadSuccessfulLookup = true;
 
     const items = parseStudentItems(payload);
     const match = findBestStudentMatch(items, user);
@@ -373,10 +385,21 @@ async function resolveStudentRecord(user: DemoUser) {
     const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
       cache: "no-store",
     });
-    const payload = await readJson<unknown>(response);
+    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
+      response
+    );
     if (response.ok) {
+      hadSuccessfulLookup = true;
       return parseStudentItems(payload)[0] ?? null;
     }
+
+    lastLookupError =
+      collapseSpaces(payload?.error ?? payload?.message) ||
+      "Failed to look up your student profile.";
+  }
+
+  if (!hadSuccessfulLookup && lastLookupError) {
+    throw new Error(lastLookupError);
   }
 
   return null;
@@ -422,8 +445,8 @@ function getTierMeta(tier: TrophyTier): TierMeta {
   if (tier === "bronze") {
     return {
       label: "Bronze",
-      shortLabel: "🥉 Bronze",
-      icon: "🥉",
+      shortLabel: "Bronze",
+      Icon: Medal,
       chip: "bg-amber-100 text-amber-800",
       card: "border-orange-300 bg-[linear-gradient(180deg,rgba(255,247,237,0.96),rgba(255,255,255,0.98))]",
       glow: "shadow-[0_18px_42px_rgba(234,88,12,0.14)]",
@@ -434,8 +457,8 @@ function getTierMeta(tier: TrophyTier): TierMeta {
   if (tier === "silver") {
     return {
       label: "Silver",
-      shortLabel: "🥈 Silver",
-      icon: "🥈",
+      shortLabel: "Silver",
+      Icon: Award,
       chip: "bg-slate-200 text-slate-700",
       card: "border-slate-300 bg-[linear-gradient(180deg,rgba(241,245,249,0.98),rgba(255,255,255,0.98))]",
       glow: "shadow-[0_18px_42px_rgba(100,116,139,0.16)]",
@@ -446,8 +469,8 @@ function getTierMeta(tier: TrophyTier): TierMeta {
   if (tier === "gold") {
     return {
       label: "Gold",
-      shortLabel: "🥇 Gold",
-      icon: "🥇",
+      shortLabel: "Gold",
+      Icon: Trophy,
       chip: "bg-yellow-100 text-yellow-800",
       card: "border-yellow-300 bg-[linear-gradient(180deg,rgba(254,249,195,0.98),rgba(255,255,255,0.98))]",
       glow: "shadow-[0_18px_42px_rgba(234,179,8,0.16)]",
@@ -458,8 +481,8 @@ function getTierMeta(tier: TrophyTier): TierMeta {
   if (tier === "platinum") {
     return {
       label: "Platinum",
-      shortLabel: "💠 Platinum",
-      icon: "💠",
+      shortLabel: "Platinum",
+      Icon: Star,
       chip: "bg-indigo-100 text-indigo-800",
       card: "border-indigo-300 bg-[linear-gradient(180deg,rgba(224,231,255,0.98),rgba(255,255,255,0.98))]",
       glow: "shadow-[0_18px_42px_rgba(99,102,241,0.16)]",
@@ -469,8 +492,8 @@ function getTierMeta(tier: TrophyTier): TierMeta {
   }
   return {
     label: "Diamond",
-    shortLabel: "💎 Diamond",
-    icon: "💎",
+    shortLabel: "Diamond",
+    Icon: Gem,
     chip: "bg-cyan-100 text-cyan-800",
     card: "border-cyan-300 bg-[linear-gradient(180deg,rgba(236,254,255,0.98),rgba(255,255,255,0.98))]",
     glow: "shadow-[0_18px_42px_rgba(6,182,212,0.16)]",
@@ -550,6 +573,13 @@ function getCategoryMeta(category: TrophyCategory) {
     soft: "border-teal-200 bg-teal-50 text-teal-700",
     progress: "bg-teal-500",
   };
+}
+
+function getLevelIcon(level: Pick<LevelConfig, "level" | "color">) {
+  if (level.level >= 4 || level.color === "amber") return Trophy;
+  if (level.level === 3 || level.color === "purple") return GraduationCap;
+  if (level.level === 2 || level.color === "blue") return LineChart;
+  return BookOpen;
 }
 
 function getLevelHeroClasses(color: LevelConfig["color"]) {
@@ -679,6 +709,35 @@ function LoadingSkeleton() {
   );
 }
 
+function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-4">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+            <BookOpen size={22} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-sky-700">
+              Student Portal / Trophies
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+              {STUDENT_PROFILE_EMPTY_TITLE}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+              {STUDENT_PROFILE_EMPTY_MESSAGE}
+            </p>
+          </div>
+        </div>
+        <Button className="gap-2" onClick={onRetry} variant="secondary">
+          <RefreshCw size={16} />
+          Retry
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function EmptyStateTip({ item }: { item: TrophyShowcaseItem | null }) {
   if (!item) {
     return null;
@@ -690,8 +749,11 @@ function EmptyStateTip({ item }: { item: TrophyShowcaseItem | null }) {
         Quick Start Tip
       </p>
       <div className="mt-3 flex items-start gap-3">
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-3xl shadow-[0_12px_24px_rgba(245,158,11,0.12)]">
-          {item.definition.icon}
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-amber-700 shadow-[0_12px_24px_rgba(245,158,11,0.12)]">
+          {(() => {
+            const Icon = getCategoryMeta(item.definition.category).Icon;
+            return <Icon size={22} />;
+          })()}
         </span>
         <div>
           <h3 className="text-lg font-semibold text-heading">
@@ -716,6 +778,7 @@ export default function StudentTrophiesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ShowcaseFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | TrophyCategory>("all");
   const [tierFilter, setTierFilter] = useState<"all" | TrophyTier>("all");
@@ -884,6 +947,7 @@ export default function StudentTrophiesPage() {
     }
 
     setError("");
+    setProfileMissing(false);
 
     try {
       const sessionUser = readStoredUser();
@@ -903,11 +967,9 @@ export default function StudentTrophiesPage() {
 
       const studentRecord = await resolveStudentRecord(effectiveUser);
       if (!studentRecord) {
-        throw new Error(
-          isDemoModeEnabled()
-            ? "No student records are available yet."
-            : "Could not locate your student record."
-        );
+        setData(null);
+        setProfileMissing(true);
+        return;
       }
 
       const response = await fetch(`/api/gamification/trophies/${studentRecord.id}`, {
@@ -923,12 +985,13 @@ export default function StudentTrophiesPage() {
     } catch (loadError) {
       const message =
         loadError instanceof Error ? loadError.message : "Failed to load levels and trophies.";
+      setProfileMissing(false);
       setError(message);
-        toast({
-          title: "Failed",
-          message,
-          variant: "error",
-        });
+      toast({
+        title: "Failed",
+        message,
+        variant: "error",
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -958,7 +1021,7 @@ export default function StudentTrophiesPage() {
 
       if (payload.data.newTrophiesAwarded.length > 0) {
         const unlocked = payload.data.newTrophiesAwarded
-          .map((item) => `${item.trophyIcon} ${item.trophyName}`)
+          .map((item) => item.trophyName)
           .join(", ");
         toast({
           title: "New trophies unlocked",
@@ -989,6 +1052,10 @@ export default function StudentTrophiesPage() {
 
   if (loading) {
     return <LoadingSkeleton />;
+  }
+
+  if (profileMissing) {
+    return <StudentProfileEmptyState onRetry={() => void loadTrophies(false)} />;
   }
 
   if (error || !data) {
@@ -1090,10 +1157,12 @@ export default function StudentTrophiesPage() {
                 <div className="flex items-center gap-4">
                   <span
                     aria-label={`${data.level.current.name} level icon`}
-                    className="inline-flex h-20 w-20 items-center justify-center rounded-[28px] bg-white text-5xl shadow-[0_18px_40px_rgba(15,23,42,0.12)]"
-                    role="img"
+                    className="inline-flex h-20 w-20 items-center justify-center rounded-[28px] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.12)]"
                   >
-                    {data.level.current.icon}
+                    {(() => {
+                      const Icon = getLevelIcon(data.level.current);
+                      return <Icon size={36} />;
+                    })()}
                   </span>
                   <div>
                     <span
@@ -1129,7 +1198,7 @@ export default function StudentTrophiesPage() {
                   </div>
                   <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                     {data.level.progress.isMaxLevel
-                      ? "Max Level Reached! 🎉"
+                      ? "Max Level Reached"
                       : `${formatXPDisplay(data.level.progress.xpRemainingToNextLevel)} to ${data.level.next?.name ?? "next level"}`}
                   </div>
                 </div>
@@ -1203,17 +1272,20 @@ export default function StudentTrophiesPage() {
                       <div className="flex items-start justify-between gap-3">
                         <span
                           aria-label={`${item.trophyName} trophy`}
-                          className="text-4xl"
-                          role="img"
+                          className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-heading shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
                         >
-                          {item.trophyIcon}
+                          {(() => {
+                            const Icon = getCategoryMeta(item.category).Icon;
+                            return <Icon size={24} />;
+                          })()}
                         </span>
                         <span
                           className={cn(
-                            "rounded-full px-3 py-1 text-xs font-semibold",
+                            "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold",
                             tierMeta.chip
                           )}
                         >
+                          <tierMeta.Icon size={14} />
                           {tierMeta.shortLabel}
                         </span>
                       </div>
@@ -1274,7 +1346,10 @@ export default function StudentTrophiesPage() {
                       className={cn("rounded-full px-3 py-1", tierMeta.chip)}
                       key={tier}
                     >
-                      {tierMeta.shortLabel} {stats.earned} / {stats.total}
+                      <span className="inline-flex items-center gap-2">
+                        <tierMeta.Icon size={14} />
+                        {tierMeta.shortLabel} {stats.earned} / {stats.total}
+                      </span>
                     </span>
                   );
                 }
@@ -1418,12 +1493,14 @@ export default function StudentTrophiesPage() {
                             <span
                               aria-label={`${item.definition.name} icon`}
                               className={cn(
-                                "text-5xl transition-transform duration-200",
-                                item.earned ? "group-hover:scale-105" : "opacity-40 grayscale"
+                                "inline-flex h-14 w-14 items-center justify-center rounded-[20px] bg-white shadow-[0_12px_28px_rgba(15,23,42,0.08)] transition-transform duration-200",
+                                item.earned ? "group-hover:scale-105" : "opacity-60"
                               )}
-                              role="img"
                             >
-                              {item.definition.icon}
+                              {(() => {
+                                const Icon = categoryMeta.Icon;
+                                return <Icon size={26} />;
+                              })()}
                             </span>
                             <div className="flex items-center gap-2">
                               <span
@@ -1432,7 +1509,10 @@ export default function StudentTrophiesPage() {
                                   tierMeta.chip
                                 )}
                               >
-                                {tierMeta.shortLabel}
+                                <span className="inline-flex items-center gap-2">
+                                  <tierMeta.Icon size={14} />
+                                  {tierMeta.shortLabel}
+                                </span>
                               </span>
                               {!item.earned ? (
                                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-500">
@@ -1515,10 +1595,9 @@ export default function StudentTrophiesPage() {
                                 <div className="flex items-center gap-3">
                                   <span
                                     aria-label={`${item.definition.name} icon`}
-                                    className="text-2xl"
-                                    role="img"
+                                    className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-heading"
                                   >
-                                    {item.definition.icon}
+                                    <categoryMeta.Icon size={18} />
                                   </span>
                                   <div>
                                     <p className="font-semibold text-heading">
@@ -1537,7 +1616,10 @@ export default function StudentTrophiesPage() {
                                     tierMeta.chip
                                   )}
                                 >
-                                  {tierMeta.shortLabel}
+                                  <span className="inline-flex items-center gap-2">
+                                    <tierMeta.Icon size={14} />
+                                    {tierMeta.shortLabel}
+                                  </span>
                                 </span>
                               </td>
                               <td className="px-4 py-4">
@@ -1611,7 +1693,7 @@ export default function StudentTrophiesPage() {
                       <div className="flex flex-col items-center text-center">
                         <span
                           className={cn(
-                            "inline-flex h-20 w-20 items-center justify-center rounded-[28px] border text-4xl",
+                            "inline-flex h-20 w-20 items-center justify-center rounded-[28px] border",
                             item.status === "current"
                               ? cn(statusMeta.node, badge.borderColor)
                               : statusMeta.node
@@ -1619,7 +1701,16 @@ export default function StudentTrophiesPage() {
                           role="img"
                           aria-label={`${item.config.name} level`}
                         >
-                          {item.status === "completed" ? "✅" : item.status === "locked" ? "🔒" : item.config.icon}
+                          {(() => {
+                            if (item.status === "completed") {
+                              return <CheckCircle2 size={28} />;
+                            }
+                            if (item.status === "locked") {
+                              return <Lock size={26} />;
+                            }
+                            const Icon = getLevelIcon(item.config);
+                            return <Icon size={32} />;
+                          })()}
                         </span>
                         <p className="mt-4 text-lg font-semibold text-heading">
                           {item.config.name}
@@ -1674,13 +1765,22 @@ export default function StudentTrophiesPage() {
                   <div className="relative pl-16" key={item.config.level}>
                     <span
                       className={cn(
-                        "absolute left-0 top-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl border text-2xl",
+                        "absolute left-0 top-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl border",
                         statusMeta.node
                       )}
                       role="img"
                       aria-label={`${item.config.name} level`}
                     >
-                      {item.status === "completed" ? "✅" : item.status === "locked" ? "🔒" : item.config.icon}
+                      {(() => {
+                        if (item.status === "completed") {
+                          return <CheckCircle2 size={20} />;
+                        }
+                        if (item.status === "locked") {
+                          return <Lock size={18} />;
+                        }
+                        const Icon = getLevelIcon(item.config);
+                        return <Icon size={20} />;
+                      })()}
                     </span>
                     {hasNext ? (
                       <span className="absolute left-[23px] top-14 h-[calc(100%-2.5rem)] w-[2px] rounded-full bg-slate-200" />
@@ -1775,8 +1875,8 @@ export default function StudentTrophiesPage() {
                     </div>
 
                     <div className="mt-5 flex flex-wrap gap-2">
-                      {section.items.map((item) => (
-                        <button
+                        {section.items.map((item) => (
+                          <button
                           className={cn(
                             "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors",
                             item.earned
@@ -1786,9 +1886,15 @@ export default function StudentTrophiesPage() {
                           key={item.definition.key}
                           onClick={() => setSelectedTrophy(item)}
                           type="button"
-                        >
-                          <span role="img" aria-label={`${item.definition.name} icon`}>
-                            {item.definition.icon}
+                          >
+                          <span
+                            aria-label={`${item.definition.name} icon`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-heading"
+                          >
+                            {(() => {
+                              const Icon = getCategoryMeta(item.definition.category).Icon;
+                              return <Icon size={14} />;
+                            })()}
                           </span>
                           <span className="max-w-[180px] truncate">{item.definition.name}</span>
                           {item.earned ? <CheckCircle2 size={12} /> : <Lock size={12} />}
@@ -1850,16 +1956,16 @@ export default function StudentTrophiesPage() {
                           <span
                             aria-label={`${selectedTrophy.definition.name} icon`}
                             className={cn(
-                              "inline-flex h-24 w-24 items-center justify-center rounded-[30px] bg-white text-6xl shadow-[0_18px_40px_rgba(15,23,42,0.14)]",
-                              selectedTrophy.earned ? "" : "grayscale"
+                              "inline-flex h-24 w-24 items-center justify-center rounded-[30px] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.14)]",
+                              selectedTrophy.earned ? "" : "opacity-60"
                             )}
-                            role="img"
                           >
-                            {selectedTrophy.definition.icon}
+                            <categoryMeta.Icon size={40} />
                           </span>
                           <div>
                             <div className="flex flex-wrap gap-2">
-                              <span className={cn("rounded-full px-3 py-1 text-xs font-semibold", tierMeta.chip)}>
+                              <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold", tierMeta.chip)}>
+                                <tierMeta.Icon size={14} />
                                 {tierMeta.shortLabel}
                               </span>
                               <span className={cn("rounded-full px-3 py-1 text-xs font-semibold", categoryMeta.chip)}>
