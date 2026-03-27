@@ -30,6 +30,7 @@ const CommunityDraftSchema = new Schema(
     pictureUrl: {
       type: String,
       maxLength: 2500000,
+      default: null,
     },
     status: {
       type: String,
@@ -46,5 +47,11 @@ const CommunityDraftSchema = new Schema(
   { timestamps: true }
 );
 
-export default mongoose.models.CommunityDraft ||
-  mongoose.model("CommunityDraft", CommunityDraftSchema);
+const communityDraftModelName = "CommunityDraft";
+
+if (process.env.NODE_ENV === "development" && mongoose.models[communityDraftModelName]) {
+  delete mongoose.models[communityDraftModelName];
+}
+
+export default mongoose.models[communityDraftModelName] ??
+  mongoose.model(communityDraftModelName, CommunityDraftSchema);

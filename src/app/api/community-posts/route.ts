@@ -87,7 +87,7 @@ export async function POST(req: Request) {
       category,
       tags,
       attachments,
-      ...(pictureNorm.value ? { pictureUrl: pictureNorm.value } : {}),
+      pictureUrl: pictureNorm.value ?? null,
       status,
       author: authorId,
       authorDisplayName,

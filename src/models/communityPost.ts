@@ -47,6 +47,7 @@ const CommunityPostSchema = new Schema(
   pictureUrl: {
     type: String,
     maxLength: 2500000,
+    default: null,
   },
 
   status: {
@@ -65,5 +66,13 @@ const CommunityPostSchema = new Schema(
 { timestamps: true }
 );
 
-export default mongoose.models.CommunityPost ||
-mongoose.model("CommunityPost", CommunityPostSchema);
+const communityPostModelName = "CommunityPost";
+
+// Next.js can reuse a cached Mongoose model without new schema fields. Bust cache in dev
+// so `pictureUrl` and other updates are applied. Restart the dev server if issues persist.
+if (process.env.NODE_ENV === "development" && mongoose.models[communityPostModelName]) {
+  delete mongoose.models[communityPostModelName];
+}
+
+export default mongoose.models[communityPostModelName] ??
+  mongoose.model(communityPostModelName, CommunityPostSchema);

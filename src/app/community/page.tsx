@@ -788,11 +788,11 @@ export default function CommunityPage() {
                                 <Card
                                     key={post.id}
                                     id={`post-${post.id}`}
-                                    className="overflow-hidden rounded-2xl border border-blue-100 bg-white/95 shadow-none"
+                                    className="overflow-hidden rounded-2xl border border-blue-100 bg-blue-100 shadow-none"
                                 >
-                                    <div className={`relative h-44 bg-gradient-to-r ${thumbnailStyle[post.category]}`}>
-                                        <div className="absolute inset-0 bg-blue-900/20" />
-                                        <div className="absolute bottom-3 left-3 rounded-md bg-slate-900/80 px-2 py-1 text-xs font-semibold text-white">
+                                    <div className={`relative h-5 rounded- bg-gradient-to-r ${thumbnailStyle[post.category]}`}>
+                                    <div className="absolute inset-0 bg-blue-100" />
+                                        <div className="absolute bottom-2 right-2 rounded-md bg-slate-900/80 px-2 py-1 text-xs font-semibold text-white">
                                             {categoryLabel[post.category]}
                                         </div>
                                     </div>
