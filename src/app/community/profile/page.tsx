@@ -26,6 +26,7 @@ import {
     ThumbsUp,
     User,
     Users,
+    X,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
 import CommunityPostComposer, {
@@ -100,7 +101,13 @@ export default function CommunityProfilePage() {
     const [acceptingReplyId, setAcceptingReplyId] = useState<string | null>(null);
     const [expandedResolvedReplies, setExpandedResolvedReplies] = useState<Record<string, boolean>>({});
     const [draftPosts, setDraftPosts] = useState<CommunityPostDraft[]>([]);
-    const [editingDraft, setEditingDraft] = useState<CommunityPostDraft | null>(null);
+    const [draftInUpdateModal, setDraftInUpdateModal] =
+        useState<CommunityPostDraft | null>(null);
+    const [draftDeleteConfirm, setDraftDeleteConfirm] = useState<{
+        id: string;
+        title: string;
+    } | null>(null);
+    const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
     const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
     const [draftActionError, setDraftActionError] = useState<string | null>(null);
 
@@ -394,14 +401,14 @@ export default function CommunityProfilePage() {
                 );
             });
             setDraftActionError(null);
-            if (draft.id) {
-                setEditingDraft(savedDraft);
-            } else {
-                setEditingDraft(null);
+            setDraftInUpdateModal((m) =>
+                m && savedDraft.id === m.id ? null : m
+            );
+            if (!draft.id) {
+                document
+                    .getElementById("draft-posts")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
             }
-            document
-                .getElementById("draft-posts")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" });
             return savedDraft;
         },
         []
@@ -430,7 +437,7 @@ export default function CommunityProfilePage() {
 
             setDraftPosts((prev) => prev.filter((draft) => draft.id !== draftId));
             setDraftActionError(null);
-            setEditingDraft((prev) => (prev?.id === draftId ? null : prev));
+            setDraftInUpdateModal((prev) => (prev?.id === draftId ? null : prev));
         },
         [profileData.userId]
     );
@@ -448,12 +455,35 @@ export default function CommunityProfilePage() {
     );
 
     const handleDraftUpdate = useCallback((draft: CommunityPostDraft) => {
-        setEditingDraft(draft);
+        setDraftInUpdateModal(draft);
         setDraftActionError(null);
-        document
-            .getElementById("create-post")
-            ?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, []);
+
+    const confirmDraftDelete = useCallback(async () => {
+        const pending = draftDeleteConfirm;
+        if (!pending) return;
+        setDeletingDraftId(pending.id);
+        try {
+            await handleDraftDeleted(pending.id);
+            setDraftDeleteConfirm(null);
+        } catch {
+            // Error surfaced via draftActionError from handleDraftDeleted
+        } finally {
+            setDeletingDraftId(null);
+        }
+    }, [draftDeleteConfirm, handleDraftDeleted]);
+
+    useEffect(() => {
+        if (!draftInUpdateModal && !draftDeleteConfirm) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setDraftInUpdateModal(null);
+                setDraftDeleteConfirm(null);
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [draftInUpdateModal, draftDeleteConfirm]);
 
     const handleDraftPostNow = useCallback(
         async (draft: CommunityPostDraft) => {
@@ -769,12 +799,11 @@ export default function CommunityProfilePage() {
                             compact
                             className="shadow-shadow"
                             resetAfterDraftSave
-                            draftToEdit={editingDraft}
+                            draftToEdit={null}
                             onDraftSaved={handleDraftSaved}
-                        onDraftDeleted={(draftId) => {
-                            handleDraftDeleted(draftId).catch(() => undefined);
-                        }}
-                            onDraftEditCancel={() => setEditingDraft(null)}
+                            onDraftDeleted={(draftId) => {
+                                handleDraftDeleted(draftId).catch(() => undefined);
+                            }}
                             onPostSuccess={handleDraftPostedFromComposer}
                         />
                         <p className="mt-4 text-center text-sm text-slate-600">
@@ -1171,12 +1200,16 @@ export default function CommunityProfilePage() {
                                             <button
                                                 type="button"
                                                 className="rounded-full bg-red-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
-                                                onClick={() => {
-                                                    handleDraftDeleted(draft.id).catch(
-                                                        () => undefined
-                                                    );
-                                                }}
-                                                disabled={postingDraftId === draft.id}
+                                                onClick={() =>
+                                                    setDraftDeleteConfirm({
+                                                        id: draft.id,
+                                                        title: draft.title,
+                                                    })
+                                                }
+                                                disabled={
+                                                    postingDraftId === draft.id ||
+                                                    deletingDraftId === draft.id
+                                                }
                                             >
                                                 Delete
                                             </button>
@@ -1205,6 +1238,107 @@ export default function CommunityProfilePage() {
                     </section>
                 </div>
             </div>
+
+            {draftInUpdateModal && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                    role="presentation"
+                >
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+                        aria-label="Close update dialog"
+                        onClick={() => setDraftInUpdateModal(null)}
+                    />
+                    <div
+                        className="relative z-10 max-h-[min(90vh,900px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-blue-200 bg-slate-50/95 p-4 shadow-xl sm:p-6"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="draft-update-modal-title"
+                    >
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <h2
+                                id="draft-update-modal-title"
+                                className="text-lg font-semibold text-slate-800"
+                            >
+                                Update draft
+                            </h2>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-blue-100"
+                                aria-label="Close"
+                                onClick={() => setDraftInUpdateModal(null)}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <CommunityPostComposer
+                            compact
+                            className="shadow-none"
+                            draftToEdit={draftInUpdateModal}
+                            onDraftSaved={handleDraftSaved}
+                            onDraftDeleted={(draftId) => {
+                                handleDraftDeleted(draftId).catch(() => undefined);
+                            }}
+                            onDraftEditCancel={() => setDraftInUpdateModal(null)}
+                            onPostSuccess={handleDraftPostedFromComposer}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {draftDeleteConfirm && (
+                <div
+                    className="fixed inset-0 z-[101] flex items-center justify-center p-4"
+                    role="presentation"
+                >
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-[1px]"
+                        aria-label="Dismiss"
+                        onClick={() =>
+                            !deletingDraftId && setDraftDeleteConfirm(null)
+                        }
+                    />
+                    <div
+                        className="relative z-10 w-full max-w-md rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="draft-delete-confirm-title"
+                    >
+                        <h2
+                            id="draft-delete-confirm-title"
+                            className="text-lg font-semibold text-slate-800"
+                        >
+                            Delete this draft?
+                        </h2>
+                        <p className="mt-3 text-sm text-slate-600">
+                            Are you sure you want to delete “{draftDeleteConfirm.title}”?
+                            This cannot be undone.
+                        </p>
+                        <div className="mt-6 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                onClick={() => setDraftDeleteConfirm(null)}
+                                disabled={!!deletingDraftId}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                onClick={() => {
+                                    confirmDraftDelete().catch(() => undefined);
+                                }}
+                                disabled={!!deletingDraftId}
+                            >
+                                {deletingDraftId ? "Deleting…" : "Delete draft"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

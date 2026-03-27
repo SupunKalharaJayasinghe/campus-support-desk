@@ -444,11 +444,11 @@ export default function CommunityPostComposer({
                             </Button>
                         </div>
                     ) : (
-                        <div className="flex w-full flex-wrap items-center gap-3">
-                            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-3">
+                        <div className="flex w-full flex-nowrap items-center justify-between gap-2 overflow-x-auto sm:gap-3">
+                            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                                 <Button
                                     type="button"
-                                    className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
+                                    className="rounded-full bg-red-600 px-4 text-white hover:bg-red-700 sm:px-6"
                                     onClick={handleDeleteDraft}
                                     disabled={isSubmitting}
                                 >
@@ -457,17 +457,17 @@ export default function CommunityPostComposer({
                                 <Button
                                     type="button"
                                     variant="primary"
-                                    className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
+                                    className="rounded-full bg-blue-700 px-4 text-white hover:bg-blue-800 sm:px-6"
                                     onClick={handleSaveDraft}
                                     disabled={!isFormValid || isSubmitting}
                                 >
                                     {saveDraftLabel}
                                 </Button>
                             </div>
-                            <div className="flex flex-1 justify-center">
+                            <div className="flex min-w-0 flex-1 justify-center px-1">
                                 <Button
                                     type="submit"
-                                    className="inline-flex min-w-[10rem] items-center justify-center gap-2 rounded-full bg-blue-700 px-12 py-2.5 text-base font-semibold text-white hover:bg-blue-800 sm:min-w-[12rem] sm:px-14"
+                                    className="inline-flex min-w-[9rem] shrink-0 items-center justify-center gap-2 rounded-full bg-blue-700 px-8 py-2.5 text-base font-semibold text-white hover:bg-blue-800 sm:min-w-[12rem] sm:px-14"
                                     disabled={isSubmitting}
                                 >
                                     {isSubmitting ? (
@@ -483,10 +483,10 @@ export default function CommunityPostComposer({
                                     )}
                                 </Button>
                             </div>
-                            <div className="flex min-w-0 flex-1 justify-end">
+                            <div className="shrink-0">
                                 <Button
                                     type="button"
-                                    className="rounded-full bg-red-600 px-6 text-white hover:bg-red-700"
+                                    className="rounded-full bg-red-600 px-4 text-white hover:bg-red-700 sm:px-6"
                                     onClick={handleComposerCancel}
                                     disabled={isSubmitting}
                                 >
