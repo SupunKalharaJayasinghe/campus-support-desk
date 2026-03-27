@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Eye, Flag, LogOut, ShieldCheck, Users } from "lucide-react";
 import { clearDemoSession, isDemoModeEnabled } from "@/lib/rbac";
-import PageHeader from "@/components/admin/PageHeader";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -384,51 +383,67 @@ export default function CommunityAdminPage() {
   };
 
   return (
-    <div className="grid items-start gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="sticky top-5 z-10 w-full self-start xl:flex xl:min-h-[calc(100dvh-3.25rem)] xl:flex-col">
-        <Card
-          title="Sections"
-          description="Jump to each admin area."
-          className="rounded-2xl p-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col"
-        >
-          <nav aria-label="Community admin sections" className="space-y-1.5">
-            {SECTION_LINKS.map((section) => (
-              <a
-                key={section.id}
-                href={`#${section.id}`}
-                className="block rounded-xl border border-border bg-card px-3 py-2 text-sm text-text/80 transition-colors hover:bg-tint hover:text-heading whitespace-nowrap"
-              >
-                {section.label}
-              </a>
-            ))}
-          </nav>
-        </Card>
-        <div className="mt-3 shrink-0 xl:mt-0 xl:border-t xl:border-border xl:pt-3">
-          <Button
-            className="h-10 w-full gap-2"
-            type="button"
-            variant="secondary"
-            onClick={handleLogout}
-          >
-            <LogOut size={16} aria-hidden />
-            Logout
-          </Button>
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-bg">
+      <header className="flex shrink-0 flex-col gap-4 border-b border-border bg-card px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-heading sm:text-3xl">
+            Community Admin
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text/72">
+            Monitor members, inspect reported posts, and manage moderation actions from one place.
+          </p>
         </div>
-      </aside>
+        <Button
+          className="h-11 shrink-0 gap-2 !rounded-full border-heading/20 px-5 text-heading hover:border-heading/35 hover:bg-tint"
+          type="button"
+          variant="secondary"
+        >
+          <ShieldCheck size={16} className="text-heading/80" aria-hidden />
+          Moderation Rules
+        </Button>
+      </header>
 
-      <div className="space-y-6 lg:space-y-8">
-        <PageHeader
-          title="Community Admin"
-          description="Monitor members, inspect reported posts, and manage moderation actions from one place."
-          actions={
-            <Button className="gap-2" variant="secondary">
-              <ShieldCheck size={16} />
-              Moderation Rules
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-3 pb-3 pt-3 md:flex-row md:gap-6 md:px-5 md:pb-4 md:pt-4">
+        <aside
+          aria-label="Community admin navigation"
+          className="flex w-full shrink-0 flex-col border-b border-border pb-3 md:w-[260px] md:min-h-0 md:shrink-0 md:self-stretch md:border-b-0 md:border-r md:pb-0 md:pr-5"
+        >
+          <Card
+            title="Sections"
+            description="Jump to each admin area."
+            className="min-h-0 rounded-2xl p-4 md:flex-1 md:overflow-y-auto md:overscroll-contain"
+          >
+            <nav aria-label="Community admin sections" className="space-y-1.5">
+              {SECTION_LINKS.map((section) => (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="block rounded-xl border border-border bg-card px-3 py-2 text-sm whitespace-nowrap text-text/80 transition-colors hover:bg-tint hover:text-heading"
+                >
+                  {section.label}
+                </a>
+              ))}
+            </nav>
+          </Card>
+          <div className="mt-3 shrink-0 border-t border-border pt-3 md:mt-auto">
+            <Button
+              className="h-10 w-full gap-2 focus-visible:ring-red-500"
+              type="button"
+              variant="danger"
+              onClick={handleLogout}
+            >
+              <LogOut size={16} aria-hidden />
+              Logout
             </Button>
-          }
-        />
+          </div>
+        </aside>
 
-        <section id="overview" className="scroll-mt-24 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <main
+          id="community-admin-main"
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain pr-1"
+        >
+          <div className="space-y-6 pb-6 md:space-y-8">
+        <section id="overview" className="scroll-mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card accent>
             <div className="flex items-start justify-between">
               <div>
@@ -478,7 +493,7 @@ export default function CommunityAdminPage() {
           </Card>
         </section>
 
-        <section id="filters" className="scroll-mt-24">
+        <section id="filters" className="scroll-mt-6">
           <Card
             title="Filters"
             description="Search student users in the User table and filter the report queue."
@@ -505,7 +520,7 @@ export default function CommunityAdminPage() {
         <section className="grid gap-5 xl:grid-cols-12">
           <Card
             id="members"
-            className="scroll-mt-24 xl:col-span-7"
+            className="scroll-mt-6 xl:col-span-7"
             title="Community Members"
             description="Rows from the User table (role: STUDENT). Names and identifiers come from user records."
           >
@@ -559,7 +574,7 @@ export default function CommunityAdminPage() {
 
           <Card
             id="reports"
-            className="scroll-mt-24 xl:col-span-5"
+            className="scroll-mt-6 xl:col-span-5"
             title="Reported Posts"
             description="Post reports from the database (CommunityPostReport)."
           >
@@ -615,7 +630,7 @@ export default function CommunityAdminPage() {
 
         <Card
           id="report-details"
-          className="scroll-mt-24"
+          className="scroll-mt-6"
           title="Reported Post Details"
           description="Review evidence and apply moderation decision."
         >
@@ -687,6 +702,8 @@ export default function CommunityAdminPage() {
             </p>
           )}
         </Card>
+          </div>
+        </main>
       </div>
     </div>
   );
