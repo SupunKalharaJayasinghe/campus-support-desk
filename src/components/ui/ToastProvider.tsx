@@ -52,9 +52,20 @@ function inferVariant(title: string, message?: string): ToastVariant {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
+  const activeToastKeys = useRef(new Set<string>());
 
-  const dismiss = useCallback((id: number) => {
+  const getToastKey = useCallback(
+    (payload: Pick<ToastItem, "title" | "message" | "variant">) =>
+      `${payload.variant}::${payload.title.trim().toLowerCase()}::${(payload.message ?? "")
+        .trim()
+        .toLowerCase()}`,
+    []
+  );
+
+  const dismiss = useCallback((id: number, key: string) => {
     let didScheduleRemoval = false;
+
+    activeToastKeys.current.delete(key);
 
     setToasts((previous) =>
       previous.map((item) => {
@@ -82,6 +93,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       nextId.current += 1;
       const resolvedDuration = duration ?? DEFAULT_DURATION;
       const resolvedVariant = variant ?? inferVariant(title, message);
+      const key = getToastKey({
+        title,
+        message,
+        variant: resolvedVariant,
+      });
+
+      if (activeToastKeys.current.has(key)) {
+        return;
+      }
+
+      activeToastKeys.current.add(key);
 
       setToasts((previous) => [
         ...previous,
@@ -95,10 +117,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       ]);
 
       window.setTimeout(() => {
-        dismiss(id);
+        dismiss(id, key);
       }, resolvedDuration);
     },
-    [dismiss]
+    [dismiss, getToastKey]
   );
 
   const value = useMemo(() => ({ toast }), [toast]);
@@ -117,7 +139,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               closing={item.closing}
               duration={item.duration}
               message={item.message}
-              onClose={() => dismiss(item.id)}
+              onClose={() => dismiss(item.id, getToastKey(item))}
               title={item.title}
               variant={item.variant}
             />

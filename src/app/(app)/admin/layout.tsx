@@ -7,7 +7,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <RoleGuard allowedRole="SUPER_ADMIN">
+    <RoleGuard>
       <AdminShell>{children}</AdminShell>
     </RoleGuard>
   );

@@ -986,4 +986,3 @@ export function deleteModuleOffering(id: string) {
 
   return true;
 }
-
