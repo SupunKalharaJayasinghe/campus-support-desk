@@ -1262,6 +1262,11 @@ export async function checkAllMilestones(studentId: string): Promise<MilestoneCh
       }
     }
 
+    // TODO: Add quiz-specific trophy checks when quiz trophy definitions are added.
+    // e.g., "Quiz Enthusiast" — Complete 5 quizzes.
+    // e.g., "Quiz Master" — Score 80%+ on 10 quizzes.
+    // e.g., "Speed Demon" — Complete a quiz in under 50% of the time limit.
+
     for (let iteration = 0; iteration < 5; iteration += 1) {
       let awardedInIteration = 0;
 

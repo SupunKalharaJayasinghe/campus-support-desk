@@ -1,5 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import "@/models/ModuleOffering";
+import "@/models/Quiz";
+import "@/models/QuizAttempt";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleById } from "@/lib/module-store";
 import { checkAllMilestones } from "@/lib/milestone-checker";
@@ -15,6 +17,7 @@ import type {
 } from "@/models/GamificationPoints";
 import { GamificationPointsModel } from "@/models/GamificationPoints";
 import { ModuleModel } from "@/models/Module";
+import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { StudentModel } from "@/models/Student";
 
 export const XP_VALUES = {
@@ -73,6 +76,22 @@ export interface PointsSummary {
   pointsThisMonth: number;
   pointsThisSemester: number;
   averagePointsPerModule: number;
+}
+
+export interface QuizPointsSummary {
+  totalQuizXP: number;
+  quizzesCompleted: number;
+  quizzesOnTime: number;
+  quizzesHighScore: number;
+  quizzesPerfectScore: number;
+  averageQuizPercentage: number;
+  recentQuizActivity: Array<{
+    action: string;
+    xpPoints: number;
+    reason: string;
+    createdAt: Date;
+    metadata: Record<string, unknown>;
+  }>;
 }
 
 interface ModuleMeta {
@@ -250,6 +269,18 @@ function buildEmptyPointsSummary(studentId = ""): PointsSummary {
     pointsThisMonth: 0,
     pointsThisSemester: 0,
     averagePointsPerModule: 0,
+  };
+}
+
+function buildEmptyQuizPointsSummary(): QuizPointsSummary {
+  return {
+    totalQuizXP: 0,
+    quizzesCompleted: 0,
+    quizzesOnTime: 0,
+    quizzesHighScore: 0,
+    quizzesPerfectScore: 0,
+    averageQuizPercentage: 0,
+    recentQuizActivity: [],
   };
 }
 
@@ -1223,6 +1254,196 @@ export async function awardCustomPoints(
 }
 
 /**
+ * Awards quiz-related XP for a submitted quiz attempt.
+ *
+ * Call this after a quiz attempt has been auto-graded and saved with a submitted status.
+ * It evaluates completion, on-time submission, high score, and perfect score awards,
+ * updates the attempt's `xpAwarded` field, and then runs milestone and trophy checks.
+ *
+ * @param attemptId Quiz attempt id to evaluate.
+ * @returns Award result with awarded actions, totals, milestones, and collected errors.
+ */
+export async function awardPointsForQuizAttempt(
+  attemptId: string
+): Promise<AwardResult> {
+  const normalizedAttemptId = collapseSpaces(attemptId);
+  const result = buildEmptyAwardResult();
+
+  try {
+    const mongooseConnection = await ensureDatabaseConnection();
+    if (!mongooseConnection) {
+      result.errors.push("Database connection is not configured");
+      result.success = false;
+      return result;
+    }
+
+    const attemptObjectId = toObjectId(normalizedAttemptId);
+    if (!attemptObjectId) {
+      result.errors.push("Invalid quiz attempt ID");
+      result.success = false;
+      return result;
+    }
+
+    const attempt = await QuizAttemptModel.findById(attemptObjectId)
+      .populate({
+        path: "quizId",
+        select: "title moduleOfferingId academicYear semester",
+      })
+      .populate({
+        path: "studentId",
+        select: "_id",
+      })
+      .exec()
+      .catch(() => null);
+
+    if (!attempt) {
+      result.errors.push("Quiz attempt not found");
+      result.success = false;
+      return result;
+    }
+
+    if (!["submitted", "auto_submitted", "graded"].includes(collapseSpaces(attempt.status))) {
+      result.errors.push("Quiz attempt must be submitted before awarding XP");
+      result.success = false;
+      return result;
+    }
+
+    const attemptRow = attempt.toObject() as unknown as Record<string, unknown>;
+    const quizRow = asObject(attemptRow.quizId);
+    const studentObjectId = toObjectId(readId(attemptRow.studentId));
+    if (!studentObjectId) {
+      result.errors.push("Quiz attempt is missing a valid student ID");
+      result.success = false;
+      return result;
+    }
+
+    result.studentId = readId(studentObjectId);
+
+    const quizTitle = collapseSpaces(quizRow?.title) || "Untitled Quiz";
+    const moduleOfferingObjectId =
+      toObjectId(readId(attemptRow.moduleOfferingId)) ??
+      toObjectId(readId(quizRow?.moduleOfferingId)) ??
+      undefined;
+    const academicYear =
+      collapseSpaces(attemptRow.academicYear) || collapseSpaces(quizRow?.academicYear);
+    const semesterValue = Number(attemptRow.semester ?? quizRow?.semester ?? 0);
+    const semester = semesterValue === 1 || semesterValue === 2 ? semesterValue : undefined;
+    const score = Number(attemptRow.score ?? 0);
+    const totalMarks = Number(attemptRow.totalMarks ?? 0);
+    const percentage = roundToTwo(Number(attemptRow.percentage ?? 0));
+    const isOnTime = Boolean(attemptRow.isOnTime);
+    const timeTaken = Number(attemptRow.timeTaken ?? 0);
+    const attemptNumber = Number(attemptRow.attemptNumber ?? 1);
+    const quizReferenceId = readId(quizRow?._id ?? quizRow?.id ?? attemptRow.quizId);
+
+    const metadata = {
+      quizId: quizReferenceId,
+      quizTitle,
+      score,
+      totalMarks,
+      percentage,
+      isOnTime,
+      timeTaken,
+      attemptNumber,
+    };
+
+    const checks: Array<{
+      shouldAward: boolean;
+      action: PointsAction;
+      xpPoints: number;
+      reason: string;
+    }> = [
+      {
+        shouldAward: true,
+        action: "quiz_completed",
+        xpPoints: XP_VALUES.QUIZ_COMPLETED,
+        reason: `Completed quiz: ${quizTitle}`,
+      },
+      {
+        shouldAward: isOnTime,
+        action: "quiz_on_time",
+        xpPoints: XP_VALUES.QUIZ_ON_TIME,
+        reason: `Completed quiz '${quizTitle}' before the deadline`,
+      },
+      {
+        shouldAward: percentage >= 80,
+        action: "quiz_high_score",
+        xpPoints: XP_VALUES.QUIZ_HIGH_SCORE,
+        reason: `Scored ${percentage}% on quiz '${quizTitle}' (above 80% threshold)`,
+      },
+      {
+        shouldAward: percentage === 100,
+        action: "quiz_perfect_score",
+        xpPoints: XP_VALUES.QUIZ_PERFECT_SCORE,
+        reason: `Perfect score on quiz '${quizTitle}'! 100%!`,
+      },
+    ];
+
+    for (const check of checks) {
+      if (!check.shouldAward) {
+        continue;
+      }
+
+      await upsertReferenceAward(
+        result,
+        {
+          studentId: studentObjectId,
+          action: check.action,
+          referenceId: attemptObjectId,
+        },
+        {
+          studentId: studentObjectId,
+          action: check.action,
+          xpPoints: check.xpPoints,
+          reason: check.reason,
+          category: "quiz",
+          referenceType: "QuizAttempt",
+          referenceId: attemptObjectId,
+          moduleOfferingId: moduleOfferingObjectId,
+          academicYear: academicYear || undefined,
+          semester: semester as 1 | 2 | undefined,
+          metadata,
+          awardedBy: "system",
+        }
+      );
+    }
+
+    attempt.xpAwarded = result.totalPointsAwarded;
+    await attempt.save().catch((error: unknown) => {
+      throw error instanceof Error
+        ? error
+        : new Error("Failed to update quiz attempt XP total");
+    });
+
+    const milestonesUnlocked = await checkAndAwardMilestonesInternal(studentObjectId, result);
+    result.milestonesUnlocked.push(...milestonesUnlocked);
+
+    try {
+      const milestoneResult = await checkAllMilestones(result.studentId);
+      if (milestoneResult.newTrophiesAwarded.length > 0) {
+        result.milestonesUnlocked.push(
+          ...milestoneResult.newTrophiesAwarded.map(
+            (award) => `${award.trophyIcon} ${award.trophyName}`
+          )
+        );
+      }
+    } catch (error) {
+      console.error("checkAllMilestones after quiz award error", error);
+    }
+
+    await refreshTotalXP(result, studentObjectId);
+    return result;
+  } catch (error) {
+    console.error("awardPointsForQuizAttempt error", error);
+    result.errors.push(
+      error instanceof Error ? error.message : "Failed to award quiz attempt points"
+    );
+    result.success = false;
+    return result;
+  }
+}
+
+/**
  * Soft-revokes a single points ledger entry.
  *
  * This does not delete the ledger row. It marks the entry as revoked so that it is excluded
@@ -1284,6 +1505,64 @@ export async function revokePoints(
       message:
         error instanceof Error ? error.message : "Failed to revoke points entry",
     };
+  }
+}
+
+/**
+ * Soft-revokes every active points entry that was awarded for a specific quiz attempt.
+ *
+ * Use this when a quiz attempt is invalidated or otherwise should no longer contribute to XP.
+ *
+ * @param attemptId Quiz attempt id whose related point entries should be revoked.
+ * @param reason Revocation reason stored on each affected ledger entry.
+ * @returns Revocation result and the number of affected entries.
+ */
+export async function revokePointsForQuizAttempt(
+  attemptId: string,
+  reason: string
+): Promise<{ success: boolean; revokedCount: number }> {
+  try {
+    const mongooseConnection = await ensureDatabaseConnection();
+    if (!mongooseConnection) {
+      return { success: false, revokedCount: 0 };
+    }
+
+    const attemptObjectId = toObjectId(attemptId);
+    if (!attemptObjectId) {
+      return { success: false, revokedCount: 0 };
+    }
+
+    const updateResult = await GamificationPointsModel.updateMany(
+      {
+        referenceId: attemptObjectId,
+        referenceType: "QuizAttempt",
+        isRevoked: false,
+      },
+      {
+        $set: {
+          isRevoked: true,
+          revokedAt: new Date(),
+          revokedReason: collapseSpaces(reason) || "Points revoked for quiz attempt",
+        },
+      }
+    ).exec();
+
+    await QuizAttemptModel.updateOne(
+      { _id: attemptObjectId },
+      {
+        $set: {
+          xpAwarded: 0,
+        },
+      }
+    ).exec();
+
+    return {
+      success: true,
+      revokedCount: Number(updateResult.modifiedCount ?? 0),
+    };
+  } catch (error) {
+    console.error("revokePointsForQuizAttempt error", error);
+    return { success: false, revokedCount: 0 };
   }
 }
 
@@ -1538,6 +1817,88 @@ export async function getPointsSummary(studentId: string): Promise<PointsSummary
     return summary;
   } catch (error) {
     console.error("getPointsSummary error", error);
+    return summary;
+  }
+}
+
+/**
+ * Returns a student's quiz-only XP summary.
+ *
+ * This is read-only and focuses only on ledger entries in the `quiz` category so that quiz
+ * dashboards can show dedicated completion and scoring metrics.
+ *
+ * @param studentId Student record id.
+ * @returns Quiz-specific XP summary and recent quiz activity.
+ */
+export async function getQuizPointsSummary(
+  studentId: string
+): Promise<QuizPointsSummary> {
+  const summary = buildEmptyQuizPointsSummary();
+
+  try {
+    const mongooseConnection = await ensureDatabaseConnection();
+    if (!mongooseConnection) {
+      return summary;
+    }
+
+    const studentObjectId = toObjectId(studentId);
+    if (!studentObjectId) {
+      return summary;
+    }
+
+    const rows = await GamificationPointsModel.find({
+      studentId: studentObjectId,
+      category: "quiz",
+      isRevoked: false,
+    })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec()
+      .catch(() => []);
+
+    summary.totalQuizXP = rows.reduce(
+      (sum, row) => sum + Number(row.xpPoints ?? 0),
+      0
+    );
+    summary.quizzesCompleted = rows.filter((row) => row.action === "quiz_completed").length;
+    summary.quizzesOnTime = rows.filter((row) => row.action === "quiz_on_time").length;
+    summary.quizzesHighScore = rows.filter((row) => row.action === "quiz_high_score").length;
+    summary.quizzesPerfectScore = rows.filter(
+      (row) => row.action === "quiz_perfect_score"
+    ).length;
+
+    summary.recentQuizActivity = rows.slice(0, 10).map((row) => ({
+      action: collapseSpaces(row.action),
+      xpPoints: Number(row.xpPoints ?? 0),
+      reason: collapseSpaces(row.reason),
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt ?? Date.now()),
+      metadata: asObject(row.metadata) ?? {},
+    }));
+
+    const percentagesByAttempt = new Map<string, number>();
+    rows.forEach((row) => {
+      const referenceId = readId(row.referenceId);
+      const metadata = asObject(row.metadata);
+      const percentage = Number(metadata?.percentage ?? NaN);
+      if (!referenceId || !Number.isFinite(percentage) || percentagesByAttempt.has(referenceId)) {
+        return;
+      }
+
+      percentagesByAttempt.set(referenceId, percentage);
+    });
+
+    const percentages = Array.from(percentagesByAttempt.values());
+    summary.averageQuizPercentage =
+      percentages.length > 0
+        ? roundToTwo(
+            percentages.reduce((sum, value) => sum + value, 0) / percentages.length
+          )
+        : 0;
+
+    return summary;
+  } catch (error) {
+    console.error("getQuizPointsSummary error", error);
     return summary;
   }
 }

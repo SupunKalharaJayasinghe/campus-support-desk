@@ -232,7 +232,13 @@ export async function GET(
     const completed: Array<{
       quiz: { id: string; title: string; totalMarks: number };
       module: { code: string; name: string };
-      bestAttempt: { score: number; percentage: number; passed: boolean; submittedAt: string | null };
+      bestAttempt: {
+        score: number;
+        percentage: number;
+        passed: boolean;
+        submittedAt: string | null;
+        xpAwarded: number;
+      };
       totalAttempts: number;
     }> = [];
     const expired: Array<{
@@ -333,6 +339,7 @@ export async function GET(
             score: Number(bestAttempt?.score ?? 0),
             percentage: Number(bestAttempt?.percentage ?? 0),
             passed: Boolean(bestAttempt?.passed),
+            xpAwarded: Number(bestAttempt?.xpAwarded ?? 0),
             submittedAt:
               bestAttempt?.submittedAt instanceof Date
                 ? bestAttempt.submittedAt.toISOString()

@@ -4,6 +4,7 @@ import "@/models/ModuleOffering";
 import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import "@/models/User";
+import { awardPointsForQuizAttempt } from "@/lib/points-engine";
 import { connectMongoose } from "@/lib/mongoose";
 import type { IAnswer } from "@/models/QuizAttempt";
 import { QuizModel } from "@/models/Quiz";
@@ -141,6 +142,7 @@ export async function POST(
 
     const now = new Date();
     let autoSubmittedCount = 0;
+    const autoSubmittedAttemptIds: string[] = [];
 
     for (const attempt of inProgressAttempts) {
       const submission = gradeAnswers(
@@ -165,7 +167,36 @@ export async function POST(
       attempt.status = "auto_submitted";
       await attempt.save();
       autoSubmittedCount += 1;
+      autoSubmittedAttemptIds.push(String(attempt._id));
     }
+
+    const xpResults = await Promise.allSettled(
+      autoSubmittedAttemptIds.map(async (attemptId) => awardPointsForQuizAttempt(attemptId))
+    );
+    const xpSummary = xpResults.reduce(
+      (summary, outcome) => {
+        if (outcome.status !== "fulfilled") {
+          console.error("quiz close XP award error", outcome.reason);
+          return summary;
+        }
+
+        if (outcome.value.errors.length > 0) {
+          console.error("quiz close XP award errors", outcome.value.errors);
+        }
+
+        return {
+          totalXPAwarded:
+            summary.totalXPAwarded + Number(outcome.value.totalPointsAwarded ?? 0),
+          studentsAwarded:
+            summary.studentsAwarded +
+            (Number(outcome.value.totalPointsAwarded ?? 0) > 0 ? 1 : 0),
+        };
+      },
+      {
+        totalXPAwarded: 0,
+        studentsAwarded: 0,
+      }
+    );
 
     quiz.status = "closed";
     await quiz.save();
@@ -195,7 +226,9 @@ export async function POST(
       success: true,
       data: {
         quiz: mapped,
+        autoSubmittedCount,
         autoSubmittedAttempts: autoSubmittedCount,
+        xpSummary,
       },
     });
   } catch (error) {

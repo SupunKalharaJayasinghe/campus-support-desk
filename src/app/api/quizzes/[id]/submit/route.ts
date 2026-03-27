@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Quiz";
 import "@/models/QuizAttempt";
+import { awardPointsForQuizAttempt } from "@/lib/points-engine";
 import { connectMongoose } from "@/lib/mongoose";
 import type { IAnswer } from "@/models/QuizAttempt";
 import { QuizModel } from "@/models/Quiz";
@@ -273,8 +274,36 @@ export async function POST(
       attempt.ipAddress;
     await attempt.save();
 
+    let xpAwarded: {
+      totalXP: number;
+      actions: Array<{ action: string; xpPoints: number; reason: string }>;
+      milestonesUnlocked: string[];
+      newTotalXP: number;
+    } | null = null;
+
+    try {
+      const awardResult = await awardPointsForQuizAttempt(String(attempt._id));
+      if (awardResult.errors.length > 0) {
+        console.error("quiz submit XP award errors", awardResult.errors);
+      }
+      if (awardResult.totalPointsAwarded > 0 || awardResult.milestonesUnlocked.length > 0) {
+        xpAwarded = {
+          totalXP: awardResult.totalPointsAwarded,
+          actions: awardResult.pointsAwarded,
+          milestonesUnlocked: awardResult.milestonesUnlocked,
+          newTotalXP: awardResult.newTotalXP,
+        };
+      }
+    } catch (xpError) {
+      console.error("quiz submit XP award error", xpError);
+    }
+
     const showResultsImmediately = Boolean(quizRow.showResultsImmediately);
     const showCorrectAnswers = Boolean(quizRow.showCorrectAnswers);
+    const message =
+      xpAwarded && xpAwarded.totalXP > 0
+        ? `Quiz submitted successfully! You scored ${attempt.percentage}% and earned ${xpAwarded.totalXP} XP!`
+        : `Quiz submitted successfully! You scored ${attempt.percentage}%.`;
 
     return NextResponse.json({
       success: true,
@@ -307,7 +336,8 @@ export async function POST(
               })),
             }
           : null,
-        message: `Quiz submitted successfully! You scored ${attempt.percentage}%.`,
+        xpAwarded,
+        message,
       },
     });
   } catch (error) {

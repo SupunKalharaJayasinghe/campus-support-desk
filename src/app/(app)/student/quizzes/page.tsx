@@ -67,6 +67,7 @@ interface QuizDashboardData {
       percentage: number;
       passed: boolean;
       submittedAt: string | null;
+      xpAwarded: number;
     };
     totalAttempts: number;
   }>;
@@ -549,9 +550,14 @@ export default function StudentQuizzesPage() {
                         {item.module.code} · {item.module.name}
                       </p>
                     </div>
-                    <Badge variant={item.bestAttempt.passed ? "success" : "danger"}>
-                      {item.bestAttempt.passed ? "Passed" : "Needs Improvement"}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2">
+                      {item.bestAttempt.xpAwarded > 0 ? (
+                        <Badge variant="warning">+{item.bestAttempt.xpAwarded} XP</Badge>
+                      ) : null}
+                      <Badge variant={item.bestAttempt.passed ? "success" : "danger"}>
+                        {item.bestAttempt.passed ? "Passed" : "Needs Improvement"}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="mt-4 grid gap-3 text-sm text-text/72 sm:grid-cols-2">
                     <div>

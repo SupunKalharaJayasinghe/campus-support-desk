@@ -86,6 +86,16 @@ interface SubmissionResult {
       selectedAnswer?: string;
     }>;
   } | null;
+  xpAwarded?: {
+    totalXP: number;
+    actions: Array<{
+      action: string;
+      xpPoints: number;
+      reason: string;
+    }>;
+    milestonesUnlocked: string[];
+    newTotalXP: number;
+  } | null;
   message: string;
 }
 
@@ -319,6 +329,7 @@ export default function StudentQuizAttemptPage() {
   const [reviewData, setReviewData] = useState<ReviewAttemptData | null>(null);
   const [timeTick, setTimeTick] = useState(Date.now());
   const [timeUpOpen, setTimeUpOpen] = useState(false);
+  const [displayedXpTotal, setDisplayedXpTotal] = useState(0);
   const timeUpTriggeredRef = useRef(false);
 
   const answeredCount = useMemo(() => {
@@ -406,6 +417,36 @@ export default function StudentQuizAttemptPage() {
     const key = `unihub_quiz_answers_${attemptInfo.id}`;
     window.localStorage.setItem(key, JSON.stringify(answers));
   }, [answers, attemptInfo]);
+
+  useEffect(() => {
+    const target = submission?.xpAwarded?.totalXP ?? 0;
+    if (target <= 0) {
+      setDisplayedXpTotal(0);
+      return;
+    }
+
+    setDisplayedXpTotal(0);
+    const steps = Math.min(target, 24);
+    const increment = Math.max(1, Math.ceil(target / steps));
+    const interval = window.setInterval(() => {
+      setDisplayedXpTotal((current) => {
+        if (current >= target) {
+          window.clearInterval(interval);
+          return target;
+        }
+
+        const next = Math.min(target, current + increment);
+        if (next >= target) {
+          window.clearInterval(interval);
+        }
+        return next;
+      });
+    }, 45);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [submission?.xpAwarded?.totalXP]);
 
   useEffect(() => {
     if (
@@ -690,6 +731,7 @@ export default function StudentQuizAttemptPage() {
           results: reviewData.results,
         }
       : null;
+  const earnedXp = submission?.xpAwarded ?? null;
 
   if (resultSource && resultSource.quiz) {
     return (
@@ -740,6 +782,85 @@ export default function StudentQuizAttemptPage() {
           </div>
         </Card>
 
+        {earnedXp ? (
+          <Card className="border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,0.98),rgba(255,255,255,0.98))]">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                  XP Earned
+                </p>
+                <h2 className="mt-3 text-4xl font-semibold tracking-tight text-emerald-900">
+                  +{displayedXpTotal} XP
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-900/75">
+                  Your quiz submission has been added to UniHub Rewards and contributes to your overall ranking.
+                </p>
+              </div>
+              <Card className="border-emerald-200 bg-white/90" title="New Total">
+                <p className="text-3xl font-semibold text-heading">{earnedXp.newTotalXP} XP</p>
+              </Card>
+            </div>
+
+            <div className="mt-6 space-y-3 rounded-[24px] border border-emerald-100 bg-white/85 p-5">
+              {earnedXp.actions.map((award) => (
+                <div
+                  className="flex items-center justify-between gap-4 border-b border-emerald-100 pb-3 last:border-b-0 last:pb-0"
+                  key={`${award.action}-${award.reason}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                      <CheckCircle2 size={16} />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-heading">{award.reason}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-emerald-700">
+                        {award.action.replace(/_/g, " ")}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-emerald-700">
+                    +{award.xpPoints} XP
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                <span>Total Earned</span>
+                <span>+{earnedXp.totalXP} XP</span>
+              </div>
+            </div>
+
+            {earnedXp.milestonesUnlocked.length ? (
+              <div className="mt-5 rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-amber-700">
+                  Milestone Unlocked
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {earnedXp.milestonesUnlocked.map((milestone) => (
+                    <Badge key={milestone} variant="warning">
+                      {milestone}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/student/gamification">
+                <Button className="gap-2" variant="secondary">
+                  <Trophy size={16} />
+                  View all XP
+                </Button>
+              </Link>
+              <Link href="/student/trophies">
+                <Button className="gap-2" variant="secondary">
+                  <Trophy size={16} />
+                  View Trophies
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        ) : null}
+
         {resultSource.results ? (
           <section className="space-y-4">
             {resultSource.results.answers.map((answer, index) => (
@@ -789,9 +910,13 @@ export default function StudentQuizAttemptPage() {
         <Card className="border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(255,255,255,0.98))]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-heading">XP Preview</h2>
+              <h2 className="text-2xl font-semibold text-heading">
+                {earnedXp ? "Keep the Streak Going" : "XP Preview"}
+              </h2>
               <p className="mt-2 text-sm leading-6 text-text/72">
-                Completing quizzes on time and pushing above 80% can unlock bonus XP in the gamification system.
+                {earnedXp
+                  ? "Keep finishing quizzes on time and pushing above 80% to climb the leaderboard faster."
+                  : "Completing quizzes on time and pushing above 80% can unlock bonus XP in the gamification system."}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -808,6 +933,12 @@ export default function StudentQuizAttemptPage() {
                 <Button className="gap-2" variant="secondary">
                   <Trophy size={16} />
                   My XP
+                </Button>
+              </Link>
+              <Link href="/student/trophies">
+                <Button className="gap-2" variant="secondary">
+                  <Trophy size={16} />
+                  Trophies
                 </Button>
               </Link>
             </div>
