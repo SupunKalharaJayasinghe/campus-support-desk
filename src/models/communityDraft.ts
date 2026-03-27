@@ -27,6 +27,10 @@ const CommunityDraftSchema = new Schema(
         type: String,
       },
     ],
+    pictureUrl: {
+      type: String,
+      maxLength: 2500000,
+    },
     status: {
       type: String,
       enum: ["open", "resolved"],

@@ -1,5 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
+import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
 import CommunityPost from "@/models/communityPost";
 import CommunityPostLike from "@/models/communityPostLike";
 import CommunityPostReport from "@/models/communityPostReport";
@@ -11,6 +12,7 @@ type CreatePostPayload = {
   category?: unknown;
   tags?: unknown;
   attachments?: unknown;
+  pictureUrl?: unknown;
   status?: unknown;
   author?: unknown;
   authorUsername?: unknown;
@@ -74,12 +76,18 @@ export async function POST(req: Request) {
           .filter((item) => Boolean(item))
       : [];
 
+    const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
+    if (!pictureNorm.ok) {
+      return Response.json({ error: pictureNorm.error }, { status: 400 });
+    }
+
     const createdPost = await CommunityPost.create({
       title,
       description,
       category,
       tags,
       attachments,
+      ...(pictureNorm.value ? { pictureUrl: pictureNorm.value } : {}),
       status,
       author: authorId,
       authorDisplayName,

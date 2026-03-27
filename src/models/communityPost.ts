@@ -43,6 +43,12 @@ const CommunityPostSchema = new Schema(
     },
   ],
 
+  /** Optional image: https URL or data:image/... from client upload */
+  pictureUrl: {
+    type: String,
+    maxLength: 2500000,
+  },
+
   status: {
     type: String,
     enum: ["open", "resolved", "archived"],

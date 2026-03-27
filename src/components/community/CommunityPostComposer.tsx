@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Paperclip, Plus, Send, Tag, X } from "lucide-react";
+import { ImagePlus, Loader2, Paperclip, Plus, Send, Tag, X } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
+
+const MAX_IMAGE_FILE_BYTES = 2 * 1024 * 1024;
 
 const CATEGORY_OPTIONS = [
     { label: "Lost Item", value: "lost_item" },
@@ -42,6 +44,7 @@ export type CommunityPostDraftInput = {
     category: "lost_item" | "study_material" | "academic_question";
     tags: string[];
     attachments: string[];
+    pictureUrl?: string;
     status: "open" | "resolved";
 };
 
@@ -52,6 +55,7 @@ export type CommunityPostDraft = {
     category: "lost_item" | "study_material" | "academic_question";
     tags: string[];
     attachments: string[];
+    pictureUrl: string;
     status: "open" | "resolved";
     createdAt: string;
     updatedAt: string;
@@ -76,6 +80,9 @@ export default function CommunityPostComposer({
     const [tagInput, setTagInput] = useState("");
     const [attachments, setAttachments] = useState<string[]>([]);
     const [attachmentInput, setAttachmentInput] = useState("");
+    const [pictureUrl, setPictureUrl] = useState("");
+    const [pictureError, setPictureError] = useState("");
+    const pictureInputRef = useRef<HTMLInputElement>(null);
     const [status, setStatus] = useState<"open" | "resolved">("open");
     const [draftId, setDraftId] = useState<string | null>(null);
 
@@ -90,10 +97,21 @@ export default function CommunityPostComposer({
         setTagInput("");
         setAttachments(draftToEdit.attachments);
         setAttachmentInput("");
+        setPictureUrl(
+            typeof draftToEdit.pictureUrl === "string"
+                ? draftToEdit.pictureUrl
+                : ""
+        );
+        setPictureError("");
         setStatus(draftToEdit.status);
         setIsDraftSaved(true);
         setSubmitError("");
-    }, [draftToEdit]);
+    }, [
+        draftToEdit,
+        draftToEdit?.id,
+        draftToEdit?.updatedAt,
+        draftToEdit?.pictureUrl,
+    ]);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
@@ -134,6 +152,36 @@ export default function CommunityPostComposer({
         setIsDraftSaved(false);
     };
 
+    const handlePictureSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (!file) return;
+        setPictureError("");
+        if (!file.type.startsWith("image/")) {
+            setPictureError("Please choose an image file.");
+            return;
+        }
+        if (file.size > MAX_IMAGE_FILE_BYTES) {
+            setPictureError("Image must be 2 MB or smaller.");
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result;
+            if (typeof result === "string") {
+                setPictureUrl(result);
+                setIsDraftSaved(false);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const clearPicture = () => {
+        setPictureUrl("");
+        setPictureError("");
+        setIsDraftSaved(false);
+    };
+
     const handleAttachmentKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter") {
             e.preventDefault();
@@ -150,6 +198,7 @@ export default function CommunityPostComposer({
             category: category as CommunityPostDraft["category"],
             tags,
             attachments,
+            pictureUrl: pictureUrl.trim() || undefined,
             status,
         };
         const savedDraft = (await onDraftSaved?.(nextDraft)) ?? null;
@@ -165,6 +214,8 @@ export default function CommunityPostComposer({
             setTagInput("");
             setAttachments([]);
             setAttachmentInput("");
+            setPictureUrl("");
+            setPictureError("");
             setStatus("open");
             setIsDraftSaved(false);
             setSubmitError("");
@@ -182,6 +233,8 @@ export default function CommunityPostComposer({
         setTagInput("");
         setAttachments([]);
         setAttachmentInput("");
+        setPictureUrl("");
+        setPictureError("");
         setStatus("open");
         setIsDraftSaved(false);
         setSubmitError("");
@@ -225,6 +278,7 @@ export default function CommunityPostComposer({
                     category,
                     tags,
                     attachments,
+                    pictureUrl: pictureUrl.trim() || undefined,
                     status,
                     author: storedUser?.id,
                     authorName: authorDisplayName,
@@ -331,6 +385,56 @@ export default function CommunityPostComposer({
                         }}
                         className="min-h-[100px] border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200 sm:min-h-[120px]"
                     />
+                </div>
+
+                <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                        <ImagePlus size={14} />
+                        Picture <span className="text-xs font-normal text-slate-500">(optional)</span>
+                    </label>
+                    <input
+                        ref={pictureInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={handlePictureSelected}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="primary"
+                            className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                            onClick={() => pictureInputRef.current?.click()}
+                        >
+                            Choose image
+                        </Button>
+                        {pictureUrl ? (
+                            <Button
+                                type="button"
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                onClick={clearPicture}
+                            >
+                                Remove
+                            </Button>
+                        ) : null}
+                    </div>
+                    {pictureError ? (
+                        <p className="mt-2 text-xs font-medium text-red-600">{pictureError}</p>
+                    ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                            JPEG, PNG, GIF, WebP — up to 2 MB. Stored with your post.
+                        </p>
+                    )}
+                    {pictureUrl ? (
+                        <div className="relative mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- data URLs from user uploads */}
+                            <img
+                                src={pictureUrl}
+                                alt=""
+                                className="max-h-48 w-full object-contain"
+                            />
+                        </div>
+                    ) : null}
                 </div>
 
                 <div>

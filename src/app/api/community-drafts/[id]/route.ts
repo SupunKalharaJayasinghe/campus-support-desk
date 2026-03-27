@@ -1,4 +1,5 @@
 import { connectDB } from "@/lib/mongodb";
+import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
 import CommunityDraft from "@/models/communityDraft";
 import mongoose from "mongoose";
 
@@ -8,6 +9,7 @@ type UpdateDraftPayload = {
   category?: unknown;
   tags?: unknown;
   attachments?: unknown;
+  pictureUrl?: unknown;
   status?: unknown;
   userId?: unknown;
 };
@@ -29,6 +31,7 @@ function normalizeDraft(doc: {
   category?: string;
   tags?: string[];
   attachments?: string[];
+  pictureUrl?: string | null;
   status?: string;
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -40,6 +43,7 @@ function normalizeDraft(doc: {
     category: doc.category ?? "study_material",
     tags: Array.isArray(doc.tags) ? doc.tags : [],
     attachments: Array.isArray(doc.attachments) ? doc.attachments : [],
+    pictureUrl: typeof doc.pictureUrl === "string" ? doc.pictureUrl : "",
     status: doc.status === "resolved" ? "resolved" : "open",
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
@@ -82,10 +86,23 @@ export async function PATCH(
       ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
       : [];
 
+    const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
+    if (!pictureNorm.ok) {
+      return Response.json({ error: pictureNorm.error }, { status: 400 });
+    }
+
     const updated = await CommunityDraft.findOneAndUpdate(
       { _id: params.id, author: userId },
       {
-        $set: { title, description, category, tags, attachments, status },
+        $set: {
+          title,
+          description,
+          category,
+          tags,
+          attachments,
+          status,
+          pictureUrl: pictureNorm.value ?? null,
+        },
       },
       { new: true }
     ).lean();

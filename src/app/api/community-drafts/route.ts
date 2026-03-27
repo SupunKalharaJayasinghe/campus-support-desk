@@ -1,5 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
+import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
 import CommunityDraft from "@/models/communityDraft";
 import mongoose from "mongoose";
 
@@ -9,6 +10,7 @@ type DraftPayload = {
   category?: unknown;
   tags?: unknown;
   attachments?: unknown;
+  pictureUrl?: unknown;
   status?: unknown;
   author?: unknown;
   authorUsername?: unknown;
@@ -34,6 +36,7 @@ function normalizeDraft(doc: {
   category?: string;
   tags?: string[];
   attachments?: string[];
+  pictureUrl?: string | null;
   status?: string;
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -45,6 +48,7 @@ function normalizeDraft(doc: {
     category: doc.category ?? "study_material",
     tags: Array.isArray(doc.tags) ? doc.tags : [],
     attachments: Array.isArray(doc.attachments) ? doc.attachments : [],
+    pictureUrl: typeof doc.pictureUrl === "string" ? doc.pictureUrl : "",
     status: doc.status === "resolved" ? "resolved" : "open",
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
@@ -104,12 +108,18 @@ export async function POST(req: Request) {
       ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
       : [];
 
+    const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
+    if (!pictureNorm.ok) {
+      return Response.json({ error: pictureNorm.error }, { status: 400 });
+    }
+
     const draft = await CommunityDraft.create({
       title,
       description,
       category,
       tags,
       attachments,
+      pictureUrl: pictureNorm.value ?? null,
       status,
       author: authorId,
     });

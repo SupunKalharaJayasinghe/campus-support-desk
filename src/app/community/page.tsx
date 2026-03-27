@@ -45,6 +45,7 @@ type Post = {
     id: string;
     title: string;
     content: string;
+    pictureUrl?: string;
     author: string;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
@@ -58,6 +59,7 @@ type ApiPost = {
     _id: string;
     title: string;
     description: string;
+    pictureUrl?: string | null;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt?: string;
     authorDisplayName?: string;
@@ -280,6 +282,7 @@ export default function CommunityPage() {
                     id: post._id,
                     title: post.title,
                     content: post.description,
+                    pictureUrl: post.pictureUrl?.trim() || undefined,
                     author:
                         post.authorDisplayName ||
                         (typeof post.author === "object"
@@ -809,6 +812,16 @@ export default function CommunityPage() {
                                         </div>
 
                                         <p className="mt-3 line-clamp-3 text-sm text-slate-700">{post.content}</p>
+                                        {post.pictureUrl ? (
+                                            <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={post.pictureUrl}
+                                                    alt=""
+                                                    className="max-h-72 w-full object-contain"
+                                                />
+                                            </div>
+                                        ) : null}
 
                                         <div className="mt-4 flex items-center gap-2 border-t border-blue-100 pt-3">
                                             <button

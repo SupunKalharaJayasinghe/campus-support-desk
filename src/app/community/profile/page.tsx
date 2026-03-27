@@ -51,6 +51,7 @@ type DbCommunityPost = {
     title: string;
     description: string;
     category: "lost_item" | "study_material" | "academic_question";
+    pictureUrl?: string | null;
     status?: "open" | "resolved" | "archived";
     createdAt?: string;
     likesCount?: number;
@@ -362,6 +363,7 @@ export default function CommunityProfilePage() {
                 category: draft.category,
                 tags: draft.tags,
                 attachments: draft.attachments,
+                pictureUrl: draft.pictureUrl,
                 status: draft.status,
                 author: storedUser?.id,
                 authorName: authorDisplayName,
@@ -403,8 +405,9 @@ export default function CommunityProfilePage() {
                 );
             });
             setDraftActionError(null);
+            // Keep update modal open with server data so picture and edits stay visible after save.
             setDraftInUpdateModal((m) =>
-                m && savedDraft.id === m.id ? null : m
+                m && savedDraft.id === m.id ? savedDraft : m
             );
             if (!draft.id) {
                 document
@@ -514,6 +517,7 @@ export default function CommunityProfilePage() {
                         category: draft.category,
                         tags: draft.tags,
                         attachments: draft.attachments,
+                        pictureUrl: draft.pictureUrl,
                         status: draft.status,
                         author: storedUser?.id,
                         authorName: authorDisplayName,
@@ -910,6 +914,16 @@ export default function CommunityProfilePage() {
                                                 <p className="mt-2 line-clamp-3 text-sm text-slate-700">
                                                     {post.description}
                                                 </p>
+                                                {post.pictureUrl ? (
+                                                    <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img
+                                                            src={post.pictureUrl}
+                                                            alt=""
+                                                            className="max-h-56 w-full object-contain"
+                                                        />
+                                                    </div>
+                                                ) : null}
                                                 <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
                                                     <span className="inline-flex items-center gap-1.5">
                                                         <ThumbsUp size={14} /> {post.likesCount ?? 0}
@@ -1203,6 +1217,16 @@ export default function CommunityProfilePage() {
                                         <p className="line-clamp-2 text-sm text-slate-700">
                                             {draft.description}
                                         </p>
+                                        {draft.pictureUrl ? (
+                                            <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={draft.pictureUrl}
+                                                    alt=""
+                                                    className="max-h-40 w-full object-cover sm:max-h-48"
+                                                />
+                                            </div>
+                                        ) : null}
                                         <p className="mt-2 text-xs text-slate-500">
                                             Updated{" "}
                                             {new Date(draft.updatedAt).toLocaleString()}
