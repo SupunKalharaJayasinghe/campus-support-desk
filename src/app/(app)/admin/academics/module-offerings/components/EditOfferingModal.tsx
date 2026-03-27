@@ -469,7 +469,6 @@ export default function EditOfferingModal({
 
   const selectedFaculty = facultyOptions.find((item) => item.code === form.facultyId) ?? null;
   const selectedDegree = degreeOptions.find((item) => item.code === form.degreeProgramId) ?? null;
-  const selectedIntake = intakeOptions.find((item) => item.id === form.intakeId) ?? null;
   const selectedModule = moduleOptions.find((item) => item.id === form.moduleId) ?? null;
   const contextLocked = mode === "edit";
 
@@ -650,12 +649,6 @@ export default function EditOfferingModal({
             </div>
 
             <div className="mt-4 rounded-2xl border border-border bg-tint/60 p-3 text-sm text-heading">
-              <p>
-                Intake: <span className="font-semibold">{selectedIntake?.name || "—"}</span>
-              </p>
-              <p className="mt-1">
-                Semester: <span className="font-semibold">{form.termCode || "—"}</span>
-              </p>
               <p className="mt-1">
                 Faculty: <span className="font-semibold">{selectedFaculty?.code || form.facultyId || "—"}</span>
               </p>
@@ -664,6 +657,9 @@ export default function EditOfferingModal({
               </p>
               <p className="mt-1">
                 Module: <span className="font-semibold">{selectedModule ? `${selectedModule.code} - ${selectedModule.name}` : "—"}</span>
+              </p>
+              <p className="mt-2 text-xs text-text/65">
+                Intake and semester-wise assignments for this module are listed below.
               </p>
               {contextLocked ? (
                 <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
