@@ -30,7 +30,7 @@ import {
 type MainTab = "sent" | "inbox";
 type PageSize = 10 | 25 | 50 | 100;
 type AnnouncementStatus = "Draft" | "Scheduled" | "Sent";
-type AudienceType = "All" | "Role" | "Faculty" | "Degree Program";
+type AudienceType = "All" | "Role" | "Faculty" | "Semester" | "Degree Program";
 type ChannelType = "In-app" | "Email" | "Both";
 type PriorityType = "Normal" | "High";
 type InboxType = "System" | "User Report" | "Delivery" | "Other";
@@ -65,6 +65,7 @@ interface ComposeFormState {
   audienceType: AudienceType;
   roleTarget: string;
   facultyTarget: string;
+  audienceSemesterTarget: string;
   programTarget: string;
   degreeFacultyCode: string;
   degreeCodeTarget: string;
@@ -105,6 +106,11 @@ interface IntakeOption {
   name: string;
   currentTerm: string;
   stream: string;
+  termSchedules: Array<{
+    termCode: string;
+    startDate: string;
+    endDate: string;
+  }>;
 }
 
 interface IntakesApiResponse {
@@ -113,6 +119,11 @@ interface IntakesApiResponse {
     name?: string;
     currentTerm?: string;
     stream?: string;
+    termSchedules?: Array<{
+      termCode?: string;
+      startDate?: string;
+      endDate?: string;
+    }>;
   }>;
 }
 
@@ -255,6 +266,7 @@ function createDefaultComposeState(): ComposeFormState {
     audienceType: "All",
     roleTarget: "",
     facultyTarget: "",
+    audienceSemesterTarget: "ALL",
     programTarget: "",
     degreeFacultyCode: "",
     degreeCodeTarget: "",
@@ -406,6 +418,27 @@ export default function AdminNotificationsPage() {
     return DEGREE_OPTIONS_BY_FACULTY[composeForm.degreeFacultyCode] ?? [];
   }, [composeForm.degreeFacultyCode]);
 
+  const semesterFilteredIntakes = useMemo(() => {
+    if (composeForm.semesterTarget === "ALL") {
+      return availableIntakes;
+    }
+
+    return availableIntakes.filter((item) => {
+      const semesterSchedule = item.termSchedules.find(
+        (row) => row.termCode === composeForm.semesterTarget
+      );
+      if (!semesterSchedule) {
+        return false;
+      }
+
+      return Boolean(
+        item.currentTerm === composeForm.semesterTarget ||
+          semesterSchedule.startDate ||
+          semesterSchedule.endDate
+      );
+    });
+  }, [availableIntakes, composeForm.semesterTarget]);
+
   const intakeNameById = useMemo(
     () => new Map(availableIntakes.map((item) => [item.id, item.name])),
     [availableIntakes]
@@ -445,10 +478,6 @@ export default function AdminNotificationsPage() {
       sort: "az",
     });
 
-    if (composeForm.semesterTarget !== "ALL") {
-      query.set("currentTerm", composeForm.semesterTarget);
-    }
-
     fetch(`/api/intakes?${query.toString()}`, {
       signal: controller.signal,
     })
@@ -473,6 +502,13 @@ export default function AdminNotificationsPage() {
               name,
               currentTerm: String(item.currentTerm ?? "").trim(),
               stream: String(item.stream ?? "").trim(),
+              termSchedules: Array.isArray(item.termSchedules)
+                ? item.termSchedules.map((schedule) => ({
+                    termCode: String(schedule?.termCode ?? "").trim(),
+                    startDate: String(schedule?.startDate ?? "").trim(),
+                    endDate: String(schedule?.endDate ?? "").trim(),
+                  }))
+                : [],
             } as IntakeOption;
           })
           .filter((item): item is IntakeOption => item !== null);
@@ -501,17 +537,16 @@ export default function AdminNotificationsPage() {
     composeForm.audienceType,
     composeForm.degreeCodeTarget,
     composeForm.degreeFacultyCode,
-    composeForm.semesterTarget,
   ]);
 
   const buildDegreeProgramTargeting = (
     form: ComposeFormState
   ): NotificationTargeting => {
     const intakeIds = form.allIntakes
-      ? availableIntakes.map((item) => item.id)
+      ? semesterFilteredIntakes.map((item) => item.id)
       : form.intakeTargets;
     const intakeNames = form.allIntakes
-      ? availableIntakes.map((item) => item.name)
+      ? semesterFilteredIntakes.map((item) => item.name)
       : intakeIds.map((id) => intakeNameById.get(id) ?? id);
 
     return {
@@ -538,6 +573,11 @@ export default function AdminNotificationsPage() {
         ACADEMIC_FACULTY_OPTIONS.find((item) => item.code === form.facultyTarget)?.label ??
         form.facultyTarget;
       return facultyLabel;
+    }
+    if (form.audienceType === "Semester") {
+      return form.audienceSemesterTarget === "ALL"
+        ? "All Semester"
+        : form.audienceSemesterTarget;
     }
     if (!form.degreeFacultyCode && !form.degreeCodeTarget && form.programTarget) {
       return form.programTarget;
@@ -566,6 +606,9 @@ export default function AdminNotificationsPage() {
     }
     if (composeForm.audienceType === "Faculty" && !composeForm.facultyTarget) {
       nextErrors.audience = "Select a faculty target.";
+    }
+    if (composeForm.audienceType === "Semester" && !composeForm.audienceSemesterTarget) {
+      nextErrors.audience = "Select a semester target.";
     }
     if (composeForm.audienceType === "Degree Program") {
       if (!composeForm.degreeFacultyCode || !composeForm.degreeCodeTarget) {
@@ -668,6 +711,11 @@ export default function AdminNotificationsPage() {
           item.code === announcement.audienceLabel || item.label === announcement.audienceLabel
       );
       defaultState.facultyTarget = matchingFaculty?.code ?? "";
+    }
+    if (announcement.audienceType === "Semester") {
+      const normalizedSemester = String(announcement.audienceLabel ?? "").trim();
+      defaultState.audienceSemesterTarget =
+        normalizedSemester === "All Semester" ? "ALL" : normalizedSemester || "ALL";
     }
     if (announcement.audienceType === "Degree Program") {
       const hasStructuredTargeting = Boolean(
@@ -892,6 +940,7 @@ export default function AdminNotificationsPage() {
                   <option value="">All Audiences</option>
                   <option value="All">All</option>
                   <option value="Faculty">Faculty</option>
+                  <option value="Semester">Semester</option>
                   <option value="Degree Program">Degree Program</option>
                   <option value="Role">Role</option>
                 </Select>
@@ -1339,6 +1388,7 @@ export default function AdminNotificationsPage() {
                         audienceType: event.target.value as AudienceType,
                         roleTarget: "",
                         facultyTarget: "",
+                        audienceSemesterTarget: "ALL",
                         programTarget: "",
                         degreeFacultyCode: "",
                         degreeCodeTarget: "",
@@ -1358,6 +1408,7 @@ export default function AdminNotificationsPage() {
                     <option value="All">All</option>
                     <option value="Role">Role</option>
                     <option value="Faculty">Faculty</option>
+                    <option value="Semester">Semester</option>
                     <option value="Degree Program">Degree Program</option>
                   </Select>
                 </div>
@@ -1408,6 +1459,31 @@ export default function AdminNotificationsPage() {
                       {ACADEMIC_FACULTY_OPTIONS.map((faculty) => (
                         <option key={faculty.code} value={faculty.code}>
                           {faculty.code} - {faculty.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                ) : null}
+
+                {composeForm.audienceType === "Semester" ? (
+                  <div>
+                    <label className="text-sm font-medium text-[#26150F]" htmlFor="target-audience-semester">
+                      Target Semester
+                    </label>
+                    <Select
+                      className="mt-1 h-11 rounded-xl"
+                      id="target-audience-semester"
+                      onChange={(event) =>
+                        setComposeForm((previous) => ({
+                          ...previous,
+                          audienceSemesterTarget: event.target.value,
+                        }))
+                      }
+                      value={composeForm.audienceSemesterTarget}
+                    >
+                      {SEMESTER_OPTIONS.map((semester) => (
+                        <option key={semester} value={semester}>
+                          {semester === "ALL" ? "All Semester" : semester}
                         </option>
                       ))}
                     </Select>
@@ -1500,11 +1576,8 @@ export default function AdminNotificationsPage() {
                             allSubgroups: true,
                             subgroupTargets: [],
                           }));
-                          setAvailableIntakes([]);
                           setIntakeLoadError("");
-                          setIsLoadingIntakes(
-                            Boolean(composeForm.degreeFacultyCode && composeForm.degreeCodeTarget)
-                          );
+                          setIsLoadingIntakes(false);
                         }}
                         value={composeForm.semesterTarget}
                       >
@@ -1529,13 +1602,13 @@ export default function AdminNotificationsPage() {
 
                       {isLoadingIntakes ? (
                         <p className="text-xs text-[#26150F]/70">Loading intakes...</p>
-                      ) : availableIntakes.length === 0 ? (
+                      ) : semesterFilteredIntakes.length === 0 ? (
                         <p className="text-xs text-[#26150F]/70">
                           No intakes available for selected faculty, degree, and semester.
                         </p>
                       ) : (
                         <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-black/10 bg-white p-2">
-                          {availableIntakes.map((intake) => (
+                          {semesterFilteredIntakes.map((intake) => (
                             <label
                               className={cn(
                                 "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-[#26150F]/85",
