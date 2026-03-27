@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import { UserCheck, UserMinus, Users, UserX } from "lucide-react";
 
 type MemberStatus = "Active" | "Warned" | "Suspended";
 
@@ -94,62 +93,8 @@ export default function CommunityAdminMembersPage() {
     });
   }, [memberSearch, members]);
 
-  const activeCount = members.filter((m) => m.status === "Active").length;
-  const warnedCount = members.filter((m) => m.status === "Warned").length;
-  const suspendedCount = members.filter((m) => m.status === "Suspended").length;
-
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
-      <section id="overview" className="scroll-mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card accent className="border-l-[3px] border-l-primary">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-600">Total members</p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{members.length}</p>
-            </div>
-            <span className="rounded-2xl bg-primary/12 p-2.5 text-primary ring-1 ring-primary/15">
-              <Users size={18} />
-            </span>
-          </div>
-        </Card>
-
-        <Card accent className="border-l-[3px] border-l-emerald-600">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-600">Active</p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{activeCount}</p>
-            </div>
-            <span className="rounded-2xl bg-emerald-600/12 p-2.5 text-emerald-800 ring-1 ring-emerald-600/20">
-              <UserCheck size={18} />
-            </span>
-          </div>
-        </Card>
-
-        <Card accent className="border-l-[3px] border-l-amber-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-600">Warned</p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{warnedCount}</p>
-            </div>
-            <span className="rounded-2xl bg-amber-500/14 p-2.5 text-amber-800 ring-1 ring-amber-500/25">
-              <UserMinus size={18} />
-            </span>
-          </div>
-        </Card>
-
-        <Card accent className="border-l-[3px] border-l-rose-600">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-600">Suspended</p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{suspendedCount}</p>
-            </div>
-            <span className="rounded-2xl bg-rose-600/12 p-2.5 text-rose-800 ring-1 ring-rose-600/20">
-              <UserX size={18} />
-            </span>
-          </div>
-        </Card>
-      </section>
-
       <section id="filters" className="scroll-mt-6">
         <Card
           title="Search"

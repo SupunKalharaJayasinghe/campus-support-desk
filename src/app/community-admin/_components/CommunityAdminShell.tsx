@@ -37,7 +37,6 @@ const PRIMARY_NAV: Array<{
 type SubLink = { label: string; hash: string } | { label: string; href: string };
 
 const SUB_LINKS_MEMBERS: SubLink[] = [
-  { hash: "overview", label: "Page overview" },
   { hash: "filters", label: "Search" },
   { hash: "directory", label: "Member directory" },
 ];
@@ -51,7 +50,8 @@ const SUB_LINKS_REPORTS: SubLink[] = [
 
 const SUB_LINKS_DASHBOARD: SubLink[] = [
   { hash: "overview", label: "Overview" },
-  { hash: "quick-links", label: "Quick links" },
+  { hash: "member-overview", label: "Member details" },
+  { hash: "post-reports-overview", label: "Post details" },
 ];
 
 /** Primary “Sections” nav: inactive rows */
@@ -74,7 +74,15 @@ const subNavActiveClass =
 
 function subLinkIsActive(pathname: string, item: SubLink): boolean {
   if (!("href" in item)) return false;
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const href = item.href;
+  const hashIdx = href.indexOf("#");
+  if (hashIdx !== -1) {
+    const pathPart = href.slice(0, hashIdx) || "/community-admin";
+    const pathNorm = pathname.replace(/\/$/, "") || "/";
+    const baseNorm = pathPart.replace(/\/$/, "") || "/";
+    return pathNorm === baseNorm;
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export default function CommunityAdminShell({ children }: { children: ReactNode }) {
