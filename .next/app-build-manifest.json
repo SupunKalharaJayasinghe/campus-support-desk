@@ -11,35 +11,25 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/(app)/admin/page": [
+    "/(app)/student/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/page.js"
+      "static/chunks/app/(app)/student/page.js"
     ],
-    "/(app)/admin/layout": [
+    "/(app)/student/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/layout.js"
+      "static/chunks/app/(app)/student/layout.js"
     ],
     "/(app)/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/layout.js"
     ],
-    "/(app)/admin/users/lecturers/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/users/lecturers/page.js"
-    ],
-    "/(app)/admin/academics/module-offerings/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/academics/module-offerings/page.js"
-    ],
-    "/(app)/admin/academics/modules/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/admin/academics/modules/page.js"
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }
