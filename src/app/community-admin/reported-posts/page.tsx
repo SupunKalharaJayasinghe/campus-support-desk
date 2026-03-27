@@ -113,11 +113,12 @@ export default function CommunityAdminReportedPostsPage() {
     };
   }, []);
 
-  const filteredReports = useMemo(() => {
-    return reports.filter((report) => {
-      if (!reportStatusFilter) return true;
-      return report.status === reportStatusFilter;
-    });
+  /** Default view: pending (OPEN) only so reviewed items leave the queue; explicit filter narrows by status. */
+  const reportQueueFiltered = useMemo(() => {
+    if (!reportStatusFilter) {
+      return reports.filter((r) => r.status === "OPEN");
+    }
+    return reports.filter((r) => r.status === reportStatusFilter);
   }, [reportStatusFilter, reports]);
 
   const reviewedOnly = useMemo(
@@ -589,14 +590,14 @@ export default function CommunityAdminReportedPostsPage() {
       <section id="filters" className="scroll-mt-6">
         <Card
           title="Filters"
-          description="Filter the report queue by status."
+          description="The report queue lists open (pending) reports only. Choose a status to filter that list."
           className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
         >
           <Select
             value={reportStatusFilter}
             onChange={(event) => setReportStatusFilter(event.target.value as "" | ReportStatus)}
           >
-            <option value="">All report status</option>
+            <option value="">Open — report queue</option>
             <option value="OPEN">Open</option>
             <option value="REVIEWED">Reviewed</option>
             <option value="AGREED">Agreed</option>
@@ -607,8 +608,8 @@ export default function CommunityAdminReportedPostsPage() {
 
       <section id="reports" className="scroll-mt-6">
         <Card
-          title="Reported Posts"
-          description="Only the report reason is shown here. Use Check post to open full details in a popup."
+          title="Report queue (open reports)"
+          description="Only the report reason is shown here. After you save an admin review, the report moves to Reviewed report posts below."
           className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
         >
           {reportsError ? (
@@ -619,14 +620,16 @@ export default function CommunityAdminReportedPostsPage() {
             <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
               Loading reports…
             </p>
-          ) : filteredReports.length === 0 ? (
+          ) : reportQueueFiltered.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
               {reports.length === 0
                 ? "No post reports yet."
-                : "No reports match this status filter."}
+                : !reportStatusFilter
+                  ? "No open reports in the queue."
+                  : "No reports match this status filter."}
             </p>
           ) : (
-            reportRowList(filteredReports)
+            reportRowList(reportQueueFiltered)
           )}
         </Card>
       </section>
