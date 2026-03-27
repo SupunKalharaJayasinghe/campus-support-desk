@@ -102,21 +102,21 @@ export async function GET(request: Request) {
       !mongoose.Types.ObjectId.isValid(moduleOfferingId)
     ) {
       return NextResponse.json(
-        { message: "Invalid module offering id" },
+        { success: false, error: "Invalid module offering id" },
         { status: 400 }
       );
     }
 
     if (mongooseConnection && studentId && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
-        { message: "Invalid student id" },
+        { success: false, error: "Invalid student id" },
         { status: 400 }
       );
     }
 
     if (statusParam !== null && !status) {
       return NextResponse.json(
-        { message: "Status must be ACTIVE or INACTIVE" },
+        { success: false, error: "Status must be ACTIVE or INACTIVE" },
         { status: 400 }
       );
     }
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
 
       if (!offering) {
         return NextResponse.json(
-          { message: "Module offering not found" },
+          { success: false, error: "Module offering not found" },
           { status: 404 }
         );
       }
@@ -313,11 +313,16 @@ export async function GET(request: Request) {
       )
       .sort((left, right) => left.student.studentId.localeCompare(right.student.studentId));
 
-    return NextResponse.json({ items });
+    return NextResponse.json({
+      success: true,
+      data: { items },
+      items,
+    });
   } catch (error) {
     return NextResponse.json(
       {
-        message:
+        success: false,
+        error:
           error instanceof Error ? error.message : "Failed to load enrollments",
       },
       { status: 500 }

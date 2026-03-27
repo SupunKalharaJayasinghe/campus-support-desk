@@ -456,7 +456,7 @@ getLevelComparison(250):
   Level 3: status "locked"
   Level 4: status "locked"
   currentLevelIndex: 1
-  overallProgress: ~37.5%
+  overallProgress: ~43.8%
 
 Scenario 7 — Edge cases:
 getCurrentLevel(-10) → Level 1 (safety)

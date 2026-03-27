@@ -83,6 +83,7 @@ export async function GET(request: Request) {
 
     const currentEntry = leaderboard.entries[currentIndex];
     const totalStudents = leaderboard.totalStudents;
+    const activeParticipants = leaderboard.activeParticipants;
     const higherEntries = leaderboard.entries.filter(
       (entry) => entry.totalXP > currentEntry.totalXP
     );
@@ -119,6 +120,7 @@ export async function GET(request: Request) {
         rank: currentEntry.rank,
         totalXP: currentEntry.totalXP,
         totalStudents,
+        activeParticipants,
         percentile,
         xpToNextRank,
         xpFromPreviousRank,
@@ -132,9 +134,14 @@ export async function GET(request: Request) {
               rank: topStudent.rank,
             }
           : null,
-        message: `You are #${currentEntry.rank} out of ${totalStudents} students (top ${roundToOne(
-          100 - percentile
-        )}%)`,
+        message:
+          activeParticipants > 0 && activeParticipants !== totalStudents
+            ? `You are #${currentEntry.rank} out of ${totalStudents} students (${activeParticipants} active participants, top ${roundToOne(
+                100 - percentile
+              )}%)`
+            : `You are #${currentEntry.rank} out of ${totalStudents} students (top ${roundToOne(
+                100 - percentile
+              )}%)`,
       },
     });
   } catch (error) {

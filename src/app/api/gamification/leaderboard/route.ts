@@ -70,6 +70,7 @@ export interface LeaderboardBuildResult {
   scope: LeaderboardScope;
   scopeName: string | null;
   totalStudents: number;
+  activeParticipants: number;
   entries: LeaderboardEntry[];
 }
 
@@ -650,6 +651,7 @@ export async function buildLeaderboardData(
       scope: options.scope,
       scopeName: scopeContext.scopeName,
       totalStudents: 0,
+      activeParticipants: 0,
       entries: [],
     };
   }
@@ -707,7 +709,10 @@ export async function buildLeaderboardData(
   return {
     scope: options.scope,
     scopeName: scopeContext.scopeName,
+    // totalStudents keeps cohort-wide ranking semantics, while activeParticipants
+    // counts students who currently have at least one non-revoked XP ledger entry.
     totalStudents: rankedEntries.length,
+    activeParticipants: xpMap.size,
     entries: rankedEntries.map((entry) => ({
       rank: entry.rank,
       student: entry.student,
@@ -721,7 +726,8 @@ export async function buildLeaderboardData(
 
 function buildPersonalRank(
   entries: LeaderboardEntry[],
-  studentId: string
+  studentId: string,
+  activeParticipants: number
 ): {
   rank: number | null;
   totalXP: number | null;
@@ -738,7 +744,10 @@ function buildPersonalRank(
       totalXP: null,
       totalStudents,
       percentile: null,
-      message: "You are not part of this leaderboard scope",
+      message:
+        activeParticipants > 0 && activeParticipants !== totalStudents
+          ? `You are not part of this leaderboard scope (${activeParticipants} active participants)`
+          : "You are not part of this leaderboard scope",
     };
   }
 
@@ -752,7 +761,10 @@ function buildPersonalRank(
     totalXP: currentEntry.totalXP,
     totalStudents,
     percentile,
-    message: `You are #${currentEntry.rank} out of ${totalStudents} students`,
+    message:
+      activeParticipants > 0 && activeParticipants !== totalStudents
+        ? `You are #${currentEntry.rank} out of ${totalStudents} students (${activeParticipants} active participants)`
+        : `You are #${currentEntry.rank} out of ${totalStudents} students`,
   };
 }
 
@@ -823,9 +835,14 @@ export async function GET(request: Request) {
         scope: leaderboardData.scope,
         scopeName: leaderboardData.scopeName,
         totalStudents: leaderboardData.totalStudents,
+        activeParticipants: leaderboardData.activeParticipants,
         lastUpdated: new Date().toISOString(),
         personalRank: requestingStudentId
-          ? buildPersonalRank(leaderboardData.entries, requestingStudentId)
+          ? buildPersonalRank(
+              leaderboardData.entries,
+              requestingStudentId,
+              leaderboardData.activeParticipants
+            )
           : null,
         leaderboard: pagedEntries,
         pagination: {

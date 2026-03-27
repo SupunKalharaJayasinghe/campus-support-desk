@@ -158,6 +158,9 @@ export async function POST(
     }
 
     const offering = asObject(quizRow.moduleOfferingId);
+    // NOTE: Enrollment validation uses faculty/degree/intake matching because
+    // Enrollment.ts does not store moduleOfferingId directly.
+    // TODO: Add direct moduleOfferingId enrollment check when schema supports it.
     const enrolled = Boolean(
       await EnrollmentModel.exists({
         studentId: new mongoose.Types.ObjectId(studentId),

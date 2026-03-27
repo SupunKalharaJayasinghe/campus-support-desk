@@ -123,7 +123,9 @@ function calculateWeightedGradePoint(grades: IGrade[]) {
   );
 
   if (!hasCompleteCredits) {
-    // TODO: Switch to fully weighted GPA when Module credits are always included on grade payloads.
+    // TODO: Switch to weighted GPA (Σ(gradePoint × credits) / Σ(credits))
+    // when credit hours are reliably available on Module/ModuleOffering.
+    // Currently using simple average as fallback.
     return calculateAverageGradePoint(grades);
   }
 

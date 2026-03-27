@@ -19,6 +19,7 @@ import { GamificationPointsModel } from "@/models/GamificationPoints";
 import { ModuleModel } from "@/models/Module";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { StudentModel } from "@/models/Student";
+import { TrophyModel } from "@/models/Trophy";
 
 export const XP_VALUES = {
   MODULE_PASSED: 10,
@@ -543,6 +544,9 @@ async function upsertReferenceAward(
     return { awarded: true } satisfies UpsertAwardResult;
   } catch (error) {
     if (isMongoDuplicateKeyError(error)) {
+      console.warn(
+        `Duplicate XP award skipped: ${entry.action} for ${readId(entry.referenceId)}`
+      );
       return { awarded: false } satisfies UpsertAwardResult;
     }
 
@@ -611,6 +615,9 @@ async function upsertManualAward(
     return { awarded: true } satisfies UpsertAwardResult;
   } catch (error) {
     if (isMongoDuplicateKeyError(error)) {
+      console.warn(
+        `Duplicate XP award skipped: ${entry.action} for ${readId(entry.referenceId)}`
+      );
       return { awarded: false } satisfies UpsertAwardResult;
     }
 
@@ -618,6 +625,91 @@ async function upsertManualAward(
       error instanceof Error ? error.message : "Failed to persist points entry";
     result.errors.push(message);
     return { awarded: false, error: message } satisfies UpsertAwardResult;
+  }
+}
+
+function pushUniqueLabels(target: string[], labels: string[]) {
+  const existing = new Set(target.map((item) => collapseSpaces(item)).filter(Boolean));
+
+  labels.forEach((label) => {
+    const normalized = collapseSpaces(label);
+    if (!normalized || existing.has(normalized)) {
+      return;
+    }
+
+    target.push(normalized);
+    existing.add(normalized);
+  });
+}
+
+function mergeAwardResults(target: AwardResult, source: AwardResult) {
+  target.pointsAwarded.push(...source.pointsAwarded);
+  target.totalPointsAwarded = target.pointsAwarded.reduce(
+    (sum, item) => sum + Number(item.xpPoints || 0),
+    0
+  );
+  target.errors.push(
+    ...source.errors.map((error) => collapseSpaces(error)).filter(Boolean)
+  );
+  pushUniqueLabels(target.milestonesUnlocked, source.milestonesUnlocked);
+  target.success = target.errors.length === 0;
+}
+
+async function restoreExistingTrophyBonusPoints(
+  studentId: Types.ObjectId,
+  result: AwardResult
+) {
+  const trophyRows = (await TrophyModel.find({ studentId })
+    .select(
+      "trophyKey trophyName trophyTier xpBonusAwarded academicYear semester metadata"
+    )
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
+
+  for (const row of trophyRows) {
+    const trophy = asObject(row);
+    const trophyKey = collapseSpaces(trophy?.trophyKey);
+    const trophyName = collapseSpaces(trophy?.trophyName) || trophyKey;
+    const trophyTier = collapseSpaces(trophy?.trophyTier);
+    const xpBonus = Number(trophy?.xpBonusAwarded ?? 0);
+    const metadata = asObject(trophy?.metadata) ?? {};
+    const semesterValue = Number(trophy?.semester ?? 0);
+
+    if (!trophyKey || xpBonus <= 0) {
+      continue;
+    }
+
+    await upsertManualAward(
+      result,
+      {
+        studentId,
+        action: "milestone_reached",
+        category: "bonus",
+        "metadata.trophyKey": trophyKey,
+      },
+      {
+        studentId,
+        action: "milestone_reached",
+        xpPoints: xpBonus,
+        reason: `Trophy earned: ${trophyName}`,
+        category: "bonus",
+        referenceType: "Milestone",
+        academicYear: collapseSpaces(trophy?.academicYear) || undefined,
+        semester:
+          semesterValue === 1 || semesterValue === 2
+            ? (semesterValue as 1 | 2)
+            : undefined,
+        metadata: {
+          trophyKey,
+          trophyName,
+          trophyTier,
+          xpBonus,
+          ...metadata,
+        },
+        awardedBy: "system",
+      }
+    );
   }
 }
 
@@ -1661,6 +1753,19 @@ export async function recalculateStudentPoints(
       }
     ).exec();
 
+    await QuizAttemptModel.updateMany(
+      {
+        studentId: studentObjectId,
+      },
+      {
+        $set: {
+          xpAwarded: 0,
+        },
+      }
+    )
+      .exec()
+      .catch(() => null);
+
     const allGradeRows = await fetchEnrichedGrades({ studentId: studentObjectId });
     const allGrades = allGradeRows as unknown as IGrade[];
 
@@ -1695,8 +1800,51 @@ export async function recalculateStudentPoints(
       );
     }
 
+    const quizAttemptRows = (await QuizAttemptModel.find({
+      studentId: studentObjectId,
+      status: { $in: ["submitted", "auto_submitted", "graded"] },
+    })
+      .select("_id")
+      .sort({ submittedAt: 1, createdAt: 1 })
+      .lean()
+      .exec()
+      .catch(() => [])) as unknown[];
+
+    for (const row of quizAttemptRows) {
+      const attemptId = readId(asObject(row)?._id);
+      if (!attemptId) {
+        continue;
+      }
+
+      const awardResult = await awardPointsForQuizAttempt(attemptId);
+      mergeAwardResults(result, awardResult);
+    }
+
+    await restoreExistingTrophyBonusPoints(studentObjectId, result);
+
+    try {
+      const milestoneCheckResult = await checkAllMilestones(normalizedStudentId);
+      if (milestoneCheckResult.errors.length > 0) {
+        result.errors.push(...milestoneCheckResult.errors);
+      }
+
+      pushUniqueLabels(
+        result.milestonesUnlocked,
+        milestoneCheckResult.newTrophiesAwarded.map(
+          (award) => `${award.trophyIcon} ${award.trophyName}`
+        )
+      );
+    } catch (error) {
+      console.error("recalculateStudentPoints milestone checker error", error);
+      result.errors.push(
+        error instanceof Error
+          ? error.message
+          : "Failed to re-evaluate trophies during recalculation"
+      );
+    }
+
     const milestonesUnlocked = await checkAndAwardMilestonesInternal(studentObjectId, result);
-    result.milestonesUnlocked.push(...milestonesUnlocked);
+    pushUniqueLabels(result.milestonesUnlocked, milestonesUnlocked);
     await refreshTotalXP(result, studentObjectId);
     return result;
   } catch (error) {

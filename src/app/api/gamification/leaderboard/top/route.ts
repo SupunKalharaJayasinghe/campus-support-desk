@@ -68,6 +68,7 @@ export async function GET(request: Request) {
             : null,
         })),
         totalStudents: leaderboard.totalStudents,
+        activeParticipants: leaderboard.activeParticipants,
         lastUpdated: new Date().toISOString(),
       },
     });

@@ -16,6 +16,9 @@ export async function POST(
   { params }: { params: { studentId: string } }
 ) {
   try {
+    // SECURITY: This is a destructive admin-only action.
+    // TODO: Enforce proper RBAC middleware once auth layer is implemented.
+    // For now, the endpoint is accessible but should only be called from admin UI.
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
@@ -43,7 +46,6 @@ export async function POST(
     }
 
     await request.json().catch(() => null);
-    // TODO: Enforce admin-only RBAC before exposing this route beyond internal tools.
     const result = await recalculateStudentPoints(studentId);
 
     return NextResponse.json({

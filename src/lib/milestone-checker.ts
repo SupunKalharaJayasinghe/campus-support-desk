@@ -1238,7 +1238,6 @@ export async function checkAllMilestones(studentId: string): Promise<MilestoneCh
       TrophyModel.getStudentTrophies(studentObjectId, { includeHidden: true }).catch(
         () => [] as ITrophy[]
       ),
-      GamificationPointsModel.getStudentTotalXP(studentObjectId).catch(() => 0),
     ]);
     result.existingTrophyCount = existingTrophies.length;
 
@@ -1269,11 +1268,11 @@ export async function checkAllMilestones(studentId: string): Promise<MilestoneCh
 
     for (let iteration = 0; iteration < 5; iteration += 1) {
       let awardedInIteration = 0;
+      const currentTotalXP = await GamificationPointsModel.getStudentTotalXP(
+        studentObjectId
+      ).catch(() => 0);
 
       try {
-        const currentTotalXP = await GamificationPointsModel.getStudentTotalXP(
-          studentObjectId
-        ).catch(() => 0);
         const xpAwards = await checkXPMilestonesInternal(
           studentObjectId,
           currentTotalXP,
@@ -1289,9 +1288,6 @@ export async function checkAllMilestones(studentId: string): Promise<MilestoneCh
       }
 
       try {
-        const currentTotalXP = await GamificationPointsModel.getStudentTotalXP(
-          studentObjectId
-        ).catch(() => 0);
         const levelAwards = await checkLevelTrophiesInternal(
           studentObjectId,
           currentTotalXP,

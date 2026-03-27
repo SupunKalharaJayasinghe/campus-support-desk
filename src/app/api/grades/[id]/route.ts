@@ -581,6 +581,9 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
+      data: {
+        message: "Grade deleted successfully",
+      },
       message: "Grade deleted successfully",
     });
   } catch (error) {
