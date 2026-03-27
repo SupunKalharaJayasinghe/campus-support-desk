@@ -31,10 +31,23 @@ function sanitizeIdList(value: unknown) {
   return Array.from(
     new Set(
       value
-        .map((item) => String(item ?? "").trim())
+        .map((item) => {
+          if (typeof item === "string") {
+            return String(item).trim();
+          }
+          if (!item || typeof item !== "object") {
+            return "";
+          }
+          const row = item as Record<string, unknown>;
+          return String(row.id ?? row._id ?? row.lecturerId ?? "").trim();
+        })
         .filter(Boolean)
     )
   );
+}
+
+function mergeSanitizedIdLists(...values: unknown[]) {
+  return sanitizeIdList(values.flatMap((value) => (Array.isArray(value) ? value : [])));
 }
 
 function toIsoDate(value: unknown) {
@@ -139,7 +152,10 @@ function normalizeDbOffering(value: unknown) {
     syllabusVersion: String(row.syllabusVersion ?? "NEW").trim().toUpperCase(),
     status: String(row.status ?? "ACTIVE").trim().toUpperCase(),
     updatedAt: toIsoDate(row.updatedAt),
-    assignedLecturerIds: sanitizeIdList(row.assignedLecturerIds ?? row.assignedLecturers),
+    assignedLecturerIds: mergeSanitizedIdLists(
+      row.assignedLecturerIds,
+      row.assignedLecturers
+    ),
   };
 }
 

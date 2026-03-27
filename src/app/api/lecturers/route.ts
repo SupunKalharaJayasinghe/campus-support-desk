@@ -23,6 +23,7 @@ import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/models/stude
 import { LecturerModel } from "@/models/Lecturer";
 import { UserModel } from "@/models/User";
 import { hashStaffPassword, resolveDefaultStaffPassword } from "@/models/staff-auth";
+import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lecturer-sync";
 
 interface LecturerWriteInput {
   fullName: string;
@@ -245,6 +246,19 @@ export async function POST(request: Request) {
           ...validated,
         });
 
+        await syncLecturerAssignmentsAcrossModuleOfferings(
+          {
+            lecturerId: created.id,
+            fullName: created.fullName,
+            email: created.email,
+            status: created.status,
+            facultyIds: created.facultyIds,
+            degreeProgramIds: created.degreeProgramIds,
+            moduleIds: created.moduleIds,
+          },
+          { mongooseConnection: null }
+        ).catch(() => null);
+
         return NextResponse.json(toApiLecturer(created), { status: 201 });
       } catch (error) {
         const message =
@@ -308,6 +322,19 @@ export async function POST(request: Request) {
         if (!parsed) {
           throw new Error("Failed to map lecturer");
         }
+
+        await syncLecturerAssignmentsAcrossModuleOfferings(
+          {
+            lecturerId: parsed.id,
+            fullName: parsed.fullName,
+            email: parsed.email,
+            status: parsed.status,
+            facultyIds: parsed.facultyIds,
+            degreeProgramIds: parsed.degreeProgramIds,
+            moduleIds: parsed.moduleIds,
+          },
+          { mongooseConnection }
+        ).catch(() => null);
 
         return NextResponse.json(toApiLecturer(parsed), { status: 201 });
       } catch (error) {

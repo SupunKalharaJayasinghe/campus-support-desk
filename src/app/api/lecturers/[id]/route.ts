@@ -24,6 +24,7 @@ import { getMongoDuplicateField } from "@/models/student-registration";
 import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
+import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lecturer-sync";
 
 interface LecturerWriteInput {
   fullName: string;
@@ -148,6 +149,19 @@ export async function PUT(
           return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
         }
 
+        await syncLecturerAssignmentsAcrossModuleOfferings(
+          {
+            lecturerId: updated.id,
+            fullName: updated.fullName,
+            email: updated.email,
+            status: updated.status,
+            facultyIds: updated.facultyIds,
+            degreeProgramIds: updated.degreeProgramIds,
+            moduleIds: updated.moduleIds,
+          },
+          { mongooseConnection: null }
+        ).catch(() => null);
+
         return NextResponse.json(toApiLecturer(updated));
       } catch (error) {
         const message =
@@ -203,6 +217,19 @@ export async function PUT(
     if (!parsed) {
       return NextResponse.json({ message: "Failed to map lecturer" }, { status: 500 });
     }
+
+    await syncLecturerAssignmentsAcrossModuleOfferings(
+      {
+        lecturerId: parsed.id,
+        fullName: parsed.fullName,
+        email: parsed.email,
+        status: parsed.status,
+        facultyIds: parsed.facultyIds,
+        degreeProgramIds: parsed.degreeProgramIds,
+        moduleIds: parsed.moduleIds,
+      },
+      { mongooseConnection }
+    ).catch(() => null);
 
     return NextResponse.json(toApiLecturer(parsed));
   } catch (error) {

@@ -123,6 +123,14 @@ function sanitizeAssignmentIds(value: unknown) {
   );
 }
 
+function mergeAssignmentInputs(...values: unknown[]) {
+  return values.flatMap((value) => (Array.isArray(value) ? value : []));
+}
+
+function sanitizeMergedAssignmentIds(...values: unknown[]) {
+  return sanitizeAssignmentIds(mergeAssignmentInputs(...values));
+}
+
 function sanitizeOfferingStatus(value: unknown): ModuleOfferingStatus {
   return value === "INACTIVE" ? "INACTIVE" : "ACTIVE";
 }
@@ -171,8 +179,9 @@ function normalizeModuleOfferingRecord(value: unknown): ModuleOfferingRecord | n
 
   const intake = findIntakeById(intakeId);
   const moduleRecord = findModuleById(moduleId);
-  const assignedLecturerIds = sanitizeAssignmentIds(
-    row.assignedLecturerIds ?? row.assignedLecturers
+  const assignedLecturerIds = sanitizeMergedAssignmentIds(
+    row.assignedLecturerIds,
+    row.assignedLecturers
   );
   const createdAt = toIsoTimestamp(row.createdAt);
   const updatedAt = toIsoTimestamp(row.updatedAt);
@@ -208,8 +217,9 @@ function normalizeModuleOfferingRecord(value: unknown): ModuleOfferingRecord | n
       String(moduleRecord?.code ?? moduleId).trim(),
     syllabusVersion: sanitizeSyllabusVersion(row.syllabusVersion),
     assignedLecturerIds,
-    assignedLabAssistantIds: sanitizeAssignmentIds(
-      row.assignedLabAssistantIds ?? row.assignedLabAssistants
+    assignedLabAssistantIds: sanitizeMergedAssignmentIds(
+      row.assignedLabAssistantIds,
+      row.assignedLabAssistants
     ),
     status: sanitizeOfferingStatus(row.status),
     assignedLecturers: assignedLecturerIds,

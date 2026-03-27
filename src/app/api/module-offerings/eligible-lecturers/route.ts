@@ -7,16 +7,6 @@ import {
   type LecturerPersistedRecord,
 } from "@/models/lecturer-store";
 import { LecturerModel } from "@/models/Lecturer";
-import {
-  isStaffEligibleForOffering,
-  staffEligibilityMongoFilter,
-} from "@/models/staff-eligibility";
-import {
-  normalizeAcademicCode,
-  normalizeModuleCode,
-  sanitizeId,
-} from "@/models/module-offering-api";
-import { findModuleByCode, findModuleById } from "@/models/module-store";
 
 function toApiItem(
   row: Pick<LecturerPersistedRecord, "id" | "fullName" | "email" | "status">
@@ -51,46 +41,11 @@ function escapeRegex(value: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const facultyCode = normalizeAcademicCode(
-    searchParams.get("facultyCode") ?? searchParams.get("facultyId")
-  );
-  const degreeCode = normalizeAcademicCode(
-    searchParams.get("degreeCode") ??
-      searchParams.get("degreeProgramId") ??
-      searchParams.get("degreeId")
-  );
-  const moduleCode = normalizeModuleCode(
-    searchParams.get("moduleCode") ?? searchParams.get("moduleId")
-  );
-  const moduleRecord =
-    findModuleByCode(moduleCode) ?? findModuleById(sanitizeId(searchParams.get("moduleId")));
-  const moduleId = moduleRecord?.id ?? sanitizeId(searchParams.get("moduleId"));
-  const resolvedModuleCode = moduleRecord?.code ?? moduleCode;
   const search = normalizeSearch(searchParams.get("search"));
-
-  if (!facultyCode || !degreeCode || (!resolvedModuleCode && !moduleId)) {
-    return NextResponse.json({ items: [], total: 0 });
-  }
-
   const mongooseConnection = await connectMongoose().catch(() => null);
 
   if (!mongooseConnection) {
     const items = listLecturersInMemory({ status: "ACTIVE", sort: "az" })
-      .filter((row) =>
-        isStaffEligibleForOffering(
-          {
-            facultyIds: row.facultyIds,
-            degreeProgramIds: row.degreeProgramIds,
-            moduleIds: row.moduleIds,
-          },
-          {
-            facultyCode,
-            degreeCode,
-            moduleCode: resolvedModuleCode,
-            moduleId,
-          }
-        )
-      )
       .filter((row) => matchesSearch(row, search))
       .map((row) => toApiItem(row));
 
@@ -100,13 +55,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const query: Record<string, unknown> = staffEligibilityMongoFilter({
-    facultyCode,
-    degreeCode,
-    moduleCode: resolvedModuleCode,
-    moduleId,
-  });
-
+  const query: Record<string, unknown> = { status: "ACTIVE" };
   if (search) {
     const regex = new RegExp(escapeRegex(search), "i");
     query.$or = [{ fullName: regex }, { email: regex }];
@@ -129,4 +78,3 @@ export async function GET(request: Request) {
     total: items.length,
   });
 }
-

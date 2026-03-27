@@ -4,6 +4,7 @@ import "@/models/Lecturer";
 import "@/models/ModuleOffering";
 import { connectMongoose } from "@/models/mongoose";
 import {
+  mergeSanitizedIdLists,
   normalizeAcademicCode,
   normalizeIntakeName,
   normalizeModuleCode,
@@ -31,6 +32,7 @@ import {
 import { listTermOptions, type TermCode } from "@/models/intake-store";
 import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
+import { syncLecturerModuleLinksForOfferingMutation } from "@/models/module-offering-lecturer-module-sync";
 
 const TERM_SORT_ORDER = listTermOptions();
 
@@ -346,8 +348,9 @@ export async function POST(request: Request) {
         ? context.defaultSyllabusVersion
         : sanitizeSyllabusVersion(body.syllabusVersion);
     const status = sanitizeOfferingStatus(body.status);
-    const assignedLecturerIds = sanitizeIdList(
-      body.assignedLecturerIds ?? body.assignedLecturers
+    const assignedLecturerIds = mergeSanitizedIdLists(
+      body.assignedLecturerIds,
+      body.assignedLecturers
     );
     const assignedLabAssistantIds = sanitizeIdList(body.assignedLabAssistantIds);
 
@@ -500,6 +503,22 @@ export async function POST(request: Request) {
         throw error;
       }
     }
+
+    await syncLecturerModuleLinksForOfferingMutation({
+      previous: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        lecturerIds: [],
+      },
+      next: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        lecturerIds: responseOffering.assignedLecturerIds,
+      },
+      mongooseConnection,
+    }).catch(() => null);
 
     return NextResponse.json(toApiOfferingItem(responseOffering, assigneeMaps), {
       status: 201,

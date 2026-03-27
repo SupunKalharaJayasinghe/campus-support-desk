@@ -112,6 +112,14 @@ export function sanitizeIdList(value: unknown) {
   return Array.from(new Set(value.map((item) => sanitizeAssignmentId(item)).filter(Boolean)));
 }
 
+function mergeArrayValues(values: unknown[]) {
+  return values.flatMap((value) => (Array.isArray(value) ? value : []));
+}
+
+export function mergeSanitizedIdLists(...values: unknown[]) {
+  return sanitizeIdList(mergeArrayValues(values));
+}
+
 export function sanitizeSyllabusVersion(value: unknown): SyllabusVersion {
   return value === "OLD" ? "OLD" : "NEW";
 }
@@ -276,11 +284,13 @@ export function normalizeDbOffering(value: unknown): ModuleOfferingRecord | null
     return null;
   }
 
-  const assignedLecturerIds = sanitizeIdList(
-    row.assignedLecturerIds ?? row.assignedLecturers
+  const assignedLecturerIds = mergeSanitizedIdLists(
+    row.assignedLecturerIds,
+    row.assignedLecturers
   );
-  const assignedLabAssistantIds = sanitizeIdList(
-    row.assignedLabAssistantIds ?? row.assignedLabAssistants
+  const assignedLabAssistantIds = mergeSanitizedIdLists(
+    row.assignedLabAssistantIds,
+    row.assignedLabAssistants
   );
   const createdAt = toIsoDate(row.createdAt);
   const updatedAt = toIsoDate(row.updatedAt);
@@ -501,9 +511,6 @@ export async function validateLecturerAssignments(input: {
     }
     if (row.status !== "ACTIVE") {
       throw new Error(`Lecturer is inactive: ${row.fullName}`);
-    }
-    if (!isEligibleByScope(row, input.scope)) {
-      throw new Error(`Lecturer is not eligible for this offering: ${row.fullName}`);
     }
   }
 }
