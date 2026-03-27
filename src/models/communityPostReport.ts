@@ -32,7 +32,7 @@ const CommunityPostReportSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["OPEN", "REVIEWED", "DISMISSED"],
+      enum: ["OPEN", "REVIEWED", "AGREED", "DISMISSED"],
       default: "OPEN",
       index: true,
     },

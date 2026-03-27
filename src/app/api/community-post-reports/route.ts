@@ -99,7 +99,10 @@ export async function GET(req: Request) {
     const status = searchParams.get("status");
 
     const statusFilter =
-      status === "OPEN" || status === "REVIEWED" || status === "DISMISSED"
+      status === "OPEN" ||
+      status === "REVIEWED" ||
+      status === "AGREED" ||
+      status === "DISMISSED"
         ? { status }
         : {};
 

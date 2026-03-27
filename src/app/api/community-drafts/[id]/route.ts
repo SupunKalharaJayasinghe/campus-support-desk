@@ -90,7 +90,7 @@ export async function PATCH(
       { new: true }
     ).lean();
 
-    if (!updated) {
+    if (updated == null || Array.isArray(updated)) {
       return Response.json({ error: "Draft not found" }, { status: 404 });
     }
 

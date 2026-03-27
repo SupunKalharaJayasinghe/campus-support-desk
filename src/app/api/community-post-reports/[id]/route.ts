@@ -16,11 +16,16 @@ export async function PATCH(
     const body = (await req.json().catch(() => ({}))) as { status?: unknown };
     const raw = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
     const status =
-      raw === "OPEN" || raw === "REVIEWED" || raw === "DISMISSED" ? raw : null;
+      raw === "OPEN" ||
+      raw === "REVIEWED" ||
+      raw === "AGREED" ||
+      raw === "DISMISSED"
+        ? raw
+        : null;
 
     if (!status) {
       return Response.json(
-        { error: "status must be OPEN, REVIEWED, or DISMISSED" },
+        { error: "status must be OPEN, REVIEWED, AGREED, or DISMISSED" },
         { status: 400 }
       );
     }
