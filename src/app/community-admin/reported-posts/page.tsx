@@ -601,10 +601,10 @@ export default function CommunityAdminReportedPostsPage() {
             value={reportStatusFilter}
             onChange={(event) => setReportStatusFilter(event.target.value as ReportStatus)}
           >
-            <option value="OPEN">Open — report queue</option>
-            <option value="REVIEWED">Reviewed</option>
-            <option value="AGREED">Agreed</option>
-            <option value="DISMISSED">Dismissed</option>
+            <option value="OPEN">Open Reported Posts</option>
+            <option value="REVIEWED">Reviewed Reported Posts</option>
+            <option value="AGREED">Agreed Reported Posts</option>
+            <option value="DISMISSED">Dismissed Reported Posts</option>
           </Select>
         </Card>
       </section>
@@ -1035,7 +1035,7 @@ export default function CommunityAdminReportedPostsPage() {
                       type="button"
                       variant="secondary"
                     >
-                      Update comment
+                      Update
                     </Button>
                     <Button
                       className="h-10 !border-emerald-800 !bg-emerald-600 !text-white shadow-sm hover:!bg-emerald-700 disabled:!opacity-60"
@@ -1044,7 +1044,7 @@ export default function CommunityAdminReportedPostsPage() {
                       type="button"
                       variant="secondary"
                     >
-                      Accept report
+                      Accept
                     </Button>
                     <Button
                       className="h-10 !border-rose-900 !bg-rose-600 !text-white shadow-sm hover:!bg-rose-700 disabled:!opacity-60"
@@ -1053,12 +1053,12 @@ export default function CommunityAdminReportedPostsPage() {
                       type="button"
                       variant="secondary"
                     >
-                      Dismiss report
+                      Dismiss
                     </Button>
                   </>
                 ) : null}
                 <Button
-                  className="h-10 border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50 sm:ml-auto"
+                  className="h-10 border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-red-100 sm:ml-auto"
                   onClick={closeModal}
                   type="button"
                   variant="secondary"

@@ -121,14 +121,14 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text/72">{header.subtitle}</p>
             </div>
           </div>
-          <Button
+         {/* <Button
             className="h-11 shrink-0 gap-2 !rounded-full px-5 shadow-md shadow-primary/20"
             type="button"
             variant="primary"
           >
             <ShieldCheck size={16} className="text-white/95" aria-hidden />
             Moderation Rules
-          </Button>
+          </Button> */}
         </div>
       </header>
 

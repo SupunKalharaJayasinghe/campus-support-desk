@@ -186,7 +186,8 @@ export default function CommunityAdminDashboardPage() {
           className="border-l-[3px] border-l-primary bg-gradient-to-br from-card to-primary/[0.04]"
         >
           <Link href="/community-admin/members">
-            <Button className="h-10 w-full sm:w-auto" type="button" variant="primary">
+            <Button className="h-10  border-violet-400/40 bg-blue-600 text-white hover:border-violet-500 hover:bg-blue-900 sm:w-auto"
+             type="button" variant="primary">
               Open member directory
             </Button>
           </Link>
@@ -198,11 +199,11 @@ export default function CommunityAdminDashboardPage() {
         >
           <Link href="/community-admin/reported-posts">
             <Button
-              className="h-10 w-full border-violet-400/40 bg-violet-600 text-white hover:border-violet-500 hover:bg-violet-700 sm:w-auto"
+              className="h-10 w-full border-violet-400/40 bg-blue-600 text-white hover:border-violet-500 hover:bg-blue-900 sm:w-auto"
               type="button"
               variant="secondary"
             >
-              Open reports
+              Open Reported Poests
             </Button>
           </Link>
         </Card>
