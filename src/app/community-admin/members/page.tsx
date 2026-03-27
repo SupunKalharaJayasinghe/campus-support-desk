@@ -101,49 +101,49 @@ export default function CommunityAdminMembersPage() {
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
       <section id="overview" className="scroll-mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-primary">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Total members</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">{members.length}</p>
+              <p className="text-sm font-medium text-slate-600">Total members</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{members.length}</p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-primary/12 p-2.5 text-primary ring-1 ring-primary/15">
               <Users size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-emerald-600">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Active</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">{activeCount}</p>
+              <p className="text-sm font-medium text-slate-600">Active</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{activeCount}</p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-emerald-600/12 p-2.5 text-emerald-800 ring-1 ring-emerald-600/20">
               <UserCheck size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-amber-500">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Warned</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">{warnedCount}</p>
+              <p className="text-sm font-medium text-slate-600">Warned</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{warnedCount}</p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-amber-500/14 p-2.5 text-amber-800 ring-1 ring-amber-500/25">
               <UserMinus size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-rose-600">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Suspended</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">{suspendedCount}</p>
+              <p className="text-sm font-medium text-slate-600">Suspended</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">{suspendedCount}</p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-rose-600/12 p-2.5 text-rose-800 ring-1 ring-rose-600/20">
               <UserX size={18} />
             </span>
           </div>
@@ -154,6 +154,7 @@ export default function CommunityAdminMembersPage() {
         <Card
           title="Search"
           description="Filter the directory by username, email, or user ID."
+          className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
         >
           <Input
             value={memberSearch}
@@ -165,20 +166,20 @@ export default function CommunityAdminMembersPage() {
 
       <Card
         id="directory"
-        className="scroll-mt-6"
+        className="scroll-mt-6 border-l-[3px] border-l-slate-400"
         title="Member directory"
         description="Rows from the User table (role: STUDENT). Names and identifiers come from user records."
       >
         {membersError ? (
-          <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+          <p className="rounded-2xl border border-dashed border-rose-200/80 bg-rose-50/50 px-4 py-8 text-center text-sm text-rose-900/80">
             {membersError}
           </p>
         ) : membersLoading ? (
-          <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+          <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
             Loading community members…
           </p>
         ) : filteredMembers.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+          <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
             {members.length === 0
               ? "No student users found in the User table."
               : "No members match the current search."}
@@ -187,17 +188,20 @@ export default function CommunityAdminMembersPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[740px] text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-text/70">
-                  <th className="px-2 py-2.5 font-medium">Member</th>
-                  <th className="px-2 py-2.5 font-medium">Role</th>
-                  <th className="px-2 py-2.5 font-medium">Joined</th>
-                  <th className="px-2 py-2.5 font-medium">Posts/Replies</th>
-                  <th className="px-2 py-2.5 font-medium">Status</th>
+                <tr className="border-b border-primary/15 bg-gradient-to-r from-primary/[0.07] via-sky-500/[0.06] to-transparent text-left text-slate-600">
+                  <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-wide">Member</th>
+                  <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-wide">Role</th>
+                  <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-wide">Joined</th>
+                  <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-wide">Posts/Replies</th>
+                  <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-wide">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredMembers.map((member) => (
-                  <tr className="border-b border-border/70" key={member.id}>
+                  <tr
+                    className="border-b border-border/60 transition-colors hover:bg-primary/[0.03]"
+                    key={member.id}
+                  >
                     <td className="px-2 py-3 align-top">
                       <p className="font-medium text-heading">{member.name}</p>
                       <p className="text-xs text-text/70">{member.email}</p>

@@ -192,7 +192,11 @@ export default function CommunityAdminReportedPostsPage() {
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
       <section id="filters" className="scroll-mt-6">
-        <Card title="Filters" description="Filter the report queue by status.">
+        <Card
+          title="Filters"
+          description="Filter the report queue by status."
+          className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
+        >
           <Select
             value={reportStatusFilter}
             onChange={(event) => setReportStatusFilter(event.target.value as "" | ReportStatus)}
@@ -210,17 +214,18 @@ export default function CommunityAdminReportedPostsPage() {
         <Card
           title="Reported Posts"
           description="Only the report reason is shown here. Use Check post to open full details in a popup."
+          className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
         >
           {reportsError ? (
-            <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+            <p className="rounded-2xl border border-dashed border-rose-200/80 bg-rose-50/50 px-4 py-8 text-center text-sm text-rose-900/80">
               {reportsError}
             </p>
           ) : reportsLoading ? (
-            <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+            <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
               Loading reports…
             </p>
           ) : filteredReports.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-border bg-tint px-4 py-8 text-center text-sm text-text/70">
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
               {reports.length === 0
                 ? "No post reports yet."
                 : "No reports match this status filter."}
@@ -233,10 +238,10 @@ export default function CommunityAdminReportedPostsPage() {
                 return (
                   <div
                     className={cn(
-                      "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 transition-colors sm:flex-row sm:items-start sm:justify-between",
+                      "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 shadow-sm transition-colors sm:flex-row sm:items-start sm:justify-between",
                       opened
-                        ? "border-primary/35 bg-primary/10"
-                        : "border-border bg-card"
+                        ? "border-primary/40 bg-gradient-to-r from-primary/[0.12] to-sky-500/[0.08] ring-1 ring-primary/15"
+                        : "border-border/90 bg-card hover:border-amber-200/80 hover:bg-amber-50/25"
                     )}
                     key={report.id}
                   >
@@ -261,7 +266,7 @@ export default function CommunityAdminReportedPostsPage() {
 
       {detailReport ? (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-text/40 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-[2px]"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeModal();
@@ -272,14 +277,14 @@ export default function CommunityAdminReportedPostsPage() {
           <div
             aria-labelledby="report-detail-modal-title"
             aria-modal="true"
-            className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-[0_24px_56px_rgba(15,23,42,0.18)]"
+            className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border/80 bg-card shadow-[0_24px_56px_rgba(15,23,42,0.22)] ring-1 ring-primary/10"
             onMouseDown={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/80 bg-gradient-to-r from-primary/[0.08] via-sky-500/[0.05] to-transparent px-5 py-4">
               <div className="min-w-0">
                 <p
-                  className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55"
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-primary/80"
                   id="report-detail-modal-title"
                 >
                   Reported post details
@@ -309,34 +314,34 @@ export default function CommunityAdminReportedPostsPage() {
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-border bg-tint px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.08em] text-text/60">Report ID</p>
+                  <div className="rounded-2xl border border-sky-200/60 bg-sky-50/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.08em] text-sky-800/70">Report ID</p>
                     <p className="mt-1 break-all text-sm font-semibold text-heading">
                       {detailReport.id}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-border bg-tint px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.08em] text-text/60">Category</p>
+                  <div className="rounded-2xl border border-violet-200/60 bg-violet-50/35 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.08em] text-violet-800/70">Category</p>
                     <p className="mt-1 text-sm font-semibold text-heading">
                       {categoryLabel(detailReport.category)}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-border bg-tint px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.08em] text-text/60">Reported By</p>
+                  <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/35 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.08em] text-emerald-800/70">Reported By</p>
                     <p className="mt-1 text-sm font-semibold text-heading">
                       {detailReport.reportedBy}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-border bg-tint px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.08em] text-text/60">Post Author</p>
+                  <div className="rounded-2xl border border-amber-200/60 bg-amber-50/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.08em] text-amber-900/65">Post Author</p>
                     <p className="mt-1 text-sm font-semibold text-heading">
                       {detailReport.postAuthor}
                     </p>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-border bg-tint px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.08em] text-text/60">Post title</p>
+                <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/80 to-sky-50/30 px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.08em] text-slate-600">Post title</p>
                   <p className="mt-1 text-sm font-medium text-heading">{detailReport.postTitle}</p>
 
                   <p className="mt-4 text-xs uppercase tracking-[0.08em] text-text/60">Reason</p>

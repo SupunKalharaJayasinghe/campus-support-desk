@@ -55,9 +55,10 @@ const SUB_LINKS_DASHBOARD = [
 ];
 
 const navLinkClass =
-  "block rounded-xl border border-border bg-card px-3 py-2 text-sm whitespace-nowrap text-text/80 transition-colors hover:bg-tint hover:text-heading";
+  "block rounded-xl border border-border/90 bg-card/80 px-3 py-2 text-sm whitespace-nowrap text-text/80 shadow-sm transition-colors hover:border-primary/25 hover:bg-gradient-to-r hover:from-primary/[0.06] hover:to-sky-500/[0.04] hover:text-heading";
 
-const navLinkActiveClass = "border-primary/35 bg-primary/10 text-heading";
+const navLinkActiveClass =
+  "border-primary/40 bg-gradient-to-r from-primary/[0.12] to-sky-500/[0.08] text-heading shadow-sm ring-1 ring-primary/15";
 
 export default function CommunityAdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -96,33 +97,47 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
   };
 
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-bg">
-      <header className="flex shrink-0 flex-col gap-4 border-b border-border bg-card px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-heading sm:text-3xl">
-            {header.title}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text/72">{header.subtitle}</p>
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-gradient-to-br from-slate-100/90 via-bg to-sky-50/55">
+      <header className="flex shrink-0 flex-col border-b border-border/80 bg-card/95 shadow-[0_4px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+        <div
+          aria-hidden
+          className="h-1 w-full shrink-0 bg-gradient-to-r from-primary via-sky-500 to-indigo-500"
+        />
+        <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="mt-0.5 hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 via-primary/12 to-sky-400/15 text-primary shadow-sm ring-1 ring-primary/15 sm:flex">
+              <ShieldCheck size={22} strokeWidth={2} aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary/80">
+                Community moderation
+              </p>
+              <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-heading sm:text-3xl">
+                {header.title}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text/72">{header.subtitle}</p>
+            </div>
+          </div>
+          <Button
+            className="h-11 shrink-0 gap-2 !rounded-full px-5 shadow-md shadow-primary/20"
+            type="button"
+            variant="primary"
+          >
+            <ShieldCheck size={16} className="text-white/95" aria-hidden />
+            Moderation Rules
+          </Button>
         </div>
-        <Button
-          className="h-11 shrink-0 gap-2 !rounded-full border-heading/20 px-5 text-heading hover:border-heading/35 hover:bg-tint"
-          type="button"
-          variant="secondary"
-        >
-          <ShieldCheck size={16} className="text-heading/80" aria-hidden />
-          Moderation Rules
-        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-3 pb-3 pt-3 md:flex-row md:gap-6 md:px-5 md:pb-4 md:pt-4">
         <aside
           aria-label="Community admin navigation"
-          className="flex w-full shrink-0 flex-col border-b border-border pb-3 md:w-[260px] md:min-h-0 md:shrink-0 md:self-stretch md:border-b-0 md:border-r md:pb-0 md:pr-5"
+          className="flex w-full shrink-0 flex-col border-b border-border/70 pb-3 md:w-[260px] md:min-h-0 md:shrink-0 md:self-stretch md:border-b-0 md:border-r md:border-border/60 md:pb-0 md:pr-5"
         >
           <Card
             title="Sections"
             description="Move between dashboard areas."
-            className="min-h-0 rounded-2xl p-4 md:flex-1 md:overflow-y-auto md:overscroll-contain"
+            className="min-h-0 rounded-2xl border-primary/10 bg-card/90 p-4 shadow-[0_8px_30px_rgba(3,74,166,0.06)] backdrop-blur-sm md:flex-1 md:overflow-y-auto md:overscroll-contain"
           >
             <nav aria-label="Primary admin pages" className="space-y-1.5">
               {PRIMARY_NAV.map((item) => {
@@ -139,7 +154,7 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
               })}
             </nav>
 
-            <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-text/55">
+            <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-primary/65">
               On this page
             </p>
             <nav aria-label="In-page sections" className="mt-2 space-y-1.5">
@@ -154,7 +169,7 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
               ))}
             </nav>
           </Card>
-          <div className="mt-3 shrink-0 border-t border-border pt-3 md:mt-auto">
+          <div className="mt-3 shrink-0 border-t border-border/70 pt-3 md:mt-auto">
             <Button
               className="h-10 w-full gap-2 focus-visible:ring-red-500"
               type="button"

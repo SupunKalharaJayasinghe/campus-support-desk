@@ -122,57 +122,57 @@ export default function CommunityAdminDashboardPage() {
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
       <section id="overview" className="scroll-mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-primary">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Total Members</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">
+              <p className="text-sm font-medium text-slate-600">Total Members</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">
                 {membersLoading ? "…" : members.length}
               </p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-primary/12 p-2.5 text-primary ring-1 ring-primary/15">
               <Users size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-violet-500">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Reported Posts</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">
+              <p className="text-sm font-medium text-slate-600">Reported Posts</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">
                 {reportsLoading ? "…" : reports.length}
               </p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-violet-500/12 p-2.5 text-violet-700 ring-1 ring-violet-500/20">
               <Flag size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-amber-500">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Open Reports</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">
+              <p className="text-sm font-medium text-slate-600">Open Reports</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">
                 {statsReady ? openReportCount : "…"}
               </p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-amber-500/14 p-2.5 text-amber-800 ring-1 ring-amber-500/25">
               <AlertTriangle size={18} />
             </span>
           </div>
         </Card>
 
-        <Card accent>
+        <Card accent className="border-l-[3px] border-l-emerald-600">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-text/72">Closed today</p>
-              <p className="mt-2 text-2xl font-semibold text-heading">
+              <p className="text-sm font-medium text-slate-600">Closed today</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-heading">
                 {statsReady ? closedTodayCount : "…"}
               </p>
             </div>
-            <span className="rounded-2xl bg-primary/10 p-2 text-primary">
+            <span className="rounded-2xl bg-emerald-600/12 p-2.5 text-emerald-800 ring-1 ring-emerald-600/20">
               <Eye size={18} />
             </span>
           </div>
@@ -183,9 +183,10 @@ export default function CommunityAdminDashboardPage() {
         <Card
           title="Community members"
           description="Open the full student directory, search, and status breakdown."
+          className="border-l-[3px] border-l-primary bg-gradient-to-br from-card to-primary/[0.04]"
         >
           <Link href="/community-admin/members">
-            <Button className="h-10 w-full sm:w-auto" type="button" variant="secondary">
+            <Button className="h-10 w-full sm:w-auto" type="button" variant="primary">
               Open member directory
             </Button>
           </Link>
@@ -193,9 +194,14 @@ export default function CommunityAdminDashboardPage() {
         <Card
           title="Reported posts"
           description="Review the queue, read evidence, and update report status."
+          className="border-l-[3px] border-l-violet-500 bg-gradient-to-br from-card to-violet-500/[0.05]"
         >
           <Link href="/community-admin/reported-posts">
-            <Button className="h-10 w-full sm:w-auto" type="button" variant="secondary">
+            <Button
+              className="h-10 w-full border-violet-400/40 bg-violet-600 text-white hover:border-violet-500 hover:bg-violet-700 sm:w-auto"
+              type="button"
+              variant="secondary"
+            >
               Open reports
             </Button>
           </Link>
