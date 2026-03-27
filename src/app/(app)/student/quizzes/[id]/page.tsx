@@ -127,6 +127,7 @@ interface AnswerDraft {
 const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
 const STUDENT_PROFILE_EMPTY_MESSAGE =
   "Please make sure you're logged in with a valid student account, or contact your administrator.";
+const SHORT_ANSWER_MAX_LENGTH = 500;
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -324,11 +325,15 @@ function StudentProfileEmptyState({ onBack, onRetry }: { onBack: () => void; onR
 }
 
 function SubmitModal({
+  answeredCount,
+  totalQuestions,
   unanswered,
   onCancel,
   onConfirm,
   submitting,
 }: {
+  answeredCount: number;
+  totalQuestions: number;
   unanswered: number[];
   onCancel: () => void;
   onConfirm: () => void;
@@ -339,15 +344,31 @@ function SubmitModal({
       <div className="mx-auto max-w-xl rounded-[32px] border border-border bg-card p-6 shadow-[0_28px_70px_rgba(15,23,42,0.22)]">
         <h2 className="text-2xl font-semibold text-heading">Submit Quiz?</h2>
         <p className="mt-3 text-sm leading-6 text-text/72">
-          {unanswered.length > 0
-            ? `You still have ${unanswered.length} unanswered question${unanswered.length !== 1 ? "s" : ""}.`
-            : "You have answered every question."}
+          You answered {answeredCount} out of {totalQuestions} question
+          {totalQuestions === 1 ? "" : "s"}.
         </p>
         {unanswered.length > 0 ? (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            Unanswered: {unanswered.join(", ")}
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <AlertTriangle size={16} />
+              </span>
+              <div>
+                <p className="font-semibold">Some questions are still unanswered</p>
+                <p className="mt-1">Questions {unanswered.join(", ")} are unanswered.</p>
+              </div>
+            </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                <CheckCircle2 size={16} />
+              </span>
+              <span className="font-semibold">All questions answered. You are ready to submit.</span>
+            </div>
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-3">
           <Button onClick={onCancel} variant="secondary">
             Go Back &amp; Review
@@ -390,6 +411,8 @@ export default function StudentQuizAttemptPage() {
   const [timeUpOpen, setTimeUpOpen] = useState(false);
   const [displayedXpTotal, setDisplayedXpTotal] = useState(0);
   const timeUpTriggeredRef = useRef(false);
+  const fiveMinuteWarningShownRef = useRef(false);
+  const oneMinuteWarningShownRef = useRef(false);
 
   const answeredCount = useMemo(() => {
     const sourceQuestions = liveQuiz?.questions ?? [];
@@ -432,6 +455,21 @@ export default function StudentQuizAttemptPage() {
     const effectiveDeadline = Math.min(attemptDeadline, deadlineAt);
     return Math.max(0, Math.floor((effectiveDeadline - timeTick) / 1000));
   }, [attemptInfo, liveQuiz, reviewData, submission, timeTick]);
+  const timerWarningLevel = useMemo(() => {
+    if (!attemptInfo || !liveQuiz || submission || reviewData) {
+      return null;
+    }
+
+    if (remainingSeconds <= 60) {
+      return "critical";
+    }
+
+    if (remainingSeconds <= 300) {
+      return "warning";
+    }
+
+    return null;
+  }, [attemptInfo, liveQuiz, remainingSeconds, reviewData, submission]);
 
   useEffect(() => {
     void initializePage();
@@ -532,6 +570,31 @@ export default function StudentQuizAttemptPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptInfo, liveQuiz, remainingSeconds, reviewData, submission, toast]);
 
+  useEffect(() => {
+    if (!attemptInfo || !liveQuiz || submission || reviewData) {
+      return;
+    }
+
+    if (remainingSeconds <= 60 && !oneMinuteWarningShownRef.current) {
+      oneMinuteWarningShownRef.current = true;
+      toast({
+        title: "Final minute",
+        message: "Less than 1 minute remains. Review and submit now.",
+        variant: "error",
+      });
+      return;
+    }
+
+    if (remainingSeconds <= 300 && !fiveMinuteWarningShownRef.current) {
+      fiveMinuteWarningShownRef.current = true;
+      toast({
+        title: "Time running low",
+        message: "5 minutes remaining. Finish reviewing your answers.",
+        variant: "info",
+      });
+    }
+  }, [attemptInfo, liveQuiz, remainingSeconds, reviewData, submission, toast]);
+
   async function initializePage() {
     setLoading(true);
     setError("");
@@ -620,6 +683,11 @@ export default function StudentQuizAttemptPage() {
         timeLimit: payload.data.quiz.duration,
         deadline: payload.data.quiz.deadline ?? new Date().toISOString(),
       });
+      setTimeTick(Date.now());
+      setTimeUpOpen(false);
+      timeUpTriggeredRef.current = false;
+      fiveMinuteWarningShownRef.current = false;
+      oneMinuteWarningShownRef.current = false;
       const storedAnswers = window.localStorage.getItem(`unihub_quiz_answers_${payload.data.attempt.id}`);
       if (storedAnswers) {
         setAnswers(JSON.parse(storedAnswers) as Record<string, AnswerDraft>);
@@ -661,6 +729,8 @@ export default function StudentQuizAttemptPage() {
       setTimeTick(Date.now());
       setTimeUpOpen(false);
       timeUpTriggeredRef.current = false;
+      fiveMinuteWarningShownRef.current = false;
+      oneMinuteWarningShownRef.current = false;
 
       const storedAnswers = window.localStorage.getItem(`unihub_quiz_answers_${payload.data.attempt.id}`);
       setAnswers(storedAnswers ? (JSON.parse(storedAnswers) as Record<string, AnswerDraft>) : {});
@@ -691,8 +761,18 @@ export default function StudentQuizAttemptPage() {
       [questionId]: {
         ...previous[questionId],
         ...patch,
+        ...(typeof patch.answerText === "string"
+          ? { answerText: patch.answerText.slice(0, SHORT_ANSWER_MAX_LENGTH) }
+          : {}),
       },
     }));
+  }
+
+  function handleReviewFromSubmitModal() {
+    setSubmitModalOpen(false);
+    if (unansweredQuestions.length > 0) {
+      setCurrentIndex(Math.max(0, unansweredQuestions[0] - 1));
+    }
   }
 
   async function submitQuiz(isAutomatic = false) {
@@ -1077,6 +1157,44 @@ export default function StudentQuizAttemptPage() {
             </Card>
           </section>
 
+          {timerWarningLevel ? (
+            <Card
+              className={cn(
+                timerWarningLevel === "critical"
+                  ? "border-rose-200 bg-rose-50"
+                  : "border-amber-200 bg-amber-50"
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-2xl",
+                    timerWarningLevel === "critical"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
+                  )}
+                >
+                  <AlertTriangle size={20} />
+                </span>
+                <div>
+                  <p
+                    className={cn(
+                      "text-sm font-semibold uppercase tracking-[0.12em]",
+                      timerWarningLevel === "critical" ? "text-rose-700" : "text-amber-700"
+                    )}
+                  >
+                    {timerWarningLevel === "critical" ? "Final Minute" : "Time Running Low"}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-text/72">
+                    {timerWarningLevel === "critical"
+                      ? "Less than one minute remains. Submit as soon as you are ready."
+                      : "Five minutes remain. Review unanswered questions and prepare to submit."}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ) : null}
+
           {currentQuestion ? (
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
               <Card className="border-slate-200 bg-white">
@@ -1092,12 +1210,30 @@ export default function StudentQuizAttemptPage() {
 
                 <div className="mt-6">
                   {currentQuestion.questionType === "short-answer" ? (
-                    <textarea
-                      className="min-h-[180px] w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition-colors focus-visible:border-primary focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-focus"
-                      onChange={(event) => updateAnswer(currentQuestion._id, { answerText: event.target.value })}
-                      placeholder="Type your answer here"
-                      value={answers[currentQuestion._id]?.answerText ?? ""}
-                    />
+                    <div className="space-y-2">
+                      <textarea
+                        className="min-h-[180px] w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition-colors focus-visible:border-primary focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-focus"
+                        maxLength={SHORT_ANSWER_MAX_LENGTH}
+                        onChange={(event) =>
+                          updateAnswer(currentQuestion._id, {
+                            answerText: event.target.value,
+                          })
+                        }
+                        placeholder="Type your answer here"
+                        value={answers[currentQuestion._id]?.answerText ?? ""}
+                      />
+                      <div className="flex justify-between text-xs text-text/60">
+                        <span>Short answers can be left blank, but they are trimmed before submission.</span>
+                        <span
+                          className={cn(
+                            (answers[currentQuestion._id]?.answerText?.length ?? 0) >= 450 &&
+                              "font-semibold text-amber-700"
+                          )}
+                        >
+                          {(answers[currentQuestion._id]?.answerText?.length ?? 0)} / {SHORT_ANSWER_MAX_LENGTH}
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <div className="space-y-3">
                       {currentQuestion.options.map((option) => {
@@ -1238,9 +1374,11 @@ export default function StudentQuizAttemptPage() {
 
       {submitModalOpen ? (
         <SubmitModal
-          onCancel={() => setSubmitModalOpen(false)}
+          answeredCount={answeredCount}
+          onCancel={handleReviewFromSubmitModal}
           onConfirm={() => void submitQuiz()}
           submitting={submitting}
+          totalQuestions={liveQuiz?.questions.length ?? previewQuiz.questions.length}
           unanswered={unansweredQuestions}
         />
       ) : null}

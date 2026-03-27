@@ -23,6 +23,7 @@ import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
 import { readStoredUser } from "@/lib/rbac";
+import { validateNumericInputString } from "@/lib/validation-utils";
 
 type EntryView = "entry" | "all";
 type PageSize = 10 | 25 | 50 | 100;
@@ -105,6 +106,25 @@ interface GradePreview {
   status: GradeStatus | null;
 }
 
+interface EntryGradeRowTouchedState {
+  caMarksInput?: boolean;
+  finalExamMarksInput?: boolean;
+}
+
+interface EntryRowValidation {
+  caError: string | null;
+  finalError: string | null;
+  rowError: string | null;
+  skipped: boolean;
+  ready: boolean;
+  hasError: boolean;
+}
+
+interface EditGradeTouchedState {
+  caMarks: boolean;
+  finalExamMarks: boolean;
+}
+
 function cn(...classes: Array<string | undefined | false>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -182,8 +202,13 @@ function parseMarkValue(value: string): ParsedMark {
     };
   }
 
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+  const validationError = validateNumericInputString(normalized, {
+    fieldName: "Marks",
+    min: 0,
+    max: 100,
+    maxDecimals: 2,
+  });
+  if (validationError) {
     return {
       empty: false,
       invalid: true,
@@ -191,6 +216,7 @@ function parseMarkValue(value: string): ParsedMark {
     };
   }
 
+  const parsed = Number(normalized);
   return {
     empty: false,
     invalid: false,
@@ -198,8 +224,97 @@ function parseMarkValue(value: string): ParsedMark {
   };
 }
 
-function isMarkInvalid(value: string) {
-  return parseMarkValue(value).invalid;
+function normalizeMarkValidationMessage(message: string) {
+  if (message.includes("at most 2 decimal places")) {
+    return "Use at most 2 decimal places";
+  }
+  if (message.includes("between 0 and 100")) {
+    return "Must be 0–100";
+  }
+  if (message.includes("number")) {
+    return "Invalid number";
+  }
+  return message;
+}
+
+function validateBulkMarkField(
+  value: string,
+  fieldLabel: "CA marks" | "Final Exam marks",
+  companionLabel: "CA marks" | "Final Exam marks",
+  companionValue: string
+) {
+  const normalized = value.trim();
+  const companionNormalized = companionValue.trim();
+
+  if (!normalized) {
+    return companionNormalized ? `Required if ${companionLabel} are entered` : null;
+  }
+
+  const validationError = validateNumericInputString(normalized, {
+    fieldName: fieldLabel,
+    min: 0,
+    max: 100,
+    maxDecimals: 2,
+  });
+
+  return validationError ? normalizeMarkValidationMessage(validationError) : null;
+}
+
+function validateRequiredMarkField(value: string, fieldLabel: "CA marks" | "Final Exam marks") {
+  const normalized = value.trim();
+  if (!normalized) {
+    return `${fieldLabel} is required`;
+  }
+
+  const validationError = validateNumericInputString(normalized, {
+    fieldName: fieldLabel,
+    required: true,
+    min: 0,
+    max: 100,
+    maxDecimals: 2,
+  });
+
+  return validationError ? normalizeMarkValidationMessage(validationError) : null;
+}
+
+function getEntryRowValidation(row: EntryGradeRow): EntryRowValidation {
+  const caEmpty = !row.caMarksInput.trim();
+  const finalEmpty = !row.finalExamMarksInput.trim();
+
+  if (caEmpty && finalEmpty) {
+    return {
+      caError: null,
+      finalError: null,
+      rowError: null,
+      skipped: true,
+      ready: false,
+      hasError: false,
+    };
+  }
+
+  const caError = validateBulkMarkField(
+    row.caMarksInput,
+    "CA marks",
+    "Final Exam marks",
+    row.finalExamMarksInput
+  );
+  const finalError = validateBulkMarkField(
+    row.finalExamMarksInput,
+    "Final Exam marks",
+    "CA marks",
+    row.caMarksInput
+  );
+  const rowError = caEmpty !== finalEmpty ? "Both CA and Final Exam marks are required" : null;
+  const hasError = Boolean(caError || finalError || rowError);
+
+  return {
+    caError,
+    finalError,
+    rowError,
+    skipped: false,
+    ready: !hasError,
+    hasError,
+  };
 }
 
 function determineGradeLetter(totalMarks: number): GradeLetter {
@@ -557,6 +672,7 @@ export default function GradesAdminPage() {
   const [entryAcademicYear, setEntryAcademicYear] = useState(defaultAcademicYear);
   const [entrySemester, setEntrySemester] = useState<"" | "1" | "2">("");
   const [entryRows, setEntryRows] = useState<EntryGradeRow[]>([]);
+  const [entryTouched, setEntryTouched] = useState<Record<string, EntryGradeRowTouchedState>>({});
   const [isLoadingEntryRows, setIsLoadingEntryRows] = useState(false);
   const [entryError, setEntryError] = useState("");
   const [isSavingAll, setIsSavingAll] = useState(false);
@@ -579,6 +695,10 @@ export default function GradesAdminPage() {
   const [editFinalExamMarks, setEditFinalExamMarks] = useState("");
   const [editRemarks, setEditRemarks] = useState("");
   const [editError, setEditError] = useState("");
+  const [editTouched, setEditTouched] = useState<EditGradeTouchedState>({
+    caMarks: false,
+    finalExamMarks: false,
+  });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<GradeRecord | null>(null);
@@ -595,12 +715,14 @@ export default function GradesAdminPage() {
         const caState = parseMarkValue(row.caMarksInput);
         const finalState = parseMarkValue(row.finalExamMarksInput);
         const preview = buildPreview(row.caMarksInput, row.finalExamMarksInput);
+        const validation = getEntryRowValidation(row);
 
         return {
           row,
           caState,
           finalState,
           preview,
+          validation,
         };
       }),
     [entryRows]
@@ -643,22 +765,27 @@ export default function GradesAdminPage() {
 
   const invalidEntryCount = useMemo(
     () =>
-      entryRowsWithPreview.filter(({ caState, finalState }) => caState.invalid || finalState.invalid)
-        .length,
+      entryRowsWithPreview.filter(({ validation }) => validation.hasError).length,
+    [entryRowsWithPreview]
+  );
+
+  const skippedEntryCount = useMemo(
+    () => entryRowsWithPreview.filter(({ validation }) => validation.skipped).length,
+    [entryRowsWithPreview]
+  );
+
+  const readyEntryCount = useMemo(
+    () => entryRowsWithPreview.filter(({ validation }) => validation.ready).length,
     [entryRowsWithPreview]
   );
 
   const savableEntryRows = useMemo(
     () =>
       entryRowsWithPreview
-        .filter(
-          ({ caState, finalState }) =>
-            !caState.invalid &&
-            !finalState.invalid &&
-            !caState.empty &&
-            !finalState.empty &&
-            caState.value !== null &&
-            finalState.value !== null
+        .filter(({ validation, caState, finalState }) =>
+          validation.ready &&
+          caState.value !== null &&
+          finalState.value !== null
         )
         .map(({ row, caState, finalState }) => ({
           studentId: row.studentId,
@@ -678,6 +805,25 @@ export default function GradesAdminPage() {
     () => parseMarkValue(editFinalExamMarks),
     [editFinalExamMarks]
   );
+  const editCaValidationError = useMemo(
+    () => validateRequiredMarkField(editCaMarks, "CA marks"),
+    [editCaMarks]
+  );
+  const editFinalValidationError = useMemo(
+    () => validateRequiredMarkField(editFinalExamMarks, "Final Exam marks"),
+    [editFinalExamMarks]
+  );
+  const editHasChanges = useMemo(() => {
+    if (!editTarget) {
+      return false;
+    }
+
+    return (
+      editCaState.value !== roundToTwo(editTarget.caMarks) ||
+      editFinalState.value !== roundToTwo(editTarget.finalExamMarks) ||
+      collapseSpaces(editRemarks) !== collapseSpaces(editTarget.remarks)
+    );
+  }, [editCaState.value, editFinalState.value, editRemarks, editTarget]);
 
   const isOverlayOpen = Boolean(editTarget || deleteTarget || clearConfirmOpen);
 
@@ -757,6 +903,7 @@ export default function GradesAdminPage() {
     async (offeringId: string) => {
       if (!offeringId) {
         setEntryRows([]);
+        setEntryTouched({});
         setEntryError("");
         return;
       }
@@ -805,6 +952,7 @@ export default function GradesAdminPage() {
             } satisfies EntryGradeRow;
           })
         );
+        setEntryTouched({});
 
         const firstGrade = grades[0] ?? null;
         setEntryAcademicYear(firstGrade?.academicYear || defaultAcademicYear());
@@ -878,6 +1026,7 @@ export default function GradesAdminPage() {
   useEffect(() => {
     if (!selectedOfferingId) {
       setEntryRows([]);
+      setEntryTouched({});
       setEntryError("");
       return;
     }
@@ -910,6 +1059,10 @@ export default function GradesAdminPage() {
       setEditFinalExamMarks("");
       setEditRemarks("");
       setEditError("");
+      setEditTouched({
+        caMarks: false,
+        finalExamMarks: false,
+      });
       return;
     }
 
@@ -917,6 +1070,10 @@ export default function GradesAdminPage() {
     setEditFinalExamMarks(String(editTarget.finalExamMarks));
     setEditRemarks(editTarget.remarks);
     setEditError("");
+    setEditTouched({
+      caMarks: false,
+      finalExamMarks: false,
+    });
   }, [editTarget]);
 
   useEffect(() => {
@@ -951,6 +1108,45 @@ export default function GradesAdminPage() {
     []
   );
 
+  const markEntryFieldTouched = useCallback(
+    (studentId: string, field: keyof EntryGradeRowTouchedState) => {
+      setEntryTouched((previous) => ({
+        ...previous,
+        [studentId]: {
+          ...previous[studentId],
+          [field]: true,
+        },
+      }));
+    },
+    []
+  );
+
+  const markAllEntryRowsTouched = useCallback(() => {
+    setEntryTouched(
+      Object.fromEntries(
+        entryRows.map((row) => [
+          row.studentId,
+          { caMarksInput: true, finalExamMarksInput: true } satisfies EntryGradeRowTouchedState,
+        ])
+      )
+    );
+  }, [entryRows]);
+
+  const focusFirstInvalidEntryField = useCallback(() => {
+    const firstInvalid = entryRowsWithPreview.find(({ validation }) => validation.hasError);
+    if (!firstInvalid) {
+      return;
+    }
+
+    const targetId = firstInvalid.validation.caError
+      ? `entry-ca-${firstInvalid.row.studentId}`
+      : `entry-final-${firstInvalid.row.studentId}`;
+    const element = document.getElementById(targetId);
+    if (element instanceof HTMLElement) {
+      element.focus();
+    }
+  }, [entryRowsWithPreview]);
+
   const handleSaveAllGrades = useCallback(async () => {
     if (!selectedOfferingId) {
       toast({
@@ -979,6 +1175,8 @@ export default function GradesAdminPage() {
       return;
     }
 
+    markAllEntryRowsTouched();
+
     if (savableEntryRows.length === 0) {
       toast({
         title: "No complete grades to save",
@@ -989,9 +1187,10 @@ export default function GradesAdminPage() {
     }
 
     if (invalidEntryCount > 0) {
+      focusFirstInvalidEntryField();
       toast({
         title: "Fix invalid marks first",
-        message: "Marks must be numbers between 0 and 100 before saving.",
+        message: "Fix validation errors in the grade table before saving.",
         variant: "error",
       });
       return;
@@ -1038,9 +1237,11 @@ export default function GradesAdminPage() {
     currentUser?.id,
     entryAcademicYear,
     entrySemester,
+    focusFirstInvalidEntryField,
     invalidEntryCount,
     loadAllGrades,
     loadEntryRows,
+    markAllEntryRowsTouched,
     savableEntryRows,
     selectedOfferingId,
     toast,
@@ -1051,16 +1252,31 @@ export default function GradesAdminPage() {
       return;
     }
 
-    const caState = parseMarkValue(editCaMarks);
-    const finalState = parseMarkValue(editFinalExamMarks);
+    setEditTouched({
+      caMarks: true,
+      finalExamMarks: true,
+    });
 
-    if (caState.empty || caState.invalid || caState.value === null) {
-      setEditError("CA marks must be a number between 0 and 100.");
+    if (editCaValidationError) {
+      setEditError(editCaValidationError);
+      const element = document.getElementById("edit-ca-marks");
+      if (element instanceof HTMLElement) {
+        element.focus();
+      }
       return;
     }
 
-    if (finalState.empty || finalState.invalid || finalState.value === null) {
-      setEditError("Final exam marks must be a number between 0 and 100.");
+    if (editFinalValidationError) {
+      setEditError(editFinalValidationError);
+      const element = document.getElementById("edit-final-marks");
+      if (element instanceof HTMLElement) {
+        element.focus();
+      }
+      return;
+    }
+
+    if (!editHasChanges) {
+      setEditError("Update at least one field before saving.");
       return;
     }
 
@@ -1074,8 +1290,8 @@ export default function GradesAdminPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          caMarks: caState.value,
-          finalExamMarks: finalState.value,
+          caMarks: editCaState.value,
+          finalExamMarks: editFinalState.value,
           remarks: editRemarks,
           gradedBy: currentUser?.id,
         }),
@@ -1110,8 +1326,11 @@ export default function GradesAdminPage() {
     }
   }, [
     currentUser?.id,
-    editCaMarks,
-    editFinalExamMarks,
+    editCaState.value,
+    editCaValidationError,
+    editFinalState.value,
+    editFinalValidationError,
+    editHasChanges,
     editRemarks,
     editTarget,
     loadAllGrades,
@@ -1164,15 +1383,27 @@ export default function GradesAdminPage() {
     Boolean(selectedOfferingId) &&
     Boolean(entryAcademicYear.trim()) &&
     (entrySemester === "1" || entrySemester === "2") &&
-    savableEntryRows.length > 0 &&
+    readyEntryCount > 0 &&
     invalidEntryCount === 0 &&
     !isSavingAll;
+  const saveAllDisabledReason = !selectedOfferingId
+    ? "Select a module offering before saving"
+    : !entryAcademicYear.trim()
+      ? "Enter an academic year before saving"
+      : !(entrySemester === "1" || entrySemester === "2")
+        ? "Select semester 1 or 2 before saving"
+        : invalidEntryCount > 0
+          ? "Fix validation errors before saving"
+          : readyEntryCount === 0
+            ? "Enter marks for at least one student"
+            : isSavingAll
+              ? "Grades are currently being saved"
+              : "";
   const canSaveEdit =
     Boolean(editTarget) &&
-    !editCaState.invalid &&
-    !editFinalState.invalid &&
-    !editCaState.empty &&
-    !editFinalState.empty &&
+    !editCaValidationError &&
+    !editFinalValidationError &&
+    editHasChanges &&
     !isSavingEdit;
 
   return (
@@ -1381,7 +1612,18 @@ export default function GradesAdminPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-card">
-                      {entryRowsWithPreview.map(({ row, preview }, index) => (
+                      {entryRowsWithPreview.map(({ row, preview, validation }, index) => {
+                        const fieldTouched = entryTouched[row.studentId] ?? {};
+                        const showCaError = Boolean(fieldTouched.caMarksInput && validation.caError);
+                        const showFinalError = Boolean(
+                          fieldTouched.finalExamMarksInput && validation.finalError
+                        );
+                        const showRowError = Boolean(
+                          (fieldTouched.caMarksInput || fieldTouched.finalExamMarksInput) &&
+                            validation.rowError
+                        );
+
+                        return (
                         <tr className="align-top" key={row.studentId}>
                           <td className="px-4 py-3 text-text/55">{index + 1}</td>
                           <td className="px-4 py-3">
@@ -1396,11 +1638,14 @@ export default function GradesAdminPage() {
                           </td>
                           <td className="px-4 py-3">
                             <Input
+                              aria-describedby={showCaError ? `entry-ca-error-${row.studentId}` : undefined}
+                              aria-invalid={showCaError}
                               className={cn(
                                 "min-w-[130px]",
-                                isMarkInvalid(row.caMarksInput) &&
+                                showCaError &&
                                   "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                               )}
+                              id={`entry-ca-${row.studentId}`}
                               inputMode="decimal"
                               max={100}
                               min={0}
@@ -1409,18 +1654,31 @@ export default function GradesAdminPage() {
                                   caMarksInput: event.target.value,
                                 })
                               }
+                              onBlur={() => markEntryFieldTouched(row.studentId, "caMarksInput")}
                               placeholder="0 - 100"
+                              step="0.01"
                               type="number"
                               value={row.caMarksInput}
                             />
+                            {showCaError ? (
+                              <p
+                                className="mt-2 text-xs text-rose-700"
+                                id={`entry-ca-error-${row.studentId}`}
+                              >
+                                {validation.caError}
+                              </p>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3">
                             <Input
+                              aria-describedby={showFinalError ? `entry-final-error-${row.studentId}` : undefined}
+                              aria-invalid={showFinalError}
                               className={cn(
                                 "min-w-[130px]",
-                                isMarkInvalid(row.finalExamMarksInput) &&
+                                showFinalError &&
                                   "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                               )}
+                              id={`entry-final-${row.studentId}`}
                               inputMode="decimal"
                               max={100}
                               min={0}
@@ -1429,10 +1687,20 @@ export default function GradesAdminPage() {
                                   finalExamMarksInput: event.target.value,
                                 })
                               }
+                              onBlur={() => markEntryFieldTouched(row.studentId, "finalExamMarksInput")}
                               placeholder="0 - 100"
+                              step="0.01"
                               type="number"
                               value={row.finalExamMarksInput}
                             />
+                            {showFinalError ? (
+                              <p
+                                className="mt-2 text-xs text-rose-700"
+                                id={`entry-final-error-${row.studentId}`}
+                              >
+                                {validation.finalError}
+                              </p>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3">
                             <span className="font-semibold text-heading">
@@ -1446,19 +1714,28 @@ export default function GradesAdminPage() {
                           </td>
                           <td className="px-4 py-3">
                             {preview.status ? <StatusBadge status={preview.status} /> : "—"}
+                            {showRowError ? (
+                              <p className="mt-2 text-xs text-rose-700">{validation.rowError}</p>
+                            ) : null}
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
 
                 <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-text/68">
-                    {invalidEntryCount > 0
-                      ? `${invalidEntryCount} row${invalidEntryCount === 1 ? "" : "s"} contain invalid marks and must be fixed before saving.`
-                      : `${savableEntryRows.length} row${savableEntryRows.length === 1 ? "" : "s"} are ready to save.`}
-                  </p>
+                  <div className="space-y-1 text-sm text-text/68">
+                    <p className="text-emerald-700">
+                      {readyEntryCount} student{readyEntryCount === 1 ? "" : "s"} ready to save
+                    </p>
+                    <p className={invalidEntryCount > 0 ? "text-amber-700" : undefined}>
+                      {invalidEntryCount} student{invalidEntryCount === 1 ? "" : "s"} with validation
+                      {" "}errors
+                    </p>
+                    <p>{skippedEntryCount} student{skippedEntryCount === 1 ? "" : "s"} skipped</p>
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -1467,7 +1744,12 @@ export default function GradesAdminPage() {
                     >
                       Clear All
                     </Button>
-                    <Button className="gap-2" disabled={!canSaveAll} onClick={() => void handleSaveAllGrades()}>
+                    <Button
+                      className="gap-2"
+                      disabled={!canSaveAll}
+                      onClick={() => void handleSaveAllGrades()}
+                      title={!canSaveAll ? saveAllDisabledReason : undefined}
+                    >
                       {isSavingAll ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                       Save All Grades
                     </Button>
@@ -1678,6 +1960,7 @@ export default function GradesAdminPage() {
               finalExamMarksInput: "",
             }))
           );
+          setEntryTouched({});
           setClearConfirmOpen(false);
         }}
         open={clearConfirmOpen}
@@ -1719,17 +2002,34 @@ export default function GradesAdminPage() {
                   CA Marks
                 </span>
                 <Input
+                  aria-describedby={editTouched.caMarks && editCaValidationError ? "edit-ca-error" : undefined}
+                  aria-invalid={editTouched.caMarks && Boolean(editCaValidationError)}
                   className={cn(
-                    editCaState.invalid &&
+                    Boolean(editTouched.caMarks && editCaValidationError) &&
                       "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                   )}
+                  id="edit-ca-marks"
                   inputMode="decimal"
                   max={100}
                   min={0}
-                  onChange={(event) => setEditCaMarks(event.target.value)}
+                  onBlur={() =>
+                    setEditTouched((previous) => ({ ...previous, caMarks: true }))
+                  }
+                  onChange={(event) => {
+                    setEditCaMarks(event.target.value);
+                    if (editError) {
+                      setEditError("");
+                    }
+                  }}
+                  step="0.01"
                   type="number"
                   value={editCaMarks}
                 />
+                {editTouched.caMarks && editCaValidationError ? (
+                  <p className="text-xs text-rose-700" id="edit-ca-error">
+                    {editCaValidationError}
+                  </p>
+                ) : null}
               </label>
 
               <label className="space-y-2">
@@ -1737,17 +2037,40 @@ export default function GradesAdminPage() {
                   Final Exam Marks
                 </span>
                 <Input
+                  aria-describedby={
+                    editTouched.finalExamMarks && editFinalValidationError
+                      ? "edit-final-error"
+                      : undefined
+                  }
+                  aria-invalid={
+                    editTouched.finalExamMarks && Boolean(editFinalValidationError)
+                  }
                   className={cn(
-                    editFinalState.invalid &&
+                    Boolean(editTouched.finalExamMarks && editFinalValidationError) &&
                       "border-rose-300 bg-rose-50 text-rose-700 focus-visible:border-rose-400 focus-visible:ring-rose-200"
                   )}
+                  id="edit-final-marks"
                   inputMode="decimal"
                   max={100}
                   min={0}
-                  onChange={(event) => setEditFinalExamMarks(event.target.value)}
+                  onBlur={() =>
+                    setEditTouched((previous) => ({ ...previous, finalExamMarks: true }))
+                  }
+                  onChange={(event) => {
+                    setEditFinalExamMarks(event.target.value);
+                    if (editError) {
+                      setEditError("");
+                    }
+                  }}
+                  step="0.01"
                   type="number"
                   value={editFinalExamMarks}
                 />
+                {editTouched.finalExamMarks && editFinalValidationError ? (
+                  <p className="text-xs text-rose-700" id="edit-final-error">
+                    {editFinalValidationError}
+                  </p>
+                ) : null}
               </label>
             </div>
 
@@ -1793,7 +2116,12 @@ export default function GradesAdminPage() {
               <Button disabled={isSavingEdit} onClick={() => setEditTarget(null)} variant="secondary">
                 Cancel
               </Button>
-              <Button className="gap-2" disabled={!canSaveEdit} onClick={() => void handleSaveEdit()}>
+              <Button
+                className="gap-2"
+                disabled={!canSaveEdit}
+                onClick={() => void handleSaveEdit()}
+                title={!canSaveEdit && !editHasChanges ? "No changes to save" : undefined}
+              >
                 {isSavingEdit ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 Save Changes
               </Button>

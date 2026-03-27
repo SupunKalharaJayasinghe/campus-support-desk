@@ -27,12 +27,20 @@ import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
 import { readStoredUser } from "@/lib/rbac";
+import {
+  collapseValidationWhitespace,
+  countValidationMessages,
+  validateDateTimeInput,
+  validateNumericInputString,
+  validateTextInput,
+} from "@/lib/validation-utils";
 
 type PageSize = 10 | 25 | 50 | 100;
 type QuizStatus = "draft" | "published" | "closed" | "archived";
 type QuestionType = "mcq" | "true-false" | "short-answer";
 type SortOption = "newest" | "deadline" | "title";
 type ResultSortKey = "score" | "name" | "time";
+type QuizValidationMode = "draft" | "publish";
 
 interface ModuleOfferingOption {
   id: string;
@@ -177,6 +185,7 @@ interface QuizFormErrors {
   deadline?: string;
   startDate?: string;
   passingMarks?: string;
+  maxAttempts?: string;
   questions?: string;
   questionErrors: Record<string, string>;
 }
@@ -191,6 +200,14 @@ function collapseSpaces(value: unknown) {
 
 function normalizeText(value: unknown) {
   return collapseSpaces(value).toLowerCase();
+}
+
+function buildQuestionValidationKey(questionId: string, field: string) {
+  return `q-${questionId}-${field}`;
+}
+
+function toValidationElementId(key: string) {
+  return `quiz-validation-${key}`;
 }
 
 function createId() {
@@ -471,75 +488,298 @@ function normalizeQuestionsForSave(questions: QuizQuestionForm[]) {
   });
 }
 
-function validateQuizForm(form: QuizFormState): QuizFormErrors {
+function countQuizValidationErrors(errors: QuizFormErrors) {
+  return countValidationMessages([
+    errors.title,
+    errors.moduleOfferingId,
+    errors.duration,
+    errors.deadline,
+    errors.startDate,
+    errors.passingMarks,
+    errors.maxAttempts,
+    errors.questions,
+  ]) + Object.keys(errors.questionErrors).length;
+}
+
+function buildVisibleQuizErrors(
+  errors: QuizFormErrors,
+  touchedFields: Record<string, boolean>
+): QuizFormErrors {
+  const visible: QuizFormErrors = { questionErrors: {} };
+
+  if (touchedFields.title) visible.title = errors.title;
+  if (touchedFields.moduleOfferingId) visible.moduleOfferingId = errors.moduleOfferingId;
+  if (touchedFields.duration) visible.duration = errors.duration;
+  if (touchedFields.deadline) visible.deadline = errors.deadline;
+  if (touchedFields.startDate) visible.startDate = errors.startDate;
+  if (touchedFields.passingMarks) visible.passingMarks = errors.passingMarks;
+  if (touchedFields.maxAttempts) visible.maxAttempts = errors.maxAttempts;
+  if (touchedFields.questions) visible.questions = errors.questions;
+
+  Object.entries(errors.questionErrors).forEach(([key, value]) => {
+    if (touchedFields[key]) {
+      visible.questionErrors[key] = value;
+    }
+  });
+
+  return visible;
+}
+
+function buildTouchedFieldsForMode(
+  form: QuizFormState,
+  mode: QuizValidationMode
+): Record<string, boolean> {
+  const touched: Record<string, boolean> = {
+    title: true,
+    moduleOfferingId: true,
+  };
+
+  if (mode === "draft") {
+    return touched;
+  }
+
+  touched.duration = true;
+  touched.deadline = true;
+  touched.startDate = true;
+  touched.passingMarks = true;
+  touched.maxAttempts = true;
+  touched.questions = true;
+
+  form.questions.forEach((question) => {
+    touched[buildQuestionValidationKey(question.id, "text")] = true;
+    touched[buildQuestionValidationKey(question.id, "marks")] = true;
+
+    if (question.questionType === "short-answer") {
+      touched[buildQuestionValidationKey(question.id, "correct")] = true;
+      return;
+    }
+
+    touched[buildQuestionValidationKey(question.id, "options")] = true;
+    touched[buildQuestionValidationKey(question.id, "correct-option")] = true;
+
+    question.options.forEach((option) => {
+      touched[buildQuestionValidationKey(question.id, `option-${option.id}`)] = true;
+    });
+  });
+
+  return touched;
+}
+
+function focusFirstQuizValidationError(errors: QuizFormErrors) {
+  const topLevelOrder: Array<Exclude<keyof QuizFormErrors, "questionErrors">> = [
+    "title",
+    "moduleOfferingId",
+    "duration",
+    "deadline",
+    "startDate",
+    "passingMarks",
+    "maxAttempts",
+    "questions",
+  ];
+
+  for (const key of topLevelOrder) {
+    if (errors[key]) {
+      const target = document.getElementById(toValidationElementId(String(key)));
+      if (target instanceof HTMLElement) {
+        target.focus();
+      }
+      return;
+    }
+  }
+
+  const firstQuestionError = Object.keys(errors.questionErrors)[0];
+  if (!firstQuestionError) {
+    return;
+  }
+
+  const directTarget = document.getElementById(toValidationElementId(firstQuestionError));
+  if (directTarget instanceof HTMLElement) {
+    directTarget.focus();
+    return;
+  }
+
+  const questionKeyMatch = /^q-([^-]+(?:-[^-]+)*)-(text|marks|correct|correct-option|options|option-.+)$/.exec(
+    firstQuestionError
+  );
+  if (!questionKeyMatch) {
+    return;
+  }
+
+  const [, questionId, fieldSuffix] = questionKeyMatch;
+  const fallbackId =
+    fieldSuffix === "options" || fieldSuffix.startsWith("option-")
+      ? toValidationElementId(buildQuestionValidationKey(questionId, "option-primary"))
+      : fieldSuffix === "correct-option"
+        ? toValidationElementId(buildQuestionValidationKey(questionId, "correct-option"))
+        : toValidationElementId(buildQuestionValidationKey(questionId, fieldSuffix));
+
+  const fallbackTarget = document.getElementById(fallbackId);
+  if (fallbackTarget instanceof HTMLElement) {
+    fallbackTarget.focus();
+  }
+}
+
+function validateQuizForm(
+  form: QuizFormState,
+  mode: QuizValidationMode = "publish"
+): QuizFormErrors {
   const errors: QuizFormErrors = { questionErrors: {} };
   const totalMarks = calculateTotalMarks(form.questions);
 
-  if (!collapseSpaces(form.title)) {
-    errors.title = "Quiz title is required.";
+  errors.title = validateTextInput(form.title, {
+    fieldName: "Quiz title",
+    required: true,
+    minLength: 3,
+    maxLength: 200,
+  }) ?? undefined;
+  errors.moduleOfferingId = form.moduleOfferingId
+    ? undefined
+    : "Please select a module offering";
+
+  if (mode === "draft") {
+    return errors;
   }
-  if (!form.moduleOfferingId) {
-    errors.moduleOfferingId = "Select a module offering.";
+
+  const durationError = validateNumericInputString(String(form.duration), {
+    fieldName: "Duration",
+    required: true,
+    min: 1,
+    max: 480,
+    integer: true,
+  });
+  if (durationError) {
+    errors.duration =
+      durationError.includes("whole number")
+        ? "Must be a whole number"
+        : "Must be between 1 and 480 minutes";
   }
-  if (!Number.isFinite(form.duration) || form.duration < 1) {
-    errors.duration = "Duration must be at least 1 minute.";
+
+  const deadlineError = validateDateTimeInput(form.deadline, {
+    fieldName: "Deadline",
+    required: true,
+    mustBeFuture: true,
+  });
+  if (deadlineError) {
+    errors.deadline =
+      deadlineError === "Deadline is required"
+        ? "Deadline is required"
+        : deadlineError.includes("future")
+          ? "Deadline must be in the future"
+          : "Deadline must be a valid date-time";
   }
 
   const deadline = form.deadline ? new Date(form.deadline) : null;
-  if (!deadline || Number.isNaN(deadline.getTime()) || deadline.getTime() <= Date.now()) {
-    errors.deadline = "Deadline must be a valid future date.";
-  }
-
   if (form.startDate) {
-    const startDate = new Date(form.startDate);
-    if (Number.isNaN(startDate.getTime())) {
-      errors.startDate = "Start date must be valid.";
-    } else if (deadline && startDate >= deadline) {
-      errors.startDate = "Start date must be before the deadline.";
+    const startDateError = validateDateTimeInput(form.startDate, {
+      fieldName: "Start date",
+      before: deadline,
+      beforeLabel: "the deadline",
+    });
+    if (startDateError) {
+      errors.startDate =
+        startDateError.includes("before")
+          ? "Start date must be before the deadline"
+          : "Start date must be a valid date-time";
     }
   }
 
   if (form.passingMarks) {
-    const passingMarks = Number(form.passingMarks);
-    if (!Number.isFinite(passingMarks) || passingMarks < 0 || passingMarks > totalMarks) {
-      errors.passingMarks = "Passing marks must stay between 0 and the total.";
+    const passingMarksError = validateNumericInputString(form.passingMarks, {
+      fieldName: "Passing marks",
+      required: true,
+      min: 1,
+      max: totalMarks,
+    });
+    if (passingMarksError) {
+      errors.passingMarks = passingMarksError.includes("between")
+        ? `Passing marks cannot exceed total marks (${totalMarks})`
+        : "Passing marks must be a positive number";
     }
   }
 
+  const maxAttemptsError = validateNumericInputString(String(form.maxAttempts), {
+    fieldName: "Max attempts",
+    required: true,
+    min: 1,
+    max: 10,
+    integer: true,
+  });
+  if (maxAttemptsError) {
+    errors.maxAttempts =
+      maxAttemptsError.includes("whole number")
+        ? "Must be a whole number"
+        : "Must be between 1 and 10";
+  }
+
   if (form.questions.length === 0) {
-    errors.questions = "Add at least one question.";
+    errors.questions = "Quiz must have at least one question";
   }
 
   form.questions.forEach((question, index) => {
     const key = `q-${question.id}`;
-    if (!collapseSpaces(question.questionText)) {
-      errors.questionErrors[`${key}-text`] = `Question ${index + 1} text is required.`;
+    const questionTextError = validateTextInput(question.questionText, {
+      fieldName: `Question ${index + 1}`,
+      required: true,
+      minLength: 5,
+    });
+    if (questionTextError) {
+      errors.questionErrors[`${key}-text`] =
+        questionTextError === `Question ${index + 1} is required`
+          ? "Question text is required"
+          : "Question must be at least 5 characters";
     }
-    if (!Number.isFinite(question.marks) || question.marks < 1) {
-      errors.questionErrors[`${key}-marks`] = `Question ${index + 1} marks must be at least 1.`;
+
+    const marksError = validateNumericInputString(String(question.marks), {
+      fieldName: "Marks",
+      required: true,
+      min: 1,
+      integer: true,
+    });
+    if (marksError) {
+      errors.questionErrors[`${key}-marks`] =
+        marksError === "Marks is required" ? "Marks are required" : "Must be at least 1";
     }
 
     if (question.questionType === "short-answer") {
       if (!collapseSpaces(question.correctAnswer)) {
-        errors.questionErrors[`${key}-correct`] = `Question ${index + 1} needs a correct answer.`;
+        errors.questionErrors[`${key}-correct`] = "Correct answer is required for auto-grading";
       }
       return;
     }
 
-    const optionCount =
-      question.questionType === "true-false"
-        ? 2
-        : question.options.filter((option) => collapseSpaces(option.optionText)).length;
-    if (optionCount < 2) {
-      errors.questionErrors[`${key}-options`] = `Question ${index + 1} needs at least 2 options.`;
+    if (question.questionType === "true-false") {
+      if (!(question.correctAnswer === "True" || question.correctAnswer === "False")) {
+        errors.questionErrors[`${key}-correct-option`] = "Please select the correct answer";
+      }
+      return;
     }
 
-    const correctCount =
-      question.questionType === "true-false"
-        ? Number(question.correctAnswer === "True" || question.correctAnswer === "False")
-        : question.options.filter((option) => option.isCorrect).length;
+    if (question.options.length < 2) {
+      errors.questionErrors[`${key}-options`] = "At least 2 options required";
+    }
+
+    const seenOptionTexts = new Set<string>();
+    question.options.forEach((option) => {
+      const optionText = collapseValidationWhitespace(option.optionText);
+      const optionKey = `${key}-option-${option.id}`;
+      if (!optionText) {
+        errors.questionErrors[optionKey] = "Option text cannot be empty";
+        return;
+      }
+
+      const normalized = optionText.toLowerCase();
+      if (seenOptionTexts.has(normalized)) {
+        errors.questionErrors[optionKey] = "Duplicate options are not allowed";
+        return;
+      }
+
+      seenOptionTexts.add(normalized);
+    });
+
+    const correctCount = question.options.filter((option) => option.isCorrect).length;
     if (correctCount !== 1) {
-      errors.questionErrors[`${key}-correct-option`] = `Question ${index + 1} must have exactly 1 correct option.`;
+      errors.questionErrors[`${key}-correct-option`] =
+        "Exactly one correct answer must be selected";
     }
   });
 
@@ -644,9 +884,12 @@ export default function AdminQuizzesPage() {
 
   const [form, setForm] = useState<QuizFormState>(() => buildInitialFormState());
   const [formErrors, setFormErrors] = useState<QuizFormErrors>({ questionErrors: {} });
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [initialFormSnapshot, setInitialFormSnapshot] = useState("");
 
   const totalMarks = useMemo(() => calculateTotalMarks(form.questions), [form.questions]);
+  const draftValidation = useMemo(() => validateQuizForm(form, "draft"), [form]);
+  const publishValidation = useMemo(() => validateQuizForm(form, "publish"), [form]);
   const computedPassingMarks = useMemo(
     () => (form.passingMarks ? Number(form.passingMarks) || 0 : Math.ceil(totalMarks * 0.5)),
     [form.passingMarks, totalMarks]
@@ -657,6 +900,14 @@ export default function AdminQuizzesPage() {
   );
 
   const isOverlayOpen = builderOpen || Boolean(previewQuiz || resultsData || deleteTarget);
+  const canSaveDraft =
+    !saving &&
+    countQuizValidationErrors(draftValidation) === 0 &&
+    (!editingQuiz || isDirty);
+  const canPublish =
+    !saving &&
+    countQuizValidationErrors(publishValidation) === 0 &&
+    (!editingQuiz || isDirty);
 
   const sortedResultAttempts = useMemo(() => {
     const query = normalizeText(resultsSearch);
@@ -677,6 +928,10 @@ export default function AdminQuizzesPage() {
       return right.percentage - left.percentage;
     });
   }, [resultsData, resultsSearch, resultsSort]);
+
+  useEffect(() => {
+    setFormErrors(buildVisibleQuizErrors(publishValidation, touchedFields));
+  }, [publishValidation, touchedFields]);
 
   const loadModuleOfferings = useCallback(async () => {
     try {
@@ -760,6 +1015,7 @@ export default function AdminQuizzesPage() {
     setEditingQuiz(mode === "edit" && quiz ? quiz : null);
     setForm(nextForm);
     setFormErrors({ questionErrors: {} });
+    setTouchedFields({});
     setInitialFormSnapshot(JSON.stringify(nextForm));
     setBuilderOpen(true);
   }
@@ -774,25 +1030,26 @@ export default function AdminQuizzesPage() {
     setEditingQuiz(null);
     setForm(buildInitialFormState());
     setFormErrors({ questionErrors: {} });
+    setTouchedFields({});
   }
 
   async function handleSave(action: "draft" | "publish") {
-    const errors = validateQuizForm(form);
-    setFormErrors(errors);
+    const activeErrors = action === "publish" ? publishValidation : draftValidation;
+    const touchedForAction = buildTouchedFieldsForMode(form, action);
+    setTouchedFields((previous) => ({
+      ...previous,
+      ...touchedForAction,
+    }));
+    setFormErrors(buildVisibleQuizErrors(publishValidation, { ...touchedFields, ...touchedForAction }));
 
-    if (
-      errors.title ||
-      errors.moduleOfferingId ||
-      errors.duration ||
-      errors.deadline ||
-      errors.startDate ||
-      errors.passingMarks ||
-      errors.questions ||
-      Object.keys(errors.questionErrors).length > 0
-    ) {
+    if (countQuizValidationErrors(activeErrors) > 0) {
+      focusFirstQuizValidationError(activeErrors);
       toast({
         title: "Failed",
-        message: "Fix the highlighted quiz builder errors before saving.",
+        message:
+          action === "publish"
+            ? `Please fix ${countQuizValidationErrors(activeErrors)} validation error${countQuizValidationErrors(activeErrors) === 1 ? "" : "s"} before publishing.`
+            : "Fix the quiz title and module offering before saving the draft.",
         variant: "error",
       });
       return;
@@ -1463,18 +1720,43 @@ export default function AdminQuizzesPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Title</label>
                   <Input
-                    className={cn(formErrors.title && "border-red-300")}
-                    onChange={(event) => setForm((previous) => ({ ...previous, title: event.target.value }))}
+                    aria-describedby={formErrors.title ? "quiz-title-error" : undefined}
+                    aria-invalid={Boolean(formErrors.title)}
+                    className={cn(formErrors.title && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("title")}
+                    maxLength={200}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, title: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, title: event.target.value }))
+                    }
                     placeholder="Week 3 - Data Structures Quiz"
                     value={form.title}
                   />
-                  {formErrors.title ? <p className="text-xs text-red-700">{formErrors.title}</p> : null}
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span
+                      className={cn(formErrors.title ? "text-red-700" : "text-text/62")}
+                      id="quiz-title-error"
+                    >
+                      {formErrors.title ?? "Use a clear, student-facing quiz title."}
+                    </span>
+                    <span className="text-text/55">{collapseValidationWhitespace(form.title).length} / 200</span>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Module Offering</label>
                   <Select
-                    className={cn(formErrors.moduleOfferingId && "border-red-300")}
-                    onChange={(event) => setForm((previous) => ({ ...previous, moduleOfferingId: event.target.value }))}
+                    aria-describedby={formErrors.moduleOfferingId ? "quiz-module-error" : undefined}
+                    aria-invalid={Boolean(formErrors.moduleOfferingId)}
+                    className={cn(formErrors.moduleOfferingId && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("moduleOfferingId")}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, moduleOfferingId: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, moduleOfferingId: event.target.value }))
+                    }
                     value={form.moduleOfferingId}
                   >
                     <option value="">Select module offering</option>
@@ -1484,7 +1766,11 @@ export default function AdminQuizzesPage() {
                       </option>
                     ))}
                   </Select>
-                  {formErrors.moduleOfferingId ? <p className="text-xs text-red-700">{formErrors.moduleOfferingId}</p> : null}
+                  {formErrors.moduleOfferingId ? (
+                    <p className="text-xs text-red-700" id="quiz-module-error">
+                      {formErrors.moduleOfferingId}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2 lg:col-span-2">
                   <label className="text-sm font-semibold text-heading">Description</label>
@@ -1497,27 +1783,125 @@ export default function AdminQuizzesPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Duration (minutes)</label>
-                  <Input className={cn(formErrors.duration && "border-red-300")} min={1} onChange={(event) => setForm((previous) => ({ ...previous, duration: Number(event.target.value) || 0 }))} type="number" value={form.duration} />
-                  {formErrors.duration ? <p className="text-xs text-red-700">{formErrors.duration}</p> : null}
+                  <Input
+                    aria-describedby={formErrors.duration ? "quiz-duration-error" : undefined}
+                    aria-invalid={Boolean(formErrors.duration)}
+                    className={cn(formErrors.duration && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("duration")}
+                    min={1}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, duration: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        duration: Number(event.target.value),
+                      }))
+                    }
+                    type="number"
+                    value={Number.isFinite(form.duration) ? form.duration : ""}
+                  />
+                  {formErrors.duration ? (
+                    <p className="text-xs text-red-700" id="quiz-duration-error">
+                      {formErrors.duration}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Deadline</label>
-                  <Input className={cn(formErrors.deadline && "border-red-300")} onChange={(event) => setForm((previous) => ({ ...previous, deadline: event.target.value }))} type="datetime-local" value={form.deadline} />
-                  {formErrors.deadline ? <p className="text-xs text-red-700">{formErrors.deadline}</p> : null}
+                  <Input
+                    aria-describedby={formErrors.deadline ? "quiz-deadline-error" : undefined}
+                    aria-invalid={Boolean(formErrors.deadline)}
+                    className={cn(formErrors.deadline && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("deadline")}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, deadline: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, deadline: event.target.value }))
+                    }
+                    type="datetime-local"
+                    value={form.deadline}
+                  />
+                  {formErrors.deadline ? (
+                    <p className="text-xs text-red-700" id="quiz-deadline-error">
+                      {formErrors.deadline}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Start Date</label>
-                  <Input className={cn(formErrors.startDate && "border-red-300")} onChange={(event) => setForm((previous) => ({ ...previous, startDate: event.target.value }))} type="datetime-local" value={form.startDate} />
-                  {formErrors.startDate ? <p className="text-xs text-red-700">{formErrors.startDate}</p> : null}
+                  <Input
+                    aria-describedby={formErrors.startDate ? "quiz-start-date-error" : undefined}
+                    aria-invalid={Boolean(formErrors.startDate)}
+                    className={cn(formErrors.startDate && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("startDate")}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, startDate: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, startDate: event.target.value }))
+                    }
+                    type="datetime-local"
+                    value={form.startDate}
+                  />
+                  {formErrors.startDate ? (
+                    <p className="text-xs text-red-700" id="quiz-start-date-error">
+                      {formErrors.startDate}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Passing Marks</label>
-                  <Input className={cn(formErrors.passingMarks && "border-red-300")} min={0} onChange={(event) => setForm((previous) => ({ ...previous, passingMarks: event.target.value }))} placeholder={`Auto (${Math.ceil(totalMarks * 0.5)})`} type="number" value={form.passingMarks} />
-                  {formErrors.passingMarks ? <p className="text-xs text-red-700">{formErrors.passingMarks}</p> : <p className="text-xs text-text/62">Leave empty to use 50% of total marks.</p>}
+                  <Input
+                    aria-describedby={formErrors.passingMarks ? "quiz-passing-error" : undefined}
+                    aria-invalid={Boolean(formErrors.passingMarks)}
+                    className={cn(formErrors.passingMarks && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("passingMarks")}
+                    min={0}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, passingMarks: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, passingMarks: event.target.value }))
+                    }
+                    placeholder={`Auto (${Math.ceil(totalMarks * 0.5)})`}
+                    type="number"
+                    value={form.passingMarks}
+                  />
+                  {formErrors.passingMarks ? (
+                    <p className="text-xs text-red-700" id="quiz-passing-error">
+                      {formErrors.passingMarks}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-text/62">Leave empty to use 50% of total marks.</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Max Attempts</label>
-                  <Input min={1} onChange={(event) => setForm((previous) => ({ ...previous, maxAttempts: Math.max(1, Number(event.target.value) || 1) }))} type="number" value={form.maxAttempts} />
+                  <Input
+                    aria-describedby={formErrors.maxAttempts ? "quiz-max-attempts-error" : undefined}
+                    aria-invalid={Boolean(formErrors.maxAttempts)}
+                    className={cn(formErrors.maxAttempts && "border-red-300 bg-red-50 text-red-700")}
+                    id={toValidationElementId("maxAttempts")}
+                    min={1}
+                    onBlur={() =>
+                      setTouchedFields((previous) => ({ ...previous, maxAttempts: true }))
+                    }
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        maxAttempts: Number(event.target.value),
+                      }))
+                    }
+                    type="number"
+                    value={Number.isFinite(form.maxAttempts) ? form.maxAttempts : ""}
+                  />
+                  {formErrors.maxAttempts ? (
+                    <p className="text-xs text-red-700" id="quiz-max-attempts-error">
+                      {formErrors.maxAttempts}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Academic Year</label>
@@ -1571,11 +1955,20 @@ export default function AdminQuizzesPage() {
                   <h3 className="text-lg font-semibold text-heading">Question Builder</h3>
                   <p className="mt-1 text-sm text-text/72">Add, duplicate, remove, and reorder questions with inline validation.</p>
                 </div>
-                <Button className="gap-2" onClick={() => addQuestion()}>
+                <Button
+                  className="gap-2"
+                  id={toValidationElementId("questions")}
+                  onClick={() => addQuestion()}
+                >
                   <Plus size={16} />
                   Add Question
                 </Button>
               </div>
+              {formErrors.questions ? (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {formErrors.questions}
+                </div>
+              ) : null}
 
               <div className="mt-6 space-y-5">
                 {form.questions.map((question, index) => {
@@ -1586,6 +1979,12 @@ export default function AdminQuizzesPage() {
                   const correctError =
                     formErrors.questionErrors[`${key}-correct`] ||
                     formErrors.questionErrors[`${key}-correct-option`];
+                  const optionErrors = Object.fromEntries(
+                    question.options.map((option) => [
+                      option.id,
+                      formErrors.questionErrors[`${key}-option-${option.id}`],
+                    ])
+                  ) as Record<string, string | undefined>;
 
                   return (
                     <div className="rounded-[28px] border border-border bg-tint p-5" key={question.id}>
@@ -1605,8 +2004,34 @@ export default function AdminQuizzesPage() {
                       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
                         <div className="space-y-2">
                           <label className="text-sm font-semibold text-heading">Question Text</label>
-                          <textarea className={cn("min-h-[110px] w-full rounded-[16px] border bg-card px-3.5 py-3 text-sm text-text outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-focus", textError ? "border-red-300" : "border-border")} onChange={(event) => updateQuestion(question.id, { questionText: event.target.value })} placeholder="Type the question exactly as students should see it." value={question.questionText} />
-                          {textError ? <p className="text-xs text-red-700">{textError}</p> : null}
+                          <textarea
+                            aria-describedby={textError ? `${toValidationElementId(`${key}-text`)}-error` : undefined}
+                            aria-invalid={Boolean(textError)}
+                            className={cn(
+                              "min-h-[110px] w-full rounded-[16px] border bg-card px-3.5 py-3 text-sm text-text outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-focus",
+                              textError ? "border-red-300 bg-red-50 text-red-700" : "border-border"
+                            )}
+                            id={toValidationElementId(`${key}-text`)}
+                            onBlur={() =>
+                              setTouchedFields((previous) => ({
+                                ...previous,
+                                [`${key}-text`]: true,
+                              }))
+                            }
+                            onChange={(event) =>
+                              updateQuestion(question.id, { questionText: event.target.value })
+                            }
+                            placeholder="Type the question exactly as students should see it."
+                            value={question.questionText}
+                          />
+                          {textError ? (
+                            <p
+                              className="text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-text`)}-error`}
+                            >
+                              {textError}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-semibold text-heading">Type</label>
@@ -1618,8 +2043,32 @@ export default function AdminQuizzesPage() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-semibold text-heading">Marks</label>
-                          <Input className={cn(marksError && "border-red-300")} min={1} onChange={(event) => updateQuestion(question.id, { marks: Math.max(1, Number(event.target.value) || 0) })} type="number" value={question.marks} />
-                          {marksError ? <p className="text-xs text-red-700">{marksError}</p> : null}
+                          <Input
+                            aria-describedby={marksError ? `${toValidationElementId(`${key}-marks`)}-error` : undefined}
+                            aria-invalid={Boolean(marksError)}
+                            className={cn(marksError && "border-red-300 bg-red-50 text-red-700")}
+                            id={toValidationElementId(`${key}-marks`)}
+                            min={1}
+                            onBlur={() =>
+                              setTouchedFields((previous) => ({
+                                ...previous,
+                                [`${key}-marks`]: true,
+                              }))
+                            }
+                            onChange={(event) =>
+                              updateQuestion(question.id, { marks: Number(event.target.value) })
+                            }
+                            type="number"
+                            value={Number.isFinite(question.marks) ? question.marks : ""}
+                          />
+                          {marksError ? (
+                            <p
+                              className="text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-marks`)}-error`}
+                            >
+                              {marksError}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -1631,8 +2080,31 @@ export default function AdminQuizzesPage() {
                       {question.questionType === "short-answer" ? (
                         <div className="mt-4 space-y-2">
                           <label className="text-sm font-semibold text-heading">Correct Answer</label>
-                          <Input className={cn(correctError && "border-red-300")} onChange={(event) => updateQuestion(question.id, { correctAnswer: event.target.value })} placeholder="Exact answer used for auto-grading" value={question.correctAnswer} />
-                          {correctError ? <p className="text-xs text-red-700">{correctError}</p> : null}
+                          <Input
+                            aria-describedby={correctError ? `${toValidationElementId(`${key}-correct`)}-error` : undefined}
+                            aria-invalid={Boolean(correctError)}
+                            className={cn(correctError && "border-red-300 bg-red-50 text-red-700")}
+                            id={toValidationElementId(`${key}-correct`)}
+                            onBlur={() =>
+                              setTouchedFields((previous) => ({
+                                ...previous,
+                                [`${key}-correct`]: true,
+                              }))
+                            }
+                            onChange={(event) =>
+                              updateQuestion(question.id, { correctAnswer: event.target.value })
+                            }
+                            placeholder="Exact answer used for auto-grading"
+                            value={question.correctAnswer}
+                          />
+                          {correctError ? (
+                            <p
+                              className="text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-correct`)}-error`}
+                            >
+                              {correctError}
+                            </p>
+                          ) : null}
                         </div>
                       ) : question.questionType === "true-false" ? (
                         <div className="mt-4 space-y-3">
@@ -1641,11 +2113,31 @@ export default function AdminQuizzesPage() {
                             {["True", "False"].map((value) => (
                               <label className={cn("flex cursor-pointer items-center justify-between rounded-2xl border px-4 py-3 text-sm font-medium transition-colors", question.correctAnswer === value ? "border-primary bg-primary/8 text-primary" : "border-border bg-card text-text/78")} key={value}>
                                 <span>{value}</span>
-                                <input checked={question.correctAnswer === value} className="h-4 w-4 accent-[#034aa6]" name={`correct-${question.id}`} onChange={() => updateQuestion(question.id, { correctAnswer: value })} type="radio" />
+                                <input
+                                  checked={question.correctAnswer === value}
+                                  className="h-4 w-4 accent-[#034aa6]"
+                                  id={value === "True" ? toValidationElementId(`${key}-correct-option`) : undefined}
+                                  name={`correct-${question.id}`}
+                                  onBlur={() =>
+                                    setTouchedFields((previous) => ({
+                                      ...previous,
+                                      [`${key}-correct-option`]: true,
+                                    }))
+                                  }
+                                  onChange={() => updateQuestion(question.id, { correctAnswer: value })}
+                                  type="radio"
+                                />
                               </label>
                             ))}
                           </div>
-                          {correctError ? <p className="text-xs text-red-700">{correctError}</p> : null}
+                          {correctError ? (
+                            <p
+                              className="text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-correct-option`)}-error`}
+                            >
+                              {correctError}
+                            </p>
+                          ) : null}
                         </div>
                       ) : (
                         <div className="mt-4">
@@ -1658,15 +2150,94 @@ export default function AdminQuizzesPage() {
                           </div>
                           <div className="mt-3 space-y-3">
                             {question.options.map((option) => (
-                              <div className="grid gap-3 rounded-2xl border border-border bg-card px-4 py-3 md:grid-cols-[24px_minmax(0,1fr)_auto] md:items-center" key={option.id}>
-                                <input aria-label={`Correct option for question ${index + 1}`} checked={option.isCorrect} className="h-4 w-4 accent-[#034aa6]" name={`mcq-correct-${question.id}`} onChange={() => markCorrectOption(question.id, option.id)} type="radio" />
-                                <Input onChange={(event) => updateOption(question.id, option.id, { optionText: event.target.value })} placeholder="Option text" value={option.optionText} />
+                              <div
+                                className={cn(
+                                  "grid gap-3 rounded-2xl border bg-card px-4 py-3 md:grid-cols-[24px_minmax(0,1fr)_auto] md:items-center",
+                                  option.isCorrect
+                                    ? "border-emerald-200 bg-emerald-50/70"
+                                    : "border-border"
+                                )}
+                                key={option.id}
+                              >
+                                <input
+                                  aria-label={`Correct option for question ${index + 1}`}
+                                  checked={option.isCorrect}
+                                  className="h-4 w-4 accent-[#034aa6]"
+                                  id={
+                                    question.options[0]?.id === option.id
+                                      ? toValidationElementId(`${key}-correct-option`)
+                                      : undefined
+                                  }
+                                  name={`mcq-correct-${question.id}`}
+                                  onBlur={() =>
+                                    setTouchedFields((previous) => ({
+                                      ...previous,
+                                      [`${key}-correct-option`]: true,
+                                    }))
+                                  }
+                                  onChange={() => markCorrectOption(question.id, option.id)}
+                                  type="radio"
+                                />
+                                <div className="space-y-2">
+                                  <Input
+                                    aria-describedby={
+                                      optionErrors[option.id]
+                                        ? `${toValidationElementId(`${key}-option-${option.id}`)}-error`
+                                        : undefined
+                                    }
+                                    aria-invalid={Boolean(optionErrors[option.id])}
+                                    className={cn(
+                                      optionErrors[option.id] &&
+                                        "border-red-300 bg-red-50 text-red-700"
+                                    )}
+                                    id={
+                                      question.options[0]?.id === option.id
+                                        ? toValidationElementId(`${key}-option-primary`)
+                                        : toValidationElementId(`${key}-option-${option.id}`)
+                                    }
+                                    onBlur={() =>
+                                      setTouchedFields((previous) => ({
+                                        ...previous,
+                                        [`${key}-option-${option.id}`]: true,
+                                      }))
+                                    }
+                                    onChange={(event) =>
+                                      updateOption(question.id, option.id, {
+                                        optionText: event.target.value,
+                                      })
+                                    }
+                                    placeholder="Option text"
+                                    value={option.optionText}
+                                  />
+                                  {optionErrors[option.id] ? (
+                                    <p
+                                      className="text-xs text-red-700"
+                                      id={`${toValidationElementId(`${key}-option-${option.id}`)}-error`}
+                                    >
+                                      {optionErrors[option.id]}
+                                    </p>
+                                  ) : null}
+                                </div>
                                 <button className="inline-flex h-10 items-center justify-center rounded-2xl border border-border bg-tint px-3 text-sm font-medium text-text/75 transition-colors hover:bg-slate-100 disabled:opacity-50" disabled={question.options.length <= 2} onClick={() => removeOption(question.id, option.id)} type="button">Remove</button>
                               </div>
                             ))}
                           </div>
-                          {optionsError ? <p className="mt-2 text-xs text-red-700">{optionsError}</p> : null}
-                          {correctError ? <p className="mt-1 text-xs text-red-700">{correctError}</p> : null}
+                          {optionsError ? (
+                            <p
+                              className="mt-2 text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-options`)}-error`}
+                            >
+                              {optionsError}
+                            </p>
+                          ) : null}
+                          {correctError ? (
+                            <p
+                              className="mt-1 text-xs text-red-700"
+                              id={`${toValidationElementId(`${key}-correct-option`)}-error`}
+                            >
+                              {correctError}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -1683,11 +2254,11 @@ export default function AdminQuizzesPage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button onClick={closeBuilder} variant="secondary">Cancel</Button>
-                  <Button disabled={saving} onClick={() => void handleSave("draft")} variant="secondary">
+                  <Button disabled={!canSaveDraft} onClick={() => void handleSave("draft")} title={!canSaveDraft ? "Enter a valid quiz title and select a module offering before saving the draft." : undefined} variant="secondary">
                     {saving ? <Loader2 className="animate-spin" size={16} /> : null}
                     Save as Draft
                   </Button>
-                  <Button className="gap-2" disabled={saving} onClick={() => void handleSave("publish")}>
+                  <Button className="gap-2" disabled={!canPublish} onClick={() => void handleSave("publish")} title={!canPublish ? "Fix all validation errors before publishing." : undefined}>
                     {saving ? <Loader2 className="animate-spin" size={16} /> : <Rocket size={16} />}
                     Save &amp; Publish
                   </Button>
