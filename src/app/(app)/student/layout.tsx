@@ -7,6 +7,7 @@ const STUDENT_LINKS = [
   { label: "Performance", href: "/student/performance" },
   { label: "My XP", href: "/student/gamification" },
   { label: "Trophies", href: "/student/trophies" },
+  { label: "Leaderboard", href: "/student/leaderboard" },
   { label: "Book Lecturer", href: "/student/booking" },
   { label: "Report Lost Item", href: "/student/lost-items" },
   { label: "Announcements", href: "/student/announcements" },
