@@ -1,11 +1,11 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 import {
   categoryLabel,
@@ -32,48 +32,21 @@ function reportStatusLabel(status: ReportStatus) {
   return "Dismissed";
 }
 
-function scrollToReviewedReportsSection() {
-  (
-    document.getElementById("reviewed-reports") ?? document.getElementById("reports")
-  )?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}
-
-function scrollToConfirmedReportsSection() {
-  (
-    document.getElementById("confirmed-reports") ?? document.getElementById("reports")
-  )?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}
-
-function scrollToDismissedReportsSection() {
-  (
-    document.getElementById("dismissed-reports") ?? document.getElementById("reports")
-  )?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}
-
-function truncateText(text: string, maxLen: number) {
-  const t = text.trim();
-  if (t.length <= maxLen) return t;
-  return `${t.slice(0, maxLen)}…`;
+function isLikelyMongoObjectId(value: string) {
+  return /^[a-f\d]{24}$/i.test(value.trim());
 }
 
 export default function CommunityAdminReportedPostsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
-  const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatus>("OPEN");
   const [detailReportId, setDetailReportId] = useState("");
   const [adminReviewAcknowledged, setAdminReviewAcknowledged] = useState(false);
   const [reviewCommentDraft, setReviewCommentDraft] = useState("");
   const [moderationError, setModerationError] = useState<string | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,19 +92,26 @@ export default function CommunityAdminReportedPostsPage() {
     };
   }, []);
 
-  /** Filtered list for the main report card (matches selected status). */
-  const reportQueueFiltered = useMemo(
-    () => reports.filter((r) => r.status === reportStatusFilter),
-    [reportStatusFilter, reports]
-  );
+  useEffect(() => {
+    if (reportsLoading) return;
+    const openReport = searchParams.get("openReport");
+    const statusParam = searchParams.get("status");
 
-  const reviewedOnly = useMemo(
-    () => reports.filter((r) => r.status === "REVIEWED"),
-    [reports]
-  );
-  const agreedOnly = useMemo(() => reports.filter((r) => r.status === "AGREED"), [reports]);
-  const dismissedOnly = useMemo(
-    () => reports.filter((r) => r.status === "DISMISSED"),
+    if (openReport) {
+      const row = reports.find((r) => r.id === openReport);
+      if (row) {
+        setDetailReportId(openReport);
+      }
+    }
+
+    if (openReport || statusParam) {
+      router.replace("/community-admin/reported-posts", { scroll: false });
+    }
+  }, [reports, reportsLoading, router, searchParams]);
+
+  /** Open reports only — main queue (use dedicated pages for other statuses). */
+  const openReportQueue = useMemo(
+    () => reports.filter((r) => r.status === "OPEN"),
     [reports]
   );
 
@@ -386,7 +366,7 @@ export default function CommunityAdminReportedPostsPage() {
       return;
     }
     closeModal();
-    window.setTimeout(() => scrollToReviewedReportsSection(), 100);
+    window.setTimeout(() => router.push("/community-admin/reported-posts/reviewed"), 100);
   };
 
   const saveReviewBackfill = async () => {
@@ -408,7 +388,7 @@ export default function CommunityAdminReportedPostsPage() {
     }
     closeModal();
     if (detailReport.status === "REVIEWED") {
-      window.setTimeout(() => scrollToReviewedReportsSection(), 100);
+      window.setTimeout(() => router.push("/community-admin/reported-posts/reviewed"), 100);
     }
   };
 
@@ -457,7 +437,44 @@ export default function CommunityAdminReportedPostsPage() {
       return;
     }
     closeModal();
-    window.setTimeout(() => scrollToConfirmedReportsSection(), 100);
+    window.setTimeout(() => router.push("/community-admin/reported-posts/confirmed"), 100);
+  };
+
+  const deleteAgreedPost = async () => {
+    if (!detailReport || detailReport.status !== "AGREED") return;
+    const postId = detailReport.postId.trim();
+    if (!isLikelyMongoObjectId(postId)) {
+      setModerationError("Cannot delete: missing or invalid post id.");
+      return;
+    }
+    const ok = window.confirm(
+      "Delete this community post permanently? Replies, likes, and all reports for this post will be removed. This cannot be undone."
+    );
+    if (!ok) return;
+    setModerationError(null);
+    setDeleteInProgress(true);
+    try {
+      const response = await fetch(`/api/community-posts/${encodeURIComponent(postId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+      const raw: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          raw !== null &&
+          typeof raw === "object" &&
+          "error" in raw &&
+          typeof (raw as { error: unknown }).error === "string"
+            ? (raw as { error: string }).error
+            : "Could not delete post.";
+        setModerationError(message);
+        return;
+      }
+      setReports((previous) => previous.filter((r) => r.postId.trim() !== postId));
+      closeModal();
+    } finally {
+      setDeleteInProgress(false);
+    }
   };
 
   const dismissReviewedReport = async () => {
@@ -478,7 +495,7 @@ export default function CommunityAdminReportedPostsPage() {
       return;
     }
     closeModal();
-    window.setTimeout(() => scrollToDismissedReportsSection(), 100);
+    window.setTimeout(() => router.push("/community-admin/reported-posts/dismissed"), 100);
   };
 
   const reportRowList = (list: ReportedPost[]) => (
@@ -518,117 +535,12 @@ export default function CommunityAdminReportedPostsPage() {
     </div>
   );
 
-  const reviewedReportRowList = (list: ReportedPost[]) => (
-    <div className="space-y-2.5">
-      {list.map((report) => {
-        const opened = modalOpen && detailReportId === report.id;
-        const hasAdminNote = report.reviewComment.trim().length > 0;
-        return (
-          <div
-            className={cn(
-              "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 shadow-sm transition-colors sm:flex-row sm:items-start sm:justify-between",
-              opened
-                ? "border-indigo-400/50 bg-gradient-to-r from-indigo-50 to-sky-50/80 ring-1 ring-indigo-200/40"
-                : "border-sky-200/70 bg-gradient-to-br from-card to-sky-500/[0.03] hover:border-indigo-200/80 hover:bg-indigo-50/20"
-            )}
-            key={report.id}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-800/80">
-                Admin review
-              </p>
-              <p className="mt-1.5 text-sm leading-relaxed text-heading whitespace-pre-wrap">
-                {hasAdminNote
-                  ? truncateText(report.reviewComment, 320)
-                  : "— No admin review saved yet —"}
-              </p>
-              <p className="mt-2 text-[11px] text-text/50">
-                Post ID <span className="font-mono text-text/70">{report.postId}</span>
-              </p>
-            </div>
-            <Button
-              className="h-9 shrink-0 border-indigo-200 bg-indigo-600 text-white hover:bg-indigo-700 sm:self-center"
-              onClick={() => setDetailReportId(report.id)}
-              type="button"
-              variant="secondary"
-            >
-              Open
-            </Button>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  const statusSectionBody = (
-    list: ReportedPost[],
-    emptyLabel: string,
-    listVariant: "default" | "reviewed" = "default"
-  ) => {
-    if (reportsError) {
-      return (
-        <p className="rounded-2xl border border-dashed border-rose-200/80 bg-rose-50/50 px-4 py-8 text-center text-sm text-rose-900/80">
-          {reportsError}
-        </p>
-      );
-    }
-    if (reportsLoading) {
-      return (
-        <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
-          Loading reports…
-        </p>
-      );
-    }
-    if (list.length === 0) {
-      return (
-        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
-          {emptyLabel}
-        </p>
-      );
-    }
-    return listVariant === "reviewed" ? reviewedReportRowList(list) : reportRowList(list);
-  };
-
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
-      <section id="filters" className="scroll-mt-6">
-        <Card
-          title="Filters"
-          description="Choose a status to show matching reports in the report list below. Open is the default pending queue."
-          className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
-        >
-          <Select
-            value={reportStatusFilter}
-            onChange={(event) => setReportStatusFilter(event.target.value as ReportStatus)}
-          >
-            <option value="OPEN">Open Reported Posts</option>
-            <option value="REVIEWED">Reviewed Reported Posts</option>
-            <option value="AGREED">Agreed Reported Posts</option>
-            <option value="DISMISSED">Dismissed Reported Posts</option>
-          </Select>
-        </Card>
-      </section>
-
       <section id="reports" className="scroll-mt-6">
         <Card
-          title={
-            reportStatusFilter === "OPEN"
-              ? "Report queue (open reports)"
-              : reportStatusFilter === "REVIEWED"
-                ? "Reviewed reports"
-                : reportStatusFilter === "AGREED"
-                  ? "Agreed reports"
-                  : "Dismissed reports"
-          }
-          description={
-            reportStatusFilter === "OPEN"
-              ? "Only the report reason is shown here. After you save an admin review, the report moves to Reviewed report posts below."
-              : reportStatusFilter === "REVIEWED"
-                ? "Each row shows the saved admin review. Open a row to update the comment, accept, or dismiss."
-                : reportStatusFilter === "AGREED"
-                  ? "Reports you agreed with—the violation was acknowledged (Agreed)."
-                  : "Reports that were dismissed—the report was rejected."
-          }
+          title="Report queue (open reports only)"
+          description="Pending reports with status Open. After you save an admin review, the report moves to the Reviewed posts page. Use the sidebar for filters, reviewed, confirmed, and dismissed lists."
           className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
         >
           {reportsError ? (
@@ -639,57 +551,17 @@ export default function CommunityAdminReportedPostsPage() {
             <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
               Loading reports…
             </p>
-          ) : reportQueueFiltered.length === 0 ? (
+          ) : openReportQueue.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
               {reports.length === 0
                 ? "No post reports yet."
-                : reportStatusFilter === "OPEN"
-                  ? "No open reports in the queue."
-                  : "No reports match this status filter."}
+                : "No open reports in the queue."}
             </p>
-          ) : reportStatusFilter === "REVIEWED" ? (
-            reviewedReportRowList(reportQueueFiltered)
           ) : (
-            reportRowList(reportQueueFiltered)
+            reportRowList(openReportQueue)
           )}
         </Card>
       </section>
-
-      {reportStatusFilter !== "REVIEWED" ? (
-        <section id="reviewed-reports" className="scroll-mt-6">
-          <Card
-            title="Reviewed report posts"
-            description="Shows each report’s admin review. Open a row to update the comment, accept the report, or dismiss it."
-            className="border-l-[3px] border-l-sky-600 bg-gradient-to-br from-card to-sky-500/[0.05]"
-          >
-            {statusSectionBody(reviewedOnly, "No reviewed reports yet.", "reviewed")}
-          </Card>
-        </section>
-      ) : null}
-
-      {reportStatusFilter !== "AGREED" ? (
-        <section id="confirmed-reports" className="scroll-mt-6">
-          <Card
-            title="Report confirmed posts"
-            description="Reports you agreed with—the violation was acknowledged (Agreed)."
-            className="border-l-[3px] border-l-emerald-500 bg-gradient-to-br from-card to-emerald-500/[0.05]"
-          >
-            {statusSectionBody(agreedOnly, "No agreed reports yet.")}
-          </Card>
-        </section>
-      ) : null}
-
-      {reportStatusFilter !== "DISMISSED" ? (
-        <section id="dismissed-reports" className="scroll-mt-6">
-          <Card
-            title="Report dismissed posts"
-            description="Reports that were dismissed—the report was rejected."
-            className="border-l-[3px] border-l-rose-400 bg-gradient-to-br from-card to-rose-500/[0.04]"
-          >
-            {statusSectionBody(dismissedOnly, "No dismissed reports yet.")}
-          </Card>
-        </section>
-      ) : null}
 
       {detailReport ? (
         <div
@@ -990,7 +862,12 @@ export default function CommunityAdminReportedPostsPage() {
                     reporter; <span className="font-medium text-rose-800">Dismiss report</span> rejects
                     it.{" "}
                   </>
-                ) : detailReport.status === "AGREED" || detailReport.status === "DISMISSED" ? (
+                ) : detailReport.status === "AGREED" ? (
+                  <>
+                    <span className="font-medium text-rose-800">Delete post</span> removes the post from the
+                    community along with its replies, likes, and all reports for that post.
+                  </>
+                ) : detailReport.status === "DISMISSED" ? (
                   <>This decision is final for this workflow. </>
                 ) : null}
                 <span className="font-medium text-heading">Cancel</span> closes without saving.
@@ -1057,8 +934,20 @@ export default function CommunityAdminReportedPostsPage() {
                     </Button>
                   </>
                 ) : null}
+                {detailReport.status === "AGREED" ? (
+                  <Button
+                    className="h-10 !border-rose-900 !bg-rose-600 !text-white shadow-sm hover:!bg-rose-700 disabled:!opacity-60"
+                    disabled={deleteInProgress || !isLikelyMongoObjectId(detailReport.postId)}
+                    onClick={deleteAgreedPost}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {deleteInProgress ? "Deleting…" : "Delete post"}
+                  </Button>
+                ) : null}
                 <Button
-                  className="h-10 border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-red-100 sm:ml-auto"
+                  className="h-10 border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50 sm:ml-auto"
+                  disabled={deleteInProgress}
                   onClick={closeModal}
                   type="button"
                   variant="secondary"

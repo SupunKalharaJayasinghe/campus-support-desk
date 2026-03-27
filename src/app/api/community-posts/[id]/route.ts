@@ -1,5 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
 import CommunityPost from "@/models/communityPost";
+import CommunityPostLike from "@/models/communityPostLike";
+import CommunityPostReport from "@/models/communityPostReport";
+import CommunityReply from "@/models/communityReply";
 import mongoose from "mongoose";
 
 export async function GET(
@@ -36,6 +39,12 @@ export async function DELETE(
     if (!mongoose.Types.ObjectId.isValid(params.id)) {
       return Response.json({ error: "Invalid post id" }, { status: 400 });
     }
+
+    await Promise.all([
+      CommunityPostReport.deleteMany({ postId: params.id }),
+      CommunityPostLike.deleteMany({ postId: params.id }),
+      CommunityReply.deleteMany({ postId: params.id }),
+    ]);
 
     const deleted = await CommunityPost.findByIdAndDelete(params.id);
 

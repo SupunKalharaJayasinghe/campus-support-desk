@@ -8,10 +8,6 @@ import { clearDemoSession, isDemoModeEnabled } from "@/lib/rbac";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 
-function cn(...classes: Array<string | undefined | false>) {
-  return classes.filter(Boolean).join(" ");
-}
-
 const PRIMARY_NAV: Array<{
   id: string;
   label: string;
@@ -38,30 +34,48 @@ const PRIMARY_NAV: Array<{
   },
 ];
 
-const SUB_LINKS_MEMBERS = [
+type SubLink = { label: string; hash: string } | { label: string; href: string };
+
+const SUB_LINKS_MEMBERS: SubLink[] = [
   { hash: "overview", label: "Page overview" },
   { hash: "filters", label: "Search" },
   { hash: "directory", label: "Member directory" },
 ];
 
-const SUB_LINKS_REPORTS = [
-  { hash: "filters", label: "Filters" },
-  { hash: "reports", label: "Report queue" },
-  { hash: "reviewed-reports", label: "Reviewed report posts" },
-  { hash: "confirmed-reports", label: "Report confirmed posts (agreed)" },
-  { hash: "dismissed-reports", label: "Report dismissed posts" },
+const SUB_LINKS_REPORTS: SubLink[] = [
+  { href: "/community-admin/reported-posts/filters", label: "Filters & search" },
+  { href: "/community-admin/reported-posts/reviewed", label: "Reviewed posts" },
+  { href: "/community-admin/reported-posts/confirmed", label: "Confirmed posts" },
+  { href: "/community-admin/reported-posts/dismissed", label: "Dismissed posts" },
 ];
 
-const SUB_LINKS_DASHBOARD = [
+const SUB_LINKS_DASHBOARD: SubLink[] = [
   { hash: "overview", label: "Overview" },
   { hash: "quick-links", label: "Quick links" },
 ];
 
-const navLinkClass =
-  "block rounded-xl border border-border/90 bg-card/80 px-3 py-2 text-sm whitespace-nowrap text-text/80 shadow-sm transition-colors hover:border-primary/25 hover:bg-gradient-to-r hover:from-primary/[0.06] hover:to-sky-500/[0.04] hover:text-heading";
+/** Primary “Sections” nav: inactive rows */
+const primaryNavIdleClass =
+  "block rounded-xl border border-border/90 bg-card/80 px-3 py-2 text-sm font-medium whitespace-nowrap text-text/80 shadow-sm transition-colors hover:border-blue-200 hover:bg-slate-50 hover:text-heading";
 
-const navLinkActiveClass =
-  "border-primary/40 bg-gradient-to-r from-primary/[0.12] to-sky-500/[0.08] text-heading shadow-sm ring-1 ring-primary/15";
+/** Primary nav: active (hover matches resting state so idle hover utilities cannot flash light) */
+const primaryNavActiveClass =
+  "block rounded-xl border border-blue-900 bg-blue-900 px-3 py-2 text-sm font-medium whitespace-nowrap text-white shadow-md transition-colors hover:border-blue-900 hover:bg-blue-900 hover:text-white";
+
+/**
+ * Sub-nav (“On this page” / related links): exclusive idle vs active so hover utilities never fight.
+ * Active: blue-100 surface, black label; hover matches rest (same theory as primary nav).
+ */
+const subNavIdleClass =
+  "block rounded-xl border border-border/90 bg-card/80 px-3 py-2 text-sm whitespace-nowrap text-text/75 shadow-sm transition-colors hover:border-blue-200 hover:bg-slate-50 hover:text-heading";
+
+const subNavActiveClass =
+  "block rounded-xl border border-blue-200 bg-blue-100 px-3 py-2 text-sm font-medium whitespace-nowrap text-black shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-100 hover:text-black";
+
+function subLinkIsActive(pathname: string, item: SubLink): boolean {
+  if (!("href" in item)) return false;
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
 
 export default function CommunityAdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -73,6 +87,34 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
         title: "Community members",
         subtitle:
           "Browse everyone in the campus community from the User table (students). Search by name, email, or user ID.",
+      };
+    }
+    if (pathname.startsWith("/community-admin/reported-posts/filters")) {
+      return {
+        title: "Report filters",
+        subtitle:
+          "Combine status, category, priority, and text search to find reports, then open a match in the queue to moderate.",
+      };
+    }
+    if (pathname.startsWith("/community-admin/reported-posts/reviewed")) {
+      return {
+        title: "Reviewed report posts",
+        subtitle:
+          "Browse reports that already have an admin review. Open one in the main queue to accept, dismiss, or update notes.",
+      };
+    }
+    if (pathname.startsWith("/community-admin/reported-posts/confirmed")) {
+      return {
+        title: "Report confirmed posts",
+        subtitle:
+          "Reports you accepted (Agreed). Open one in the main queue for full details or to delete the community post.",
+      };
+    }
+    if (pathname.startsWith("/community-admin/reported-posts/dismissed")) {
+      return {
+        title: "Report dismissed posts",
+        subtitle:
+          "Reports you rejected after review (Dismissed). Open one in the main queue to read the full record.",
       };
     }
     if (pathname.startsWith("/community-admin/reported-posts")) {
@@ -149,7 +191,8 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
                   <Link
                     key={item.id}
                     href={item.href}
-                    className={cn(navLinkClass, active && navLinkActiveClass)}
+                    className={active ? primaryNavActiveClass : primaryNavIdleClass}
+                    aria-current={active ? "page" : undefined}
                   >
                     {item.label}
                   </Link>
@@ -158,18 +201,31 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
             </nav>
 
             <p className="mt-4 text-xs font-medium uppercase tracking-[0.14em] text-primary/65">
-              On this page
+              On This Page
             </p>
-            <nav aria-label="In-page sections" className="mt-2 space-y-1.5">
-              {subLinks.map((item) => (
-                <a
-                  key={item.hash}
-                  href={`#${item.hash}`}
-                  className={cn(navLinkClass, "text-text/75")}
-                >
-                  {item.label}
-                </a>
-              ))}
+            <nav aria-label="Related sections" className="mt-2 space-y-1.5">
+              {subLinks.map((item) =>
+                "href" in item ? (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={
+                      subLinkIsActive(pathname, item) ? subNavActiveClass : subNavIdleClass
+                    }
+                    aria-current={subLinkIsActive(pathname, item) ? "page" : undefined}
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={item.hash}
+                    href={`#${item.hash}`}
+                    className={subNavIdleClass}
+                  >
+                    {item.label}
+                  </a>
+                )
+              )}
             </nav>
           </Card>
           <div className="mt-3 shrink-0 border-t border-border/70 pt-3 md:mt-auto">
