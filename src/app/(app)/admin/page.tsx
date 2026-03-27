@@ -17,6 +17,8 @@ import PageHeader from "@/components/admin/PageHeader";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import { resolveNotificationsForRole } from "@/models/notification-center";
+import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
 
 type StatIcon = ComponentType<{ size?: number }>;
 
@@ -200,6 +202,9 @@ const QUICK_ACTIONS = [
   "Publish Announcement",
 ];
 
+const ADMIN_NOTIFICATIONS = resolveNotificationsForRole("SUPER_ADMIN").slice(0, 3);
+const ADMIN_LATEST_NOTIFICATION = ADMIN_NOTIFICATIONS[0] ?? null;
+
 function StatOverviewCard({ growth, growthLabel, icon: Icon, label, value }: StatisticCard) {
   return (
     <Card accent className="p-5">
@@ -255,6 +260,12 @@ export default function AdminDashboardPage() {
       <PageHeader
         description="Centralized oversight for academic structure, enrollments, teaching operations, and system-wide alerts."
         title="Dashboard"
+      />
+
+      <LatestNotificationSection
+        href="/admin/notifications"
+        item={ADMIN_LATEST_NOTIFICATION}
+        subtitle="Most recent notification targeted to admin users."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -409,6 +420,28 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
                     <Badge variant={item.level === "High" ? "warning" : "neutral"}>{item.level}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card
+            description="Notifications and system announcements visible to admin users."
+            title="Recent Notifications"
+          >
+            <div className="space-y-3">
+              {ADMIN_NOTIFICATIONS.map((item) => (
+                <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
+                        {item.type}
+                      </Badge>
+                      <p className="mt-2 text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="mt-1 text-sm text-text/68">{item.message}</p>
+                    </div>
+                    <p className="text-xs text-text/55">{item.time}</p>
                   </div>
                 </div>
               ))}

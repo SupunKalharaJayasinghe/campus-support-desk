@@ -1,4 +1,5 @@
 export type AppRole = "SUPER_ADMIN" | "LECTURER" | "LOST_ITEM_STAFF" | "STUDENT";
+export type AcademicStream = "WEEKDAY" | "WEEKEND";
 
 export interface DemoUser {
   id: string;
@@ -7,6 +8,12 @@ export interface DemoUser {
   username?: string;
   email?: string;
   mustChangePassword?: boolean;
+  facultyCodes?: string[];
+  degreeProgramIds?: string[];
+  semesterCode?: string;
+  stream?: AcademicStream;
+  subgroup?: string | null;
+  intakeId?: string;
 }
 
 export const ROLE_STORAGE_KEY = "unihub_role";
@@ -92,6 +99,21 @@ export function readStoredUser(): DemoUser | null {
 
   try {
     const parsed = JSON.parse(rawUser) as Partial<DemoUser>;
+    const parsedFacultyCodes = Array.isArray(parsed.facultyCodes)
+      ? parsed.facultyCodes
+          .map((value) => String(value ?? "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+    const parsedDegreeProgramIds = Array.isArray(parsed.degreeProgramIds)
+      ? parsed.degreeProgramIds
+          .map((value) => String(value ?? "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+    const parsedSemesterCode = String(parsed.semesterCode ?? "").trim().toUpperCase();
+    const parsedStream = String(parsed.stream ?? "").trim().toUpperCase();
+    const parsedSubgroup = String(parsed.subgroup ?? "").trim();
+    const parsedIntakeId = String(parsed.intakeId ?? "").trim();
+
     if (
       !parsed ||
       typeof parsed !== "object" ||
@@ -110,6 +132,15 @@ export function readStoredUser(): DemoUser | null {
         typeof parsed.mustChangePassword === "boolean"
           ? parsed.mustChangePassword
           : false,
+      facultyCodes: parsedFacultyCodes,
+      degreeProgramIds: parsedDegreeProgramIds,
+      semesterCode: parsedSemesterCode || undefined,
+      stream:
+        parsedStream === "WEEKDAY" || parsedStream === "WEEKEND"
+          ? (parsedStream as AcademicStream)
+          : undefined,
+      subgroup: parsedSubgroup || undefined,
+      intakeId: parsedIntakeId || undefined,
     };
   } catch {
     return null;
