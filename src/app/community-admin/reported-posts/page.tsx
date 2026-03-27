@@ -277,7 +277,7 @@ export default function CommunityAdminReportedPostsPage() {
           <div
             aria-labelledby="report-detail-modal-title"
             aria-modal="true"
-            className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border/80 bg-card shadow-[0_24px_56px_rgba(15,23,42,0.22)] ring-1 ring-primary/10"
+            className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border/80 bg-card bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)] ring-1 ring-primary/10"
             onMouseDown={(event) => event.stopPropagation()}
             role="dialog"
           >
@@ -358,7 +358,7 @@ export default function CommunityAdminReportedPostsPage() {
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-col gap-3 border-t border-border bg-card px-5 py-4">
+            <div className="flex shrink-0 flex-col gap-3 border-t border-border bg-card bg-white px-5 py-4">
               <p className="text-xs text-text/60">
                 <span className="font-medium text-sky-800">Reviewed</span> marks it seen without
                 siding.{" "}
