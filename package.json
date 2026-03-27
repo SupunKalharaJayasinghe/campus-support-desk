@@ -10,7 +10,8 @@
     "build:clean": "npm run clean:next && next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:community-admin": "node scripts/seed-community-admin.mjs"
+    "seed:community-admin": "node scripts/seed-community-admin.mjs",
+    "migrate:community-post-reports": "node scripts/migrate-community-post-reports.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

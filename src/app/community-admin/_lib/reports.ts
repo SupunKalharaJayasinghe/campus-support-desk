@@ -3,6 +3,8 @@ export type ReportPriority = "High" | "Medium" | "Low";
 
 export interface ReportedPost {
   id: string;
+  /** Community post id (Mongo _id of the reported post). */
+  postId: string;
   reportedBy: string;
   postAuthor: string;
   category: "academic_question" | "study_material" | "lost_item";
@@ -13,12 +15,24 @@ export interface ReportedPost {
   postTitle: string;
   postSummary: string;
   updatedAt: string;
+  adminReviewAcknowledged: boolean;
+  reviewComment: string;
 }
 
 export function priorityFromReasonKey(reasonKey: string): ReportPriority {
   if (reasonKey === "harassment") return "High";
   if (reasonKey === "inappropriate" || reasonKey === "misinformation") return "Medium";
   return "Low";
+}
+
+function mongoIdString(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object" && !Array.isArray(value) && value !== null) {
+    const o = value as Record<string, unknown>;
+    if (o._id !== undefined) return String(o._id).trim();
+  }
+  return String(value).trim();
 }
 
 function formatReportedAt(iso: string) {
@@ -41,9 +55,11 @@ export function mapApiReportToRow(raw: unknown): ReportedPost | null {
   let postSummary = "";
   let category: ReportedPost["category"] = "academic_question";
   let postAuthor = "Unknown";
+  let postId = "";
 
   if (post && typeof post === "object" && !Array.isArray(post)) {
     const p = post as Record<string, unknown>;
+    postId = mongoIdString(p._id);
     postTitle = String(p.title ?? "").trim();
     postSummary = String(p.description ?? "").trim();
     const cat = String(p.category ?? "");
@@ -51,6 +67,9 @@ export function mapApiReportToRow(raw: unknown): ReportedPost | null {
       category = cat;
     }
     postAuthor = String(p.authorDisplayName ?? "").trim() || "Unknown";
+  }
+  if (!postId) {
+    postId = mongoIdString(r.postId);
   }
 
   const reporter = r.userId;
@@ -97,8 +116,12 @@ export function mapApiReportToRow(raw: unknown): ReportedPost | null {
         ? updatedRaw
         : "";
 
+  const adminReviewAcknowledged = r.adminReviewAcknowledged === true;
+  const reviewComment =
+    typeof r.reviewComment === "string" ? r.reviewComment.trim() : "";
   return {
     id,
+    postId: postId || "—",
     reportedBy,
     postAuthor,
     category,
@@ -109,6 +132,8 @@ export function mapApiReportToRow(raw: unknown): ReportedPost | null {
     postTitle: postTitle || "—",
     postSummary: postSummary || "—",
     updatedAt: updatedIso,
+    adminReviewAcknowledged,
+    reviewComment,
   };
 }
 

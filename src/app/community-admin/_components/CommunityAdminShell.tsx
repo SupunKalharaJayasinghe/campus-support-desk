@@ -47,6 +47,9 @@ const SUB_LINKS_MEMBERS = [
 const SUB_LINKS_REPORTS = [
   { hash: "filters", label: "Filters" },
   { hash: "reports", label: "Report queue" },
+  { hash: "reviewed-reports", label: "Reviewed report posts" },
+  { hash: "confirmed-reports", label: "Report confirmed posts (agreed)" },
+  { hash: "dismissed-reports", label: "Report dismissed posts" },
 ];
 
 const SUB_LINKS_DASHBOARD = [

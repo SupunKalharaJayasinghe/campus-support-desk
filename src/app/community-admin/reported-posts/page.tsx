@@ -6,6 +6,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Select from "@/components/ui/Select";
+import Textarea from "@/components/ui/Textarea";
 import {
   categoryLabel,
   mapApiReportToRow,
@@ -31,12 +32,42 @@ function reportStatusLabel(status: ReportStatus) {
   return "Dismissed";
 }
 
+function scrollToReviewedReportsSection() {
+  document.getElementById("reviewed-reports")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function scrollToConfirmedReportsSection() {
+  document.getElementById("confirmed-reports")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function scrollToDismissedReportsSection() {
+  document.getElementById("dismissed-reports")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function truncateText(text: string, maxLen: number) {
+  const t = text.trim();
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, maxLen)}…`;
+}
+
 export default function CommunityAdminReportedPostsPage() {
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [reportStatusFilter, setReportStatusFilter] = useState<"" | ReportStatus>("");
   const [detailReportId, setDetailReportId] = useState("");
+  const [adminReviewAcknowledged, setAdminReviewAcknowledged] = useState(false);
+  const [reviewCommentDraft, setReviewCommentDraft] = useState("");
+  const [moderationError, setModerationError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,18 +120,52 @@ export default function CommunityAdminReportedPostsPage() {
     });
   }, [reportStatusFilter, reports]);
 
+  const reviewedOnly = useMemo(
+    () => reports.filter((r) => r.status === "REVIEWED"),
+    [reports]
+  );
+  const agreedOnly = useMemo(() => reports.filter((r) => r.status === "AGREED"), [reports]);
+  const dismissedOnly = useMemo(
+    () => reports.filter((r) => r.status === "DISMISSED"),
+    [reports]
+  );
+
   useEffect(() => {
     if (!detailReportId) return;
-    const stillVisible = filteredReports.some((r) => r.id === detailReportId);
-    if (!stillVisible) {
+    const exists = reports.some((r) => r.id === detailReportId);
+    if (!exists) {
       setDetailReportId("");
     }
-  }, [detailReportId, filteredReports]);
+  }, [detailReportId, reports]);
+
+  useEffect(() => {
+    if (!detailReportId) return;
+    const r = reports.find((x) => x.id === detailReportId);
+    if (!r) return;
+    setModerationError(null);
+    if (r.status === "OPEN") {
+      setReviewCommentDraft("");
+      setAdminReviewAcknowledged(false);
+    } else if (!r.reviewComment.trim() || !r.adminReviewAcknowledged) {
+      setReviewCommentDraft("");
+      setAdminReviewAcknowledged(false);
+    } else {
+      setReviewCommentDraft(r.reviewComment);
+      setAdminReviewAcknowledged(r.adminReviewAcknowledged);
+    }
+  }, [detailReportId, reports]);
 
   const detailReport =
-    detailReportId && filteredReports.some((r) => r.id === detailReportId)
-      ? filteredReports.find((r) => r.id === detailReportId) ?? null
+    detailReportId && reports.some((r) => r.id === detailReportId)
+      ? reports.find((r) => r.id === detailReportId) ?? null
       : null;
+
+  /** Closed without stored review metadata (API used to skip persisting comment after OPEN). */
+  const needsReviewBackfill = Boolean(
+    detailReport &&
+      detailReport.status !== "OPEN" &&
+      (!detailReport.reviewComment.trim() || !detailReport.adminReviewAcknowledged)
+  );
 
   const modalOpen = Boolean(detailReport);
 
@@ -108,6 +173,7 @@ export default function CommunityAdminReportedPostsPage() {
     if (!modalOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        setModerationError(null);
         setDetailReportId("");
       }
     };
@@ -124,21 +190,48 @@ export default function CommunityAdminReportedPostsPage() {
     };
   }, [modalOpen]);
 
-  const updateReportStatus = async (id: string, nextStatus: ReportStatus) => {
+  const updateReportStatus = async (
+    id: string,
+    nextStatus: ReportStatus,
+    moderation: {
+      adminReviewAcknowledged: boolean;
+      reviewComment: string;
+    }
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
     const response = await fetch(`/api/community-post-reports/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify({
+        status: nextStatus,
+        adminReviewAcknowledged: moderation.adminReviewAcknowledged,
+        reviewComment: moderation.reviewComment,
+      }),
     });
-    if (!response.ok) {
-      return;
-    }
     const raw: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        raw !== null &&
+        typeof raw === "object" &&
+        "error" in raw &&
+        typeof (raw as { error: unknown }).error === "string"
+          ? (raw as { error: string }).error
+          : "Could not update report.";
+      return { ok: false, error: message };
+    }
     if (!raw || typeof raw !== "object") {
       setReports((previous) =>
-        previous.map((item) => (item.id === id ? { ...item, status: nextStatus } : item))
+        previous.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: nextStatus,
+                adminReviewAcknowledged: moderation.adminReviewAcknowledged,
+                reviewComment: moderation.reviewComment.trim(),
+              }
+            : item
+        )
       );
-      return;
+      return { ok: true };
     }
     const doc = raw as Record<string, unknown>;
     const statusRaw = String(doc.status ?? nextStatus).toUpperCase();
@@ -156,6 +249,9 @@ export default function CommunityAdminReportedPostsPage() {
         : typeof updatedRaw === "string"
           ? updatedRaw
           : undefined;
+    const savedAck = doc.adminReviewAcknowledged === true;
+    const savedComment =
+      typeof doc.reviewComment === "string" ? doc.reviewComment.trim() : moderation.reviewComment.trim();
     setReports((previous) =>
       previous.map((item) =>
         item.id === id
@@ -163,30 +259,248 @@ export default function CommunityAdminReportedPostsPage() {
               ...item,
               status,
               updatedAt: updatedIso ?? item.updatedAt,
+              adminReviewAcknowledged: savedAck,
+              reviewComment: savedComment,
             }
           : item
       )
     );
+    return { ok: true };
   };
 
-  const closeModal = () => setDetailReportId("");
+  const closeModal = () => {
+    setModerationError(null);
+    setDetailReportId("");
+  };
+
+  /** Open report + “As community admin I review…” + non-empty review comment. */
+  const canSubmitReviewed =
+    detailReport?.status === "OPEN" &&
+    adminReviewAcknowledged &&
+    reviewCommentDraft.trim().length > 0;
+
+  const canSubmitBackfill =
+    needsReviewBackfill &&
+    adminReviewAcknowledged &&
+    reviewCommentDraft.trim().length > 0;
 
   const markReviewed = async () => {
     if (!detailReport || detailReport.status !== "OPEN") return;
-    await updateReportStatus(detailReport.id, "REVIEWED");
+    if (!canSubmitReviewed) {
+      setModerationError("Tick “As community admin I review this post” and enter a review comment before Reviewed.");
+      return;
+    }
+    setModerationError(null);
+    const result = await updateReportStatus(detailReport.id, "REVIEWED", {
+      adminReviewAcknowledged: true,
+      reviewComment: reviewCommentDraft.trim(),
+    });
+    if (!result.ok) {
+      setModerationError(result.error);
+      return;
+    }
     closeModal();
+    window.setTimeout(() => scrollToReviewedReportsSection(), 100);
   };
 
-  const markAgreed = async () => {
-    if (!detailReport || detailReport.status !== "OPEN") return;
-    await updateReportStatus(detailReport.id, "AGREED");
+  const saveReviewBackfill = async () => {
+    if (!detailReport || !needsReviewBackfill) return;
+    if (!canSubmitBackfill) {
+      setModerationError(
+        'Tick “As community admin I review this post” and enter a review comment before saving.'
+      );
+      return;
+    }
+    setModerationError(null);
+    const result = await updateReportStatus(detailReport.id, detailReport.status, {
+      adminReviewAcknowledged: true,
+      reviewComment: reviewCommentDraft.trim(),
+    });
+    if (!result.ok) {
+      setModerationError(result.error);
+      return;
+    }
     closeModal();
+    if (detailReport.status === "REVIEWED") {
+      window.setTimeout(() => scrollToReviewedReportsSection(), 100);
+    }
   };
 
-  const markDismissed = async () => {
-    if (!detailReport || detailReport.status !== "OPEN") return;
-    await updateReportStatus(detailReport.id, "DISMISSED");
+  const finalReviewComment = () => reviewCommentDraft.trim();
+
+  const canActWithSavedReview =
+    detailReport?.status === "REVIEWED" &&
+    !needsReviewBackfill &&
+    adminReviewAcknowledged &&
+    finalReviewComment().length > 0;
+
+  const saveReviewedCommentUpdate = async () => {
+    if (!detailReport || detailReport.status !== "REVIEWED" || needsReviewBackfill) return;
+    if (!canActWithSavedReview) {
+      setModerationError(
+        "Confirm the checkbox and enter an admin review comment before updating."
+      );
+      return;
+    }
+    setModerationError(null);
+    const result = await updateReportStatus(detailReport.id, "REVIEWED", {
+      adminReviewAcknowledged: true,
+      reviewComment: finalReviewComment(),
+    });
+    if (!result.ok) {
+      setModerationError(result.error);
+      return;
+    }
+  };
+
+  const acceptReviewedReport = async () => {
+    if (!detailReport || detailReport.status !== "REVIEWED" || needsReviewBackfill) return;
+    if (!canActWithSavedReview) {
+      setModerationError(
+        "Confirm the checkbox and enter an admin review comment before accepting this report."
+      );
+      return;
+    }
+    setModerationError(null);
+    const result = await updateReportStatus(detailReport.id, "AGREED", {
+      adminReviewAcknowledged: true,
+      reviewComment: finalReviewComment(),
+    });
+    if (!result.ok) {
+      setModerationError(result.error);
+      return;
+    }
     closeModal();
+    window.setTimeout(() => scrollToConfirmedReportsSection(), 100);
+  };
+
+  const dismissReviewedReport = async () => {
+    if (!detailReport || detailReport.status !== "REVIEWED" || needsReviewBackfill) return;
+    if (!canActWithSavedReview) {
+      setModerationError(
+        "Confirm the checkbox and enter an admin review comment before dismissing this report."
+      );
+      return;
+    }
+    setModerationError(null);
+    const result = await updateReportStatus(detailReport.id, "DISMISSED", {
+      adminReviewAcknowledged: true,
+      reviewComment: finalReviewComment(),
+    });
+    if (!result.ok) {
+      setModerationError(result.error);
+      return;
+    }
+    closeModal();
+    window.setTimeout(() => scrollToDismissedReportsSection(), 100);
+  };
+
+  const reportRowList = (list: ReportedPost[]) => (
+    <div className="space-y-2.5">
+      {list.map((report) => {
+        const opened = modalOpen && detailReportId === report.id;
+        return (
+          <div
+            className={cn(
+              "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 shadow-sm transition-colors sm:flex-row sm:items-start sm:justify-between",
+              opened
+                ? "border-primary/40 bg-gradient-to-r from-primary/[0.12] to-sky-500/[0.08] ring-1 ring-primary/15"
+                : "border-border/90 bg-card hover:border-amber-200/80 hover:bg-amber-50/25"
+            )}
+            key={report.id}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text/55">
+                Post ID
+              </p>
+              <p className="mt-0.5 break-all font-mono text-xs text-heading/90">{report.postId}</p>
+              <p className="mt-2 text-sm leading-relaxed text-heading whitespace-pre-wrap">
+                {report.reason}
+              </p>
+            </div>
+            <Button
+              className="h-9 shrink-0 sm:self-center"
+              onClick={() => setDetailReportId(report.id)}
+              type="button"
+              variant="secondary"
+            >
+              Check post
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const reviewedReportRowList = (list: ReportedPost[]) => (
+    <div className="space-y-2.5">
+      {list.map((report) => {
+        const opened = modalOpen && detailReportId === report.id;
+        const hasAdminNote = report.reviewComment.trim().length > 0;
+        return (
+          <div
+            className={cn(
+              "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 shadow-sm transition-colors sm:flex-row sm:items-start sm:justify-between",
+              opened
+                ? "border-indigo-400/50 bg-gradient-to-r from-indigo-50 to-sky-50/80 ring-1 ring-indigo-200/40"
+                : "border-sky-200/70 bg-gradient-to-br from-card to-sky-500/[0.03] hover:border-indigo-200/80 hover:bg-indigo-50/20"
+            )}
+            key={report.id}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-800/80">
+                Admin review
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-heading whitespace-pre-wrap">
+                {hasAdminNote
+                  ? truncateText(report.reviewComment, 320)
+                  : "— No admin review saved yet —"}
+              </p>
+              <p className="mt-2 text-[11px] text-text/50">
+                Post ID <span className="font-mono text-text/70">{report.postId}</span>
+              </p>
+            </div>
+            <Button
+              className="h-9 shrink-0 border-indigo-200 bg-indigo-600 text-white hover:bg-indigo-700 sm:self-center"
+              onClick={() => setDetailReportId(report.id)}
+              type="button"
+              variant="secondary"
+            >
+              Open
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const statusSectionBody = (
+    list: ReportedPost[],
+    emptyLabel: string,
+    listVariant: "default" | "reviewed" = "default"
+  ) => {
+    if (reportsError) {
+      return (
+        <p className="rounded-2xl border border-dashed border-rose-200/80 bg-rose-50/50 px-4 py-8 text-center text-sm text-rose-900/80">
+          {reportsError}
+        </p>
+      );
+    }
+    if (reportsLoading) {
+      return (
+        <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
+          Loading reports…
+        </p>
+      );
+    }
+    if (list.length === 0) {
+      return (
+        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center text-sm text-slate-600">
+          {emptyLabel}
+        </p>
+      );
+    }
+    return listVariant === "reviewed" ? reviewedReportRowList(list) : reportRowList(list);
   };
 
   return (
@@ -231,36 +545,38 @@ export default function CommunityAdminReportedPostsPage() {
                 : "No reports match this status filter."}
             </p>
           ) : (
-            <div className="space-y-2.5">
-              {filteredReports.map((report) => {
-                const opened = modalOpen && detailReportId === report.id;
-
-                return (
-                  <div
-                    className={cn(
-                      "flex flex-col gap-3 rounded-2xl border px-3.5 py-3 shadow-sm transition-colors sm:flex-row sm:items-start sm:justify-between",
-                      opened
-                        ? "border-primary/40 bg-gradient-to-r from-primary/[0.12] to-sky-500/[0.08] ring-1 ring-primary/15"
-                        : "border-border/90 bg-card hover:border-amber-200/80 hover:bg-amber-50/25"
-                    )}
-                    key={report.id}
-                  >
-                    <p className="min-w-0 flex-1 text-sm leading-relaxed text-heading whitespace-pre-wrap">
-                      {report.reason}
-                    </p>
-                    <Button
-                      className="h-9 shrink-0 sm:self-center"
-                      onClick={() => setDetailReportId(report.id)}
-                      type="button"
-                      variant="secondary"
-                    >
-                      Check post
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+            reportRowList(filteredReports)
           )}
+        </Card>
+      </section>
+
+      <section id="reviewed-reports" className="scroll-mt-6">
+        <Card
+          title="Reviewed report posts"
+          description="Shows each report’s admin review. Open a row to update the comment, accept the report, or dismiss it."
+          className="border-l-[3px] border-l-sky-600 bg-gradient-to-br from-card to-sky-500/[0.05]"
+        >
+          {statusSectionBody(reviewedOnly, "No reviewed reports yet.", "reviewed")}
+        </Card>
+      </section>
+
+      <section id="confirmed-reports" className="scroll-mt-6">
+        <Card
+          title="Report confirmed posts"
+          description="Reports you agreed with—the violation was acknowledged (Agreed)."
+          className="border-l-[3px] border-l-emerald-500 bg-gradient-to-br from-card to-emerald-500/[0.05]"
+        >
+          {statusSectionBody(agreedOnly, "No agreed reports yet.")}
+        </Card>
+      </section>
+
+      <section id="dismissed-reports" className="scroll-mt-6">
+        <Card
+          title="Report dismissed posts"
+          description="Reports that were dismissed—the report was rejected."
+          className="border-l-[3px] border-l-rose-400 bg-gradient-to-br from-card to-rose-500/[0.04]"
+        >
+          {statusSectionBody(dismissedOnly, "No dismissed reports yet.")}
         </Card>
       </section>
 
@@ -308,8 +624,12 @@ export default function CommunityAdminReportedPostsPage() {
                   <Badge variant={reportStatusVariant(detailReport.status)}>
                     {reportStatusLabel(detailReport.status)}
                   </Badge>
-                  {detailReport.status !== "OPEN" ? (
-                    <span className="text-xs text-text/65">This report is already closed.</span>
+                  {detailReport.status === "REVIEWED" ? (
+                    <span className="text-xs text-text/65">
+                      Update your notes, then accept or dismiss the report.
+                    </span>
+                  ) : detailReport.status !== "OPEN" ? (
+                    <span className="text-xs text-text/65">This report is closed.</span>
                   ) : null}
                 </div>
 
@@ -318,6 +638,12 @@ export default function CommunityAdminReportedPostsPage() {
                     <p className="text-xs uppercase tracking-[0.08em] text-sky-800/70">Report ID</p>
                     <p className="mt-1 break-all text-sm font-semibold text-heading">
                       {detailReport.id}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-indigo-200/70 bg-indigo-50/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.08em] text-indigo-900/70">Post ID</p>
+                    <p className="mt-1 break-all font-mono text-sm font-semibold text-heading">
+                      {detailReport.postId}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-violet-200/60 bg-violet-50/35 px-3 py-3">
@@ -332,7 +658,7 @@ export default function CommunityAdminReportedPostsPage() {
                       {detailReport.reportedBy}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-amber-200/60 bg-amber-50/40 px-3 py-3">
+                  <div className="rounded-2xl border border-amber-200/60 bg-amber-50/40 px-3 py-3 sm:col-span-2">
                     <p className="text-xs uppercase tracking-[0.08em] text-amber-900/65">Post Author</p>
                     <p className="mt-1 text-sm font-semibold text-heading">
                       {detailReport.postAuthor}
@@ -355,43 +681,277 @@ export default function CommunityAdminReportedPostsPage() {
                   <p className="mt-4 text-xs uppercase tracking-[0.08em] text-text/60">Reported At</p>
                   <p className="mt-1 text-sm text-text/85">{detailReport.reportedAt}</p>
                 </div>
+
+                {detailReport.status === "OPEN" ? (
+                  <div
+                    aria-labelledby="admin-review-form-title"
+                    className="rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-br from-primary/[0.07] to-sky-500/[0.05] px-4 py-4 shadow-sm"
+                    role="group"
+                  >
+                    <p
+                      className="text-xs font-semibold uppercase tracking-[0.08em] text-primary"
+                      id="admin-review-form-title"
+                    >
+                      Admin review form
+                    </p>
+                    <p className="mt-1 text-sm text-heading">
+                      Complete this, then click <strong className="text-primary">Reviewed</strong>. Your
+                      admin review comment is saved to the database on the report record.
+                    </p>
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm">
+                      <input
+                        checked={adminReviewAcknowledged}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-focus"
+                        id="admin-review-ack"
+                        onChange={(event) => {
+                          setAdminReviewAcknowledged(event.target.checked);
+                          setModerationError(null);
+                        }}
+                        type="checkbox"
+                      />
+                      <span className="text-sm leading-snug text-heading">
+                        As community admin I review this post{" "}
+                        <span className="text-rose-600">*</span>
+                      </span>
+                    </label>
+                    <label className="mt-3 block" htmlFor="admin-review-comment">
+                      <span className="text-xs font-medium uppercase tracking-[0.08em] text-text/70">
+                        Admin review comment <span className="text-rose-600">*</span>
+                      </span>
+                      <Textarea
+                        className="mt-1.5 min-h-[100px]"
+                        id="admin-review-comment"
+                        maxLength={4000}
+                        onChange={(event) => {
+                          setReviewCommentDraft(event.target.value);
+                          setModerationError(null);
+                        }}
+                        placeholder="Explain what you checked and why you chose this outcome…"
+                        value={reviewCommentDraft}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                {detailReport.status === "REVIEWED" && !needsReviewBackfill ? (
+                  <div className="rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/80 to-sky-50/40 px-4 py-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-indigo-900/80">
+                      Community admin review
+                    </p>
+                    <p className="mt-1 text-sm text-text/80">
+                      Edit your admin review below. Use <strong className="text-indigo-800">Update comment</strong>{" "}
+                      to save changes, or <strong className="text-emerald-800">Accept</strong> /{" "}
+                      <strong className="text-rose-800">Dismiss</strong> for a final decision.
+                    </p>
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-indigo-100 bg-white/90 px-3 py-2.5 shadow-sm">
+                      <input
+                        checked={adminReviewAcknowledged}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-border text-indigo-600 focus-visible:ring-2 focus-visible:ring-focus"
+                        id="admin-review-ack-reviewed"
+                        onChange={(event) => {
+                          setAdminReviewAcknowledged(event.target.checked);
+                          setModerationError(null);
+                        }}
+                        type="checkbox"
+                      />
+                      <span className="text-sm leading-snug text-heading">
+                        As community admin I confirm this review and any decision I apply{" "}
+                        <span className="text-rose-600">*</span>
+                      </span>
+                    </label>
+                    <label className="mt-3 block" htmlFor="admin-review-comment-reviewed">
+                      <span className="text-xs font-medium uppercase tracking-[0.08em] text-text/70">
+                        Admin review comment <span className="text-rose-600">*</span>
+                      </span>
+                      <Textarea
+                        className="mt-1.5 min-h-[120px] border-indigo-100"
+                        id="admin-review-comment-reviewed"
+                        maxLength={4000}
+                        onChange={(event) => {
+                          setReviewCommentDraft(event.target.value);
+                          setModerationError(null);
+                        }}
+                        placeholder="Your notes on the post and the reporter’s reason…"
+                        value={reviewCommentDraft}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                {(detailReport.status === "AGREED" || detailReport.status === "DISMISSED") ||
+                (detailReport.status === "REVIEWED" && needsReviewBackfill) ? (
+                  <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">
+                      Community admin review (recorded)
+                    </p>
+                    {detailReport.status === "REVIEWED" && needsReviewBackfill ? (
+                      <p className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm text-amber-950/85">
+                        This report is already reviewed but has no saved admin review in the database.
+                        Complete the form below and click{" "}
+                        <strong className="font-semibold">Save admin review</strong>.
+                      </p>
+                    ) : detailReport.adminReviewAcknowledged ? (
+                      <p className="mt-2 text-sm text-emerald-800">
+                        Recorded by community admin.
+                      </p>
+                    ) : null}
+                    {detailReport.status !== "REVIEWED" || !needsReviewBackfill ? (
+                      <>
+                        <p className="mt-3 text-xs uppercase tracking-[0.08em] text-text/60">
+                          Admin review comment
+                        </p>
+                        <p className="mt-1 min-h-[1.5rem] text-sm leading-6 text-heading whitespace-pre-wrap">
+                          {detailReport.reviewComment
+                            ? detailReport.reviewComment
+                            : "No comment was stored for this report."}
+                        </p>
+                      </>
+                    ) : null}
+                    {detailReport.status === "REVIEWED" && needsReviewBackfill ? (
+                      <div
+                        aria-labelledby="admin-review-backfill-title"
+                        className="mt-4 rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-br from-primary/[0.07] to-sky-500/[0.05] px-4 py-4 shadow-sm"
+                        role="group"
+                      >
+                        <p
+                          className="text-xs font-semibold uppercase tracking-[0.08em] text-primary"
+                          id="admin-review-backfill-title"
+                        >
+                          Record admin review
+                        </p>
+                        <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm">
+                          <input
+                            checked={adminReviewAcknowledged}
+                            className="mt-1 h-4 w-4 shrink-0 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-focus"
+                            id="admin-review-ack-backfill"
+                            onChange={(event) => {
+                              setAdminReviewAcknowledged(event.target.checked);
+                              setModerationError(null);
+                            }}
+                            type="checkbox"
+                          />
+                          <span className="text-sm leading-snug text-heading">
+                            As community admin I review this post{" "}
+                            <span className="text-rose-600">*</span>
+                          </span>
+                        </label>
+                        <label className="mt-3 block" htmlFor="admin-review-comment-backfill">
+                          <span className="text-xs font-medium uppercase tracking-[0.08em] text-text/70">
+                            Admin review comment <span className="text-rose-600">*</span>
+                          </span>
+                          <Textarea
+                            className="mt-1.5 min-h-[100px]"
+                            id="admin-review-comment-backfill"
+                            maxLength={4000}
+                            onChange={(event) => {
+                              setReviewCommentDraft(event.target.value);
+                              setModerationError(null);
+                            }}
+                            placeholder="Explain what you checked and why you recorded this outcome…"
+                            value={reviewCommentDraft}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 
             <div className="flex shrink-0 flex-col gap-3 border-t border-border bg-card bg-white px-5 py-4">
               <p className="text-xs text-text/60">
-                <span className="font-medium text-sky-800">Reviewed</span> marks it seen without
-                siding.{" "}
-                <span className="font-medium text-emerald-800">Agree</span> confirms the report.{" "}
-                <span className="font-medium text-red-800">Dismissed</span> rejects the report.
+                {detailReport.status === "OPEN" ? (
+                  <>
+                    <span className="font-medium text-sky-800">Reviewed</span> is enabled only after the
+                    form above is complete.{" "}
+                  </>
+                ) : needsReviewBackfill ? (
+                  <>
+                    <span className="font-medium text-sky-800">Save admin review</span> stores your
+                    comment on this closed report.{" "}
+                  </>
+                ) : detailReport.status === "REVIEWED" && !needsReviewBackfill ? (
+                  <>
+                    <span className="font-medium text-indigo-800">Update comment</span> saves your note
+                    and keeps status as Reviewed.{" "}
+                    <span className="font-medium text-emerald-800">Accept report</span> agrees with the
+                    reporter; <span className="font-medium text-rose-800">Dismiss report</span> rejects
+                    it.{" "}
+                  </>
+                ) : detailReport.status === "AGREED" || detailReport.status === "DISMISSED" ? (
+                  <>This decision is final for this workflow. </>
+                ) : null}
+                <span className="font-medium text-heading">Cancel</span> closes without saving.
               </p>
-              <div className="flex flex-wrap gap-2">
+              {moderationError ? (
+                <p
+                  className="rounded-xl border border-rose-200 bg-rose-50/80 px-3 py-2 text-xs text-rose-900"
+                  role="alert"
+                >
+                  {moderationError}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                {detailReport.status === "OPEN" ? (
+                  <Button
+                    className="h-10 !border-sky-500 !bg-sky-500 !text-white shadow-sm hover:!border-sky-600 hover:!bg-sky-600 disabled:!opacity-60"
+                    disabled={!canSubmitReviewed}
+                    onClick={markReviewed}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Reviewed
+                  </Button>
+                ) : null}
+                {needsReviewBackfill ? (
+                  <Button
+                    className="h-10 !border-sky-500 !bg-sky-500 !text-white shadow-sm hover:!border-sky-600 hover:!bg-sky-600 disabled:!opacity-60"
+                    disabled={!canSubmitBackfill}
+                    onClick={saveReviewBackfill}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Save admin review
+                  </Button>
+                ) : null}
+                {detailReport.status === "REVIEWED" && !needsReviewBackfill ? (
+                  <>
+                    <Button
+                      className="h-10 !border-indigo-700 !bg-indigo-600 !text-white shadow-sm hover:!bg-indigo-700 disabled:!opacity-60"
+                      disabled={!canActWithSavedReview}
+                      onClick={saveReviewedCommentUpdate}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Update comment
+                    </Button>
+                    <Button
+                      className="h-10 !border-emerald-800 !bg-emerald-600 !text-white shadow-sm hover:!bg-emerald-700 disabled:!opacity-60"
+                      disabled={!canActWithSavedReview}
+                      onClick={acceptReviewedReport}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Accept report
+                    </Button>
+                    <Button
+                      className="h-10 !border-rose-900 !bg-rose-600 !text-white shadow-sm hover:!bg-rose-700 disabled:!opacity-60"
+                      disabled={!canActWithSavedReview}
+                      onClick={dismissReviewedReport}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Dismiss report
+                    </Button>
+                  </>
+                ) : null}
                 <Button
-                  className="h-10 !border-sky-500 !bg-sky-500 !text-white shadow-sm hover:!border-sky-600 hover:!bg-sky-600 disabled:!opacity-60"
-                  disabled={detailReport.status !== "OPEN"}
-                  onClick={markReviewed}
+                  className="h-10 border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50 sm:ml-auto"
+                  onClick={closeModal}
                   type="button"
                   variant="secondary"
                 >
-                  Reviewed
-                </Button>
-                <Button
-                  className="h-10 !border-emerald-600 !bg-emerald-600 !text-white hover:!border-emerald-700 hover:!bg-emerald-700 disabled:!opacity-60"
-                  disabled={detailReport.status !== "OPEN"}
-                  onClick={markAgreed}
-                  type="button"
-                  variant="secondary"
-                >
-                  Agree
-                </Button>
-                <Button
-                  className="h-10"
-                  disabled={detailReport.status !== "OPEN"}
-                  onClick={markDismissed}
-                  type="button"
-                  variant="danger"
-                >
-                  Dismissed
+                  Cancel
                 </Button>
               </div>
             </div>

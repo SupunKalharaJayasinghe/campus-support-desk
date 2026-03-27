@@ -36,6 +36,16 @@ const CommunityPostReportSchema = new Schema(
       default: "OPEN",
       index: true,
     },
+    adminReviewAcknowledged: {
+      type: Boolean,
+      default: false,
+    },
+    reviewComment: {
+      type: String,
+      trim: true,
+      maxlength: 4000,
+      default: "",
+    },
   },
   { timestamps: true }
 );
