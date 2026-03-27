@@ -75,7 +75,7 @@ export default function CommunityAdminReportedPostsPage() {
       setReportsLoading(true);
       setReportsError(null);
       try {
-        const response = await fetch("/api/community-post-reports");
+        const response = await fetch("/api/community-post-reports", { cache: "no-store" });
         const data: unknown = await response.json();
         if (!response.ok) {
           if (!cancelled) {
@@ -190,6 +190,84 @@ export default function CommunityAdminReportedPostsPage() {
     };
   }, [modalOpen]);
 
+  const persistAdminReview = async (
+    id: string,
+    moderation: {
+      adminReviewAcknowledged: boolean;
+      reviewComment: string;
+    }
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const response = await fetch(`/api/community-post-reports/${id}`, {
+      method: "PATCH",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        saveAdminReview: true,
+        adminReviewAcknowledged: moderation.adminReviewAcknowledged,
+        reviewComment: moderation.reviewComment,
+      }),
+    });
+    const raw: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        raw !== null &&
+        typeof raw === "object" &&
+        "error" in raw &&
+        typeof (raw as { error: unknown }).error === "string"
+          ? (raw as { error: string }).error
+          : "Could not save admin review.";
+      return { ok: false, error: message };
+    }
+    if (!raw || typeof raw !== "object") {
+      setReports((previous) =>
+        previous.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: item.status === "OPEN" ? "REVIEWED" : item.status,
+                adminReviewAcknowledged: moderation.adminReviewAcknowledged,
+                reviewComment: moderation.reviewComment.trim(),
+              }
+            : item
+        )
+      );
+      return { ok: true };
+    }
+    const doc = raw as Record<string, unknown>;
+    const updatedRaw = doc.updatedAt;
+    const updatedIso =
+      updatedRaw instanceof Date
+        ? updatedRaw.toISOString()
+        : typeof updatedRaw === "string"
+          ? updatedRaw
+          : undefined;
+    const savedAck = doc.adminReviewAcknowledged === true;
+    const savedComment =
+      typeof doc.reviewComment === "string" ? doc.reviewComment.trim() : moderation.reviewComment.trim();
+    setReports((previous) =>
+      previous.map((item) => {
+        if (item.id !== id) return item;
+        const statusRaw = String(doc.status ?? "").toUpperCase();
+        const parsed: ReportStatus | null =
+          statusRaw === "REVIEWED" ||
+          statusRaw === "AGREED" ||
+          statusRaw === "DISMISSED" ||
+          statusRaw === "OPEN"
+            ? statusRaw
+            : null;
+        const status = parsed ?? (item.status === "OPEN" ? "REVIEWED" : item.status);
+        return {
+          ...item,
+          status,
+          updatedAt: updatedIso ?? item.updatedAt,
+          adminReviewAcknowledged: savedAck,
+          reviewComment: savedComment,
+        };
+      })
+    );
+    return { ok: true };
+  };
+
   const updateReportStatus = async (
     id: string,
     nextStatus: ReportStatus,
@@ -200,6 +278,7 @@ export default function CommunityAdminReportedPostsPage() {
   ): Promise<{ ok: true } | { ok: false; error: string }> => {
     const response = await fetch(`/api/community-post-reports/${id}`, {
       method: "PATCH",
+      cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         status: nextStatus,
@@ -284,14 +363,16 @@ export default function CommunityAdminReportedPostsPage() {
     adminReviewAcknowledged &&
     reviewCommentDraft.trim().length > 0;
 
-  const markReviewed = async () => {
+  const saveOpenAdminReview = async () => {
     if (!detailReport || detailReport.status !== "OPEN") return;
     if (!canSubmitReviewed) {
-      setModerationError("Tick “As community admin I review this post” and enter a review comment before Reviewed.");
+      setModerationError(
+        "Tick “As community admin I review this post” and enter a review comment before saving."
+      );
       return;
     }
     setModerationError(null);
-    const result = await updateReportStatus(detailReport.id, "REVIEWED", {
+    const result = await persistAdminReview(detailReport.id, {
       adminReviewAcknowledged: true,
       reviewComment: reviewCommentDraft.trim(),
     });
@@ -312,7 +393,7 @@ export default function CommunityAdminReportedPostsPage() {
       return;
     }
     setModerationError(null);
-    const result = await updateReportStatus(detailReport.id, detailReport.status, {
+    const result = await persistAdminReview(detailReport.id, {
       adminReviewAcknowledged: true,
       reviewComment: reviewCommentDraft.trim(),
     });
@@ -343,7 +424,7 @@ export default function CommunityAdminReportedPostsPage() {
       return;
     }
     setModerationError(null);
-    const result = await updateReportStatus(detailReport.id, "REVIEWED", {
+    const result = await persistAdminReview(detailReport.id, {
       adminReviewAcknowledged: true,
       reviewComment: finalReviewComment(),
     });
@@ -695,8 +776,9 @@ export default function CommunityAdminReportedPostsPage() {
                       Admin review form
                     </p>
                     <p className="mt-1 text-sm text-heading">
-                      Complete this, then click <strong className="text-primary">Reviewed</strong>. Your
-                      admin review comment is saved to the database on the report record.
+                      Complete this, then click <strong className="text-primary">Save admin review</strong>.
+                      Your acknowledgment and comment are stored on this report (open reports move to{" "}
+                      <strong className="text-primary">Reviewed</strong>).
                     </p>
                     <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-sm">
                       <input
@@ -862,8 +944,8 @@ export default function CommunityAdminReportedPostsPage() {
               <p className="text-xs text-text/60">
                 {detailReport.status === "OPEN" ? (
                   <>
-                    <span className="font-medium text-sky-800">Reviewed</span> is enabled only after the
-                    form above is complete.{" "}
+                    <span className="font-medium text-sky-800">Save admin review</span> is enabled only after
+                    the form above is complete.{" "}
                   </>
                 ) : needsReviewBackfill ? (
                   <>
@@ -896,11 +978,11 @@ export default function CommunityAdminReportedPostsPage() {
                   <Button
                     className="h-10 !border-sky-500 !bg-sky-500 !text-white shadow-sm hover:!border-sky-600 hover:!bg-sky-600 disabled:!opacity-60"
                     disabled={!canSubmitReviewed}
-                    onClick={markReviewed}
+                    onClick={saveOpenAdminReview}
                     type="button"
                     variant="secondary"
                   >
-                    Reviewed
+                    Save admin review
                   </Button>
                 ) : null}
                 {needsReviewBackfill ? (

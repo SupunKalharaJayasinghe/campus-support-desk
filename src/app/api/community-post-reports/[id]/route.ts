@@ -2,6 +2,17 @@ import { connectDB } from "@/lib/mongodb";
 import CommunityPostReport from "@/models/communityPostReport";
 import mongoose from "mongoose";
 
+function parseAdminReviewAcknowledged(value: unknown): boolean {
+  if (value === true) return true;
+  if (value === false || value === undefined || value === null) return false;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "on";
+  }
+  return false;
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
@@ -14,10 +25,74 @@ export async function PATCH(
     }
 
     const body = (await req.json().catch(() => ({}))) as {
+      saveAdminReview?: unknown;
       status?: unknown;
       adminReviewAcknowledged?: unknown;
       reviewComment?: unknown;
     };
+
+    const saveAdminReview =
+      body.saveAdminReview === true ||
+      body.saveAdminReview === "true" ||
+      body.saveAdminReview === 1;
+
+    if (saveAdminReview) {
+      const acknowledged = parseAdminReviewAcknowledged(body.adminReviewAcknowledged);
+      const commentRaw =
+        body.reviewComment !== undefined && body.reviewComment !== null
+          ? String(body.reviewComment).trim()
+          : "";
+
+      if (!acknowledged) {
+        return Response.json(
+          {
+            error:
+              "Confirm the checkbox: as community admin you must acknowledge reviewing this post before saving your admin review.",
+          },
+          { status: 400 }
+        );
+      }
+      if (!commentRaw) {
+        return Response.json(
+          { error: "A review comment is required before saving your admin review." },
+          { status: 400 }
+        );
+      }
+
+      const existingDoc = await CommunityPostReport.findById(params.id).lean();
+      if (!existingDoc || Array.isArray(existingDoc)) {
+        return Response.json({ error: "Report not found" }, { status: 404 });
+      }
+
+      const existingSave = existingDoc as { status?: string };
+      const existingStatusNorm =
+        existingSave.status === undefined ||
+        existingSave.status === null ||
+        existingSave.status === ""
+          ? "OPEN"
+          : String(existingSave.status).trim().toUpperCase();
+
+      const $set: Record<string, unknown> = {
+        adminReviewAcknowledged: true,
+        reviewComment: commentRaw.slice(0, 4000),
+      };
+      if (existingStatusNorm === "OPEN") {
+        $set.status = "REVIEWED";
+      }
+
+      const updated = await CommunityPostReport.findByIdAndUpdate(
+        params.id,
+        { $set },
+        { new: true }
+      ).lean();
+
+      if (!updated) {
+        return Response.json({ error: "Report not found" }, { status: 404 });
+      }
+
+      return Response.json(updated);
+    }
+
     const raw = typeof body.status === "string" ? body.status.trim().toUpperCase() : "";
     const status =
       raw === "OPEN" ||
@@ -43,8 +118,7 @@ export async function PATCH(
     const closing =
       status === "REVIEWED" || status === "AGREED" || status === "DISMISSED";
 
-    const acknowledged =
-      body.adminReviewAcknowledged === true || body.adminReviewAcknowledged === "true";
+    const acknowledged = parseAdminReviewAcknowledged(body.adminReviewAcknowledged);
     const commentRaw =
       body.reviewComment !== undefined && body.reviewComment !== null
         ? String(body.reviewComment).trim()
@@ -66,8 +140,7 @@ export async function PATCH(
 
     const movingToFinalDecision =
       existingStatusNorm === "REVIEWED" &&
-      (status === "AGREED" || status === "DISMISSED") &&
-      status !== existingStatusNorm;
+      (status === "AGREED" || status === "DISMISSED");
 
     if (wasOpen && closing) {
       if (!acknowledged) {
@@ -136,6 +209,10 @@ export async function PATCH(
           },
           { status: 400 }
         );
+      }
+      const persistedComment = setComment || existingComment;
+      if (persistedComment.trim().length > 0) {
+        $set.adminReviewAcknowledged = true;
       }
     }
 
