@@ -1,6 +1,10 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
+import {
+  dedupeStringsPreserveOrder,
+  validateCommunityPostLikeContent,
+} from "@/lib/validate-community-post-body";
 import CommunityDraft from "@/models/communityDraft";
 import mongoose from "mongoose";
 
@@ -76,7 +80,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await connectDB();
-    const body = (await req.json()) as DraftPayload;
+    let body: DraftPayload;
+    try {
+      body = (await req.json()) as DraftPayload;
+    } catch {
+      return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
     const title = toTrimmedString(body.title);
     const description = toTrimmedString(body.description);
@@ -90,6 +99,27 @@ export async function POST(req: Request) {
       );
     }
 
+    const tags = dedupeStringsPreserveOrder(
+      Array.isArray(body.tags)
+        ? body.tags.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
+        : []
+    );
+    const attachments = dedupeStringsPreserveOrder(
+      Array.isArray(body.attachments)
+        ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
+        : []
+    );
+
+    const contentCheck = validateCommunityPostLikeContent({
+      title,
+      description,
+      tags,
+      attachments,
+    });
+    if (!contentCheck.ok) {
+      return Response.json({ error: contentCheck.error }, { status: 400 });
+    }
+
     const authorId = await resolveCommunityActorId({
       userId: body.author,
       username: body.authorUsername,
@@ -100,13 +130,6 @@ export async function POST(req: Request) {
     if (!authorId) {
       return Response.json({ error: "Only logged-in users can save drafts" }, { status: 401 });
     }
-
-    const tags = Array.isArray(body.tags)
-      ? body.tags.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
-      : [];
-    const attachments = Array.isArray(body.attachments)
-      ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
-      : [];
 
     const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
     if (!pictureNorm.ok) {

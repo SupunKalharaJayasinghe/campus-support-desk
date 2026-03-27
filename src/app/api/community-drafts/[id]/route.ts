@@ -1,5 +1,9 @@
 import { connectDB } from "@/lib/mongodb";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
+import {
+  dedupeStringsPreserveOrder,
+  validateCommunityPostLikeContent,
+} from "@/lib/validate-community-post-body";
 import CommunityDraft from "@/models/communityDraft";
 import mongoose from "mongoose";
 
@@ -79,12 +83,26 @@ export async function PATCH(
       );
     }
 
-    const tags = Array.isArray(body.tags)
-      ? body.tags.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
-      : [];
-    const attachments = Array.isArray(body.attachments)
-      ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
-      : [];
+    const tags = dedupeStringsPreserveOrder(
+      Array.isArray(body.tags)
+        ? body.tags.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
+        : []
+    );
+    const attachments = dedupeStringsPreserveOrder(
+      Array.isArray(body.attachments)
+        ? body.attachments.map((item) => toTrimmedString(item)).filter((item) => Boolean(item))
+        : []
+    );
+
+    const contentCheck = validateCommunityPostLikeContent({
+      title,
+      description,
+      tags,
+      attachments,
+    });
+    if (!contentCheck.ok) {
+      return Response.json({ error: contentCheck.error }, { status: 400 });
+    }
 
     const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
     if (!pictureNorm.ok) {

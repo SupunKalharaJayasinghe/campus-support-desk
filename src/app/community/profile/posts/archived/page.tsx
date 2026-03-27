@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Archive, MessageSquare, ThumbsUp } from "lucide-react";
+import { Archive, ChevronLeft, MessageSquare, ThumbsUp } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { readStoredUser } from "@/lib/rbac";
 
@@ -72,17 +72,18 @@ export default function CommunityProfileArchivedPostsPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-6 sm:px-6">
       <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-5 space-y-3">
+          <Link
+            href="/community/profile#archive-posts"
+            className="inline-flex items-center gap-1 rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
+            Back to profile
+          </Link>
           <div className="flex items-center gap-2">
             <Archive size={20} className="text-blue-700" />
             <h1 className="text-xl font-bold text-slate-800">All archived posts</h1>
           </div>
-          <Link
-            href="/community/profile#archive-posts"
-            className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-          >
-            Back to profile
-          </Link>
         </div>
 
         {error && (

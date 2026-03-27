@@ -403,7 +403,7 @@ export default function CommunityPostComposer({
                         <Button
                             type="button"
                             variant="primary"
-                            className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                            className="rounded-xl border border-blue-200 bg-blue-700 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-blue-800"
                             onClick={() => pictureInputRef.current?.click()}
                         >
                             Choose image
@@ -411,7 +411,7 @@ export default function CommunityPostComposer({
                         {pictureUrl ? (
                             <Button
                                 type="button"
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                className="rounded-xl border border-slate-200 bg-gray-500 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-red-600"
                                 onClick={clearPicture}
                             >
                                 Remove
@@ -592,7 +592,7 @@ export default function CommunityPostComposer({
                             <div className="flex min-w-0 flex-1 justify-center px-1">
                                 <Button
                                     type="button"
-                                    className="inline-flex min-w-[9rem] shrink-0 items-center justify-center gap-2 rounded-full bg-blue-700 px-8 py-2.5 text-base font-semibold text-white hover:bg-blue-800 sm:min-w-[12rem] sm:px-14"
+                                    className="inline-flex min-w-[9rem] shrink-0 items-center justify-center gap-2 rounded-full bg-emerald-600 px-8 py-2.5 text-base font-semibold text-white hover:bg-emerald-700 sm:min-w-[12rem] sm:px-14"
                                     disabled={isSubmitting}
                                     onClick={openPostConfirm}
                                 >
@@ -612,7 +612,7 @@ export default function CommunityPostComposer({
                             <div className="shrink-0">
                                 <Button
                                     type="button"
-                                    className="rounded-full bg-red-600 px-4 text-white hover:bg-red-700 sm:px-6"
+                                    className="rounded-full bg-gray-600 px-4 text-white hover:bg-red-700 sm:px-6"
                                     onClick={handleComposerCancel}
                                     disabled={isSubmitting}
                                 >
@@ -665,7 +665,7 @@ export default function CommunityPostComposer({
                             </button>
                             <button
                                 type="button"
-                                className="inline-flex min-w-[8rem] items-center justify-center gap-2 rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                className="inline-flex min-w-[8rem] items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                                 onClick={() => {
                                     void executePost();
                                 }}
