@@ -19,6 +19,13 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
+import {
+  DEGREES_BY_FACULTY,
+  FACULTIES,
+  STREAM_OPTIONS,
+  SUBGROUP_OPTIONS,
+  TERM_OPTIONS,
+} from "@/components/admin/AdminContext";
 
 type MainTab = "sent" | "inbox";
 type PageSize = 10 | 25 | 50 | 100;
@@ -34,6 +41,7 @@ interface Announcement {
   message: string;
   audienceType: AudienceType;
   audienceLabel: string;
+  targeting?: NotificationTargeting;
   channel: ChannelType;
   status: AnnouncementStatus;
   priority: PriorityType;
@@ -58,6 +66,14 @@ interface ComposeFormState {
   roleTarget: string;
   facultyTarget: string;
   programTarget: string;
+  degreeFacultyCode: string;
+  degreeCodeTarget: string;
+  semesterTarget: string;
+  allIntakes: boolean;
+  intakeTargets: string[];
+  streamTarget: string;
+  allSubgroups: boolean;
+  subgroupTargets: string[];
   channel: ChannelType;
   priority: PriorityType;
   deliveryMode: "send_now" | "schedule";
@@ -72,6 +88,34 @@ interface ComposeErrors {
   schedule?: string;
 }
 
+interface NotificationTargeting {
+  facultyCode: string;
+  degreeCode: string;
+  semester: string;
+  allIntakes: boolean;
+  intakeIds: string[];
+  intakeNames: string[];
+  stream: string;
+  allSubgroups: boolean;
+  subgroupCodes: string[];
+}
+
+interface IntakeOption {
+  id: string;
+  name: string;
+  currentTerm: string;
+  stream: string;
+}
+
+interface IntakesApiResponse {
+  items?: Array<{
+    id?: string;
+    name?: string;
+    currentTerm?: string;
+    stream?: string;
+  }>;
+}
+
 const ROLE_OPTIONS = [
   "Student",
   "Lecturer",
@@ -81,17 +125,30 @@ const ROLE_OPTIONS = [
   "Administrator",
 ];
 
-const FACULTY_OPTIONS = [
-  "Faculty of Computing",
-  "Faculty of Engineering",
-  "Faculty of Business",
-];
+const ACADEMIC_FACULTY_OPTIONS = FACULTIES.map((faculty) => ({
+  code: faculty.code,
+  label: faculty.label,
+}));
 
-const DEGREE_PROGRAMS_BY_FACULTY: Record<string, string[]> = {
-  "Faculty of Computing": ["BSc Computer Science", "BSc Software Engineering"],
-  "Faculty of Engineering": ["BEng Mechanical Engineering", "BEng Electrical Engineering"],
-  "Faculty of Business": ["BSc Finance", "BBA Business Administration"],
-};
+const DEGREE_OPTIONS_BY_FACULTY = Object.fromEntries(
+  Object.entries(DEGREES_BY_FACULTY).map(([facultyCode, options]) => [
+    facultyCode,
+    options.map((degree) => ({
+      code: degree.code,
+      label: degree.label,
+    })),
+  ])
+) as Record<string, Array<{ code: string; label: string }>>;
+
+const SEMESTER_OPTIONS = ["ALL", ...TERM_OPTIONS] as const;
+
+const STREAM_TARGET_OPTIONS = [
+  { value: "ALL", label: "All Streams" },
+  ...STREAM_OPTIONS.map((stream) => ({
+    value: stream.toUpperCase(),
+    label: stream,
+  })),
+];
 
 const INITIAL_SENT_ANNOUNCEMENTS: Announcement[] = [
   {
@@ -199,6 +256,14 @@ function createDefaultComposeState(): ComposeFormState {
     roleTarget: "",
     facultyTarget: "",
     programTarget: "",
+    degreeFacultyCode: "",
+    degreeCodeTarget: "",
+    semesterTarget: "ALL",
+    allIntakes: true,
+    intakeTargets: [],
+    streamTarget: "ALL",
+    allSubgroups: true,
+    subgroupTargets: [],
     channel: "In-app",
     priority: "Normal",
     deliveryMode: "send_now",
@@ -263,6 +328,9 @@ export default function AdminNotificationsPage() {
   const [selectedInboxId, setSelectedInboxId] = useState<string | null>(
     INITIAL_INBOX_NOTIFICATIONS[0]?.id ?? null
   );
+  const [availableIntakes, setAvailableIntakes] = useState<IntakeOption[]>([]);
+  const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
+  const [intakeLoadError, setIntakeLoadError] = useState("");
 
   useEffect(() => {
     if (!rowMenuAnnouncementId) return;
@@ -330,38 +398,257 @@ export default function AdminNotificationsPage() {
   const previewAnnouncement =
     sentAnnouncements.find((item) => item.id === previewAnnouncementId) ?? null;
 
-  const availableProgramOptions = useMemo(() => {
-    if (composeForm.facultyTarget && DEGREE_PROGRAMS_BY_FACULTY[composeForm.facultyTarget]) {
-      return DEGREE_PROGRAMS_BY_FACULTY[composeForm.facultyTarget];
+  const availableDegreeOptions = useMemo(() => {
+    if (!composeForm.degreeFacultyCode) {
+      return [] as Array<{ code: string; label: string }>;
     }
-    return Object.values(DEGREE_PROGRAMS_BY_FACULTY).flat();
-  }, [composeForm.facultyTarget]);
 
-  const buildAudienceLabel = (form: ComposeFormState) => {
+    return DEGREE_OPTIONS_BY_FACULTY[composeForm.degreeFacultyCode] ?? [];
+  }, [composeForm.degreeFacultyCode]);
+
+  const intakeNameById = useMemo(
+    () => new Map(availableIntakes.map((item) => [item.id, item.name])),
+    [availableIntakes]
+  );
+
+  const availableSubgroupOptions = useMemo(() => {
+    if (composeForm.audienceType !== "Degree Program") {
+      return [] as string[];
+    }
+
+    if (composeForm.allIntakes) {
+      return [...SUBGROUP_OPTIONS];
+    }
+
+    if (composeForm.intakeTargets.length === 0) {
+      return [] as string[];
+    }
+
+    return [...SUBGROUP_OPTIONS];
+  }, [composeForm.audienceType, composeForm.allIntakes, composeForm.intakeTargets]);
+
+  useEffect(() => {
+    if (
+      composeForm.audienceType !== "Degree Program" ||
+      !composeForm.degreeFacultyCode ||
+      !composeForm.degreeCodeTarget
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const query = new URLSearchParams({
+      faculty: composeForm.degreeFacultyCode,
+      degree: composeForm.degreeCodeTarget,
+      page: "1",
+      pageSize: "100",
+      sort: "az",
+    });
+
+    if (composeForm.semesterTarget !== "ALL") {
+      query.set("currentTerm", composeForm.semesterTarget);
+    }
+
+    fetch(`/api/intakes?${query.toString()}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load intakes.");
+        }
+
+        const payload = (await response.json()) as IntakesApiResponse;
+        const rows = Array.isArray(payload.items) ? payload.items : [];
+        const normalizedRows = rows
+          .map((item) => {
+            const id = String(item.id ?? "").trim();
+            const name = String(item.name ?? "").trim();
+
+            if (!id || !name) {
+              return null;
+            }
+
+            return {
+              id,
+              name,
+              currentTerm: String(item.currentTerm ?? "").trim(),
+              stream: String(item.stream ?? "").trim(),
+            } as IntakeOption;
+          })
+          .filter((item): item is IntakeOption => item !== null);
+
+        setAvailableIntakes(normalizedRows);
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          (error as { name?: string }).name === "AbortError"
+        ) {
+          return;
+        }
+
+        setAvailableIntakes([]);
+        setIntakeLoadError("Unable to load intakes for selected faculty/degree.");
+      })
+      .finally(() => {
+        setIsLoadingIntakes(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    composeForm.audienceType,
+    composeForm.degreeCodeTarget,
+    composeForm.degreeFacultyCode,
+    composeForm.semesterTarget,
+  ]);
+
+  const buildDegreeProgramTargeting = (
+    form: ComposeFormState
+  ): NotificationTargeting => {
+    const intakeIds = form.allIntakes
+      ? availableIntakes.map((item) => item.id)
+      : form.intakeTargets;
+    const intakeNames = form.allIntakes
+      ? availableIntakes.map((item) => item.name)
+      : intakeIds.map((id) => intakeNameById.get(id) ?? id);
+
+    return {
+      facultyCode: form.degreeFacultyCode,
+      degreeCode: form.degreeCodeTarget,
+      semester: form.semesterTarget,
+      allIntakes: form.allIntakes,
+      intakeIds,
+      intakeNames,
+      stream: form.streamTarget,
+      allSubgroups: form.allSubgroups,
+      subgroupCodes: form.allSubgroups ? [] : form.subgroupTargets,
+    };
+  };
+
+  const buildAudienceLabel = (
+    form: ComposeFormState,
+    targeting?: NotificationTargeting
+  ) => {
     if (form.audienceType === "All") return "All Users";
     if (form.audienceType === "Role") return form.roleTarget;
-    if (form.audienceType === "Faculty") return form.facultyTarget;
-    return form.programTarget;
+    if (form.audienceType === "Faculty") {
+      const facultyLabel =
+        ACADEMIC_FACULTY_OPTIONS.find((item) => item.code === form.facultyTarget)?.label ??
+        form.facultyTarget;
+      return facultyLabel;
+    }
+    if (!form.degreeFacultyCode && !form.degreeCodeTarget && form.programTarget) {
+      return form.programTarget;
+    }
+
+    const resolved = targeting ?? buildDegreeProgramTargeting(form);
+    const semesterLabel =
+      resolved.semester === "ALL" ? "All Semester" : resolved.semester;
+    const intakeLabel = resolved.allIntakes
+      ? "All Intakes"
+      : resolved.intakeNames.join(", ");
+    const streamLabel = resolved.stream === "ALL" ? "All Streams" : resolved.stream;
+    const subgroupLabel = resolved.allSubgroups
+      ? "All Subgroups"
+      : resolved.subgroupCodes.join(", ");
+
+    return `${resolved.facultyCode} / ${resolved.degreeCode} / ${semesterLabel} / ${intakeLabel || "No Intake"} / ${streamLabel} / ${subgroupLabel || "No Subgroup"}`;
   };
 
   const validateCompose = () => {
     const nextErrors: ComposeErrors = {};
     if (!composeForm.title.trim()) nextErrors.title = "Title is required.";
     if (!composeForm.message.trim()) nextErrors.message = "Message is required.";
-    if (composeForm.audienceType === "Role" && !composeForm.roleTarget) nextErrors.audience = "Select a role target.";
-    if (composeForm.audienceType === "Faculty" && !composeForm.facultyTarget) nextErrors.audience = "Select a faculty target.";
-    if (composeForm.audienceType === "Degree Program" && !composeForm.programTarget) nextErrors.audience = "Select a degree program target.";
-    if (composeForm.deliveryMode === "schedule" && (!composeForm.scheduleDate || !composeForm.scheduleTime)) {
+    if (composeForm.audienceType === "Role" && !composeForm.roleTarget) {
+      nextErrors.audience = "Select a role target.";
+    }
+    if (composeForm.audienceType === "Faculty" && !composeForm.facultyTarget) {
+      nextErrors.audience = "Select a faculty target.";
+    }
+    if (composeForm.audienceType === "Degree Program") {
+      if (!composeForm.degreeFacultyCode || !composeForm.degreeCodeTarget) {
+        if (!composeForm.programTarget) {
+          nextErrors.audience = "Select faculty and degree targets.";
+        }
+      } else if (!composeForm.allIntakes && composeForm.intakeTargets.length === 0) {
+        nextErrors.audience = "Select at least one intake or choose All Intakes.";
+      } else if (!composeForm.allSubgroups && composeForm.subgroupTargets.length === 0) {
+        nextErrors.audience = "Select at least one subgroup or choose All Subgroups.";
+      }
+    }
+    if (
+      composeForm.deliveryMode === "schedule" &&
+      (!composeForm.scheduleDate || !composeForm.scheduleTime)
+    ) {
       nextErrors.schedule = "Schedule date and time are required.";
     }
     setComposeErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
+  const setAllIntakesTarget = (checked: boolean) => {
+    setComposeForm((previous) => ({
+      ...previous,
+      allIntakes: checked,
+      intakeTargets: checked ? [] : previous.intakeTargets,
+      allSubgroups: checked ? true : previous.allSubgroups,
+      subgroupTargets: checked ? [] : previous.subgroupTargets,
+    }));
+  };
+
+  const toggleIntakeTarget = (intakeId: string, checked: boolean) => {
+    setComposeForm((previous) => {
+      const next = new Set(previous.intakeTargets);
+      if (checked) {
+        next.add(intakeId);
+      } else {
+        next.delete(intakeId);
+      }
+
+      return {
+        ...previous,
+        allIntakes: false,
+        intakeTargets: Array.from(next),
+        allSubgroups: next.size === 0 ? true : previous.allSubgroups,
+        subgroupTargets: next.size === 0 ? [] : previous.subgroupTargets,
+      };
+    });
+  };
+
+  const setAllSubgroupsTarget = (checked: boolean) => {
+    setComposeForm((previous) => ({
+      ...previous,
+      allSubgroups: checked,
+      subgroupTargets: checked ? [] : previous.subgroupTargets,
+    }));
+  };
+
+  const toggleSubgroupTarget = (subgroup: string, checked: boolean) => {
+    setComposeForm((previous) => {
+      const next = new Set(previous.subgroupTargets);
+      if (checked) {
+        next.add(subgroup);
+      } else {
+        next.delete(subgroup);
+      }
+
+      return {
+        ...previous,
+        allSubgroups: false,
+        subgroupTargets: Array.from(next),
+      };
+    });
+  };
+
   const openNewCompose = () => {
     setComposeMode("create");
     setEditingAnnouncementId(null);
     setComposeForm(createDefaultComposeState());
+    setAvailableIntakes([]);
+    setIntakeLoadError("");
+    setIsLoadingIntakes(false);
     setComposeErrors({});
     setComposeOpen(true);
   };
@@ -375,8 +662,40 @@ export default function AdminNotificationsPage() {
     defaultState.priority = announcement.priority;
     defaultState.deliveryMode = announcement.status === "Scheduled" ? "schedule" : "send_now";
     if (announcement.audienceType === "Role") defaultState.roleTarget = announcement.audienceLabel;
-    if (announcement.audienceType === "Faculty") defaultState.facultyTarget = announcement.audienceLabel;
-    if (announcement.audienceType === "Degree Program") defaultState.programTarget = announcement.audienceLabel;
+    if (announcement.audienceType === "Faculty") {
+      const matchingFaculty = ACADEMIC_FACULTY_OPTIONS.find(
+        (item) =>
+          item.code === announcement.audienceLabel || item.label === announcement.audienceLabel
+      );
+      defaultState.facultyTarget = matchingFaculty?.code ?? "";
+    }
+    if (announcement.audienceType === "Degree Program") {
+      const hasStructuredTargeting = Boolean(
+        announcement.targeting?.facultyCode && announcement.targeting?.degreeCode
+      );
+      setIsLoadingIntakes(hasStructuredTargeting);
+      if (announcement.targeting) {
+        defaultState.degreeFacultyCode = announcement.targeting.facultyCode;
+        defaultState.degreeCodeTarget = announcement.targeting.degreeCode;
+        defaultState.semesterTarget = announcement.targeting.semester || "ALL";
+        defaultState.allIntakes = announcement.targeting.allIntakes !== false;
+        defaultState.intakeTargets = Array.isArray(announcement.targeting.intakeIds)
+          ? announcement.targeting.intakeIds
+          : [];
+        defaultState.streamTarget = announcement.targeting.stream || "ALL";
+        defaultState.allSubgroups = announcement.targeting.allSubgroups !== false;
+        defaultState.subgroupTargets = Array.isArray(announcement.targeting.subgroupCodes)
+          ? announcement.targeting.subgroupCodes
+          : [];
+      } else {
+        defaultState.programTarget = announcement.audienceLabel;
+      }
+    }
+    if (announcement.audienceType !== "Degree Program") {
+      setAvailableIntakes([]);
+      setIntakeLoadError("");
+      setIsLoadingIntakes(false);
+    }
     setComposeMode("edit");
     setEditingAnnouncementId(announcement.id);
     setComposeForm(defaultState);
@@ -390,6 +709,13 @@ export default function AdminNotificationsPage() {
   };
 
   const upsertAnnouncement = (status: AnnouncementStatus) => {
+    const degreeTargeting =
+      composeForm.audienceType === "Degree Program" &&
+      composeForm.degreeFacultyCode &&
+      composeForm.degreeCodeTarget
+        ? buildDegreeProgramTargeting(composeForm)
+        : undefined;
+
     const announcement: Announcement = {
       id:
         composeMode === "edit" && editingAnnouncementId
@@ -398,7 +724,8 @@ export default function AdminNotificationsPage() {
       title: composeForm.title.trim() || "Untitled Draft",
       message: composeForm.message.trim(),
       audienceType: composeForm.audienceType,
-      audienceLabel: buildAudienceLabel(composeForm),
+      audienceLabel: buildAudienceLabel(composeForm, degreeTargeting),
+      targeting: degreeTargeting,
       channel: composeForm.channel,
       status,
       priority: composeForm.priority,
@@ -1006,15 +1333,26 @@ export default function AdminNotificationsPage() {
                   <Select
                     className="mt-1 h-11 rounded-xl"
                     id="audience-type"
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setComposeForm((previous) => ({
                         ...previous,
                         audienceType: event.target.value as AudienceType,
                         roleTarget: "",
                         facultyTarget: "",
                         programTarget: "",
-                      }))
-                    }
+                        degreeFacultyCode: "",
+                        degreeCodeTarget: "",
+                        semesterTarget: "ALL",
+                        allIntakes: true,
+                        intakeTargets: [],
+                        streamTarget: "ALL",
+                        allSubgroups: true,
+                        subgroupTargets: [],
+                      }));
+                      setAvailableIntakes([]);
+                      setIntakeLoadError("");
+                      setIsLoadingIntakes(false);
+                    }}
                     value={composeForm.audienceType}
                   >
                     <option value="All">All</option>
@@ -1067,9 +1405,9 @@ export default function AdminNotificationsPage() {
                       value={composeForm.facultyTarget}
                     >
                       <option value="">Select Faculty</option>
-                      {FACULTY_OPTIONS.map((faculty) => (
-                        <option key={faculty} value={faculty}>
-                          {faculty}
+                      {ACADEMIC_FACULTY_OPTIONS.map((faculty) => (
+                        <option key={faculty.code} value={faculty.code}>
+                          {faculty.code} - {faculty.label}
                         </option>
                       ))}
                     </Select>
@@ -1077,53 +1415,221 @@ export default function AdminNotificationsPage() {
                 ) : null}
 
                 {composeForm.audienceType === "Degree Program" ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-sm font-medium text-[#26150F]" htmlFor="target-program-faculty">
+                          Faculty
+                        </label>
+                        <Select
+                          className="mt-1 h-11 rounded-xl"
+                          id="target-program-faculty"
+                          onChange={(event) => {
+                            setComposeForm((previous) => ({
+                              ...previous,
+                              degreeFacultyCode: event.target.value,
+                              degreeCodeTarget: "",
+                              semesterTarget: "ALL",
+                              allIntakes: true,
+                              intakeTargets: [],
+                              allSubgroups: true,
+                              subgroupTargets: [],
+                            }));
+                            setAvailableIntakes([]);
+                            setIntakeLoadError("");
+                            setIsLoadingIntakes(false);
+                          }}
+                          value={composeForm.degreeFacultyCode}
+                        >
+                          <option value="">Select Faculty</option>
+                          {ACADEMIC_FACULTY_OPTIONS.map((faculty) => (
+                            <option key={faculty.code} value={faculty.code}>
+                              {faculty.code} - {faculty.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-[#26150F]" htmlFor="target-program">
+                          Degree
+                        </label>
+                        <Select
+                          className="mt-1 h-11 rounded-xl"
+                          id="target-program"
+                          onChange={(event) => {
+                            setComposeForm((previous) => ({
+                              ...previous,
+                              degreeCodeTarget: event.target.value,
+                              semesterTarget: "ALL",
+                              allIntakes: true,
+                              intakeTargets: [],
+                              allSubgroups: true,
+                              subgroupTargets: [],
+                            }));
+                            setAvailableIntakes([]);
+                            setIntakeLoadError("");
+                            setIsLoadingIntakes(
+                              Boolean(event.target.value && composeForm.degreeFacultyCode)
+                            );
+                          }}
+                          value={composeForm.degreeCodeTarget}
+                        >
+                          <option value="">Select Degree</option>
+                          {availableDegreeOptions.map((program) => (
+                            <option key={program.code} value={program.code}>
+                              {program.code} - {program.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="text-sm font-medium text-[#26150F]" htmlFor="target-program-faculty">
-                        Faculty
+                      <label className="text-sm font-medium text-[#26150F]" htmlFor="target-semester">
+                        Semester
                       </label>
                       <Select
                         className="mt-1 h-11 rounded-xl"
-                        id="target-program-faculty"
-                        onChange={(event) =>
+                        id="target-semester"
+                        onChange={(event) => {
                           setComposeForm((previous) => ({
                             ...previous,
-                            facultyTarget: event.target.value,
-                            programTarget: "",
-                          }))
-                        }
-                        value={composeForm.facultyTarget}
+                            semesterTarget: event.target.value,
+                            allIntakes: true,
+                            intakeTargets: [],
+                            allSubgroups: true,
+                            subgroupTargets: [],
+                          }));
+                          setAvailableIntakes([]);
+                          setIntakeLoadError("");
+                          setIsLoadingIntakes(
+                            Boolean(composeForm.degreeFacultyCode && composeForm.degreeCodeTarget)
+                          );
+                        }}
+                        value={composeForm.semesterTarget}
                       >
-                        <option value="">All Faculties</option>
-                        {FACULTY_OPTIONS.map((faculty) => (
-                          <option key={faculty} value={faculty}>
-                            {faculty}
+                        {SEMESTER_OPTIONS.map((semester) => (
+                          <option key={semester} value={semester}>
+                            {semester === "ALL" ? "All Semester" : semester}
                           </option>
                         ))}
                       </Select>
                     </div>
+
+                    <div className="space-y-2 rounded-xl border border-black/10 bg-white/70 p-3">
+                      <p className="text-sm font-medium text-[#26150F]">Intake Selection</p>
+                      <label className="flex items-center gap-2 text-sm text-[#26150F]/85">
+                        <input
+                          checked={composeForm.allIntakes}
+                          onChange={(event) => setAllIntakesTarget(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>All Intakes</span>
+                      </label>
+
+                      {isLoadingIntakes ? (
+                        <p className="text-xs text-[#26150F]/70">Loading intakes...</p>
+                      ) : availableIntakes.length === 0 ? (
+                        <p className="text-xs text-[#26150F]/70">
+                          No intakes available for selected faculty, degree, and semester.
+                        </p>
+                      ) : (
+                        <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-black/10 bg-white p-2">
+                          {availableIntakes.map((intake) => (
+                            <label
+                              className={cn(
+                                "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-[#26150F]/85",
+                                composeForm.allIntakes ? "opacity-60" : ""
+                              )}
+                              key={intake.id}
+                            >
+                              <span className="flex items-center gap-2">
+                                <input
+                                  checked={composeForm.intakeTargets.includes(intake.id)}
+                                  disabled={composeForm.allIntakes}
+                                  onChange={(event) =>
+                                    toggleIntakeTarget(intake.id, event.target.checked)
+                                  }
+                                  type="checkbox"
+                                />
+                                <span>{intake.name}</span>
+                              </span>
+                              <span className="text-xs text-[#26150F]/55">{intake.currentTerm}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      {intakeLoadError ? (
+                        <p className="text-xs text-[#0339A6]">{intakeLoadError}</p>
+                      ) : (
+                        <p className="text-xs text-[#26150F]/60">
+                          Select one or more intakes when All Intakes is unchecked.
+                        </p>
+                      )}
+                    </div>
+
                     <div>
-                      <label className="text-sm font-medium text-[#26150F]" htmlFor="target-program">
-                        Degree Program
+                      <label className="text-sm font-medium text-[#26150F]" htmlFor="target-stream">
+                        Weekday / Weekend
                       </label>
                       <Select
                         className="mt-1 h-11 rounded-xl"
-                        id="target-program"
+                        id="target-stream"
                         onChange={(event) =>
                           setComposeForm((previous) => ({
                             ...previous,
-                            programTarget: event.target.value,
+                            streamTarget: event.target.value,
                           }))
                         }
-                        value={composeForm.programTarget}
+                        value={composeForm.streamTarget}
                       >
-                        <option value="">Select Program</option>
-                        {availableProgramOptions.map((program) => (
-                          <option key={program} value={program}>
-                            {program}
+                        {STREAM_TARGET_OPTIONS.map((stream) => (
+                          <option key={stream.value} value={stream.value}>
+                            {stream.label}
                           </option>
                         ))}
                       </Select>
+                    </div>
+
+                    <div className="space-y-2 rounded-xl border border-black/10 bg-white/70 p-3">
+                      <p className="text-sm font-medium text-[#26150F]">Subgroup Selection</p>
+                      <label className="flex items-center gap-2 text-sm text-[#26150F]/85">
+                        <input
+                          checked={composeForm.allSubgroups}
+                          onChange={(event) => setAllSubgroupsTarget(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span>All Subgroups</span>
+                      </label>
+
+                      {availableSubgroupOptions.length === 0 ? (
+                        <p className="text-xs text-[#26150F]/70">
+                          Select intake filters to enable subgroup selection.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1 rounded-lg border border-black/10 bg-white p-2">
+                          {availableSubgroupOptions.map((subgroup) => (
+                            <label
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[#26150F]/85",
+                                composeForm.allSubgroups ? "opacity-60" : ""
+                              )}
+                              key={subgroup}
+                            >
+                              <input
+                                checked={composeForm.subgroupTargets.includes(subgroup)}
+                                disabled={composeForm.allSubgroups}
+                                onChange={(event) =>
+                                  toggleSubgroupTarget(subgroup, event.target.checked)
+                                }
+                                type="checkbox"
+                              />
+                              <span>{subgroup}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : null}

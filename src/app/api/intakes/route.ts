@@ -17,6 +17,7 @@ import {
   type IntakeStatus,
   type IntakeRecord,
   type IntakeTermScheduleRecord,
+  type TermCode,
 } from "@/models/intake-store";
 import type { IntakeTermScheduleInput } from "@/models/intake-store";
 
@@ -53,6 +54,23 @@ function sanitizeSort(value: string | null): IntakeSort {
 
 function sanitizeStatus(value: string | null): "" | IntakeStatus {
   if (value === "ACTIVE" || value === "INACTIVE" || value === "DRAFT") {
+    return value;
+  }
+
+  return "";
+}
+
+function sanitizeCurrentTerm(value: string | null): "" | TermCode {
+  if (
+    value === "Y1S1" ||
+    value === "Y1S2" ||
+    value === "Y2S1" ||
+    value === "Y2S2" ||
+    value === "Y3S1" ||
+    value === "Y3S2" ||
+    value === "Y4S1" ||
+    value === "Y4S2"
+  ) {
     return value;
   }
 
@@ -127,9 +145,11 @@ export async function GET(request: Request) {
       searchParams.get("degreeProgramId") ??
       searchParams.get("degreeCode")
   );
+  const currentTerm = sanitizeCurrentTerm(searchParams.get("currentTerm"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
 
   const allItems = listIntakes({
+    currentTerm,
     degree,
     faculty,
     search,
