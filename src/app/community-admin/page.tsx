@@ -10,6 +10,7 @@ import {
   mapApiReportToRow,
   type ReportedPost,
 } from "@/app/community-admin/_lib/reports";
+import AdminOverviewCharts from "@/app/community-admin/_components/AdminOverviewCharts";
 
 type MemberStatus = "Active" | "Warned" | "Suspended";
 
@@ -282,6 +283,15 @@ export default function CommunityAdminDashboardPage() {
             </Link>
           </Card>
         </div>
+
+        <AdminOverviewCharts
+          activeMemberCount={activeMemberCount}
+          warnedMemberCount={warnedMemberCount}
+          suspendedMemberCount={suspendedMemberCount}
+          membersLoading={membersLoading}
+          reports={reports}
+          reportsLoading={reportsLoading}
+        />
       </section>
     </div>
   );

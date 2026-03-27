@@ -52,6 +52,7 @@ const SUB_LINKS_DASHBOARD: SubLink[] = [
   { hash: "overview", label: "Overview" },
   { hash: "member-overview", label: "Member details" },
   { hash: "post-reports-overview", label: "Post details" },
+  { hash: "overview-charts", label: "Charts" },
 ];
 
 /** Primary “Sections” nav: inactive rows */
