@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -8,13 +8,6 @@ import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
 import { availableLecturerSlots, studentBookings } from "@/lib/mockData";
 import type { StudentBooking } from "@/lib/mockData";
-
-interface SelectedSlot {
-  lecturer: string;
-  date: string;
-  start: string;
-  end: string;
-}
 
 function bookingVariant(status: StudentBooking["status"]) {
   if (status === "Approved" || status === "Completed") {
@@ -30,7 +23,8 @@ export default function StudentBookingPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<StudentBooking[]>(studentBookings);
-  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const successTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 500);
@@ -49,6 +43,32 @@ export default function StudentBookingPage() {
     );
   }
 
+  const confirmBooking = (slot: { date: string; start: string; end: string }, lecturer: string) => {
+    setBookings((prev) => [
+      {
+        id: `sb-${Date.now()}`,
+        lecturer,
+        purpose: "Consultation",
+        date: slot.date,
+        time: `${slot.start} - ${slot.end}`,
+        status: "Pending",
+      },
+      ...prev,
+    ]);
+    setSuccessMessage("Booking submitted");
+    if (successTimerRef.current) {
+      window.clearTimeout(successTimerRef.current);
+    }
+    successTimerRef.current = window.setTimeout(() => {
+      setSuccessMessage(null);
+      successTimerRef.current = null;
+    }, 3000);
+    toast({
+      title: "Booking submitted",
+      message: "Your request was sent for lecturer approval.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -56,29 +76,34 @@ export default function StudentBookingPage() {
         <p className="text-sm text-text/72">Book and track lecturer consultation sessions.</p>
       </div>
 
-      <Card title="Available Slots" description="Next 7 days lecturer availability">
+      <Card className="relative" title="Available Slots" description="Next 7 days lecturer availability">
+        {successMessage ? (
+          <div className="absolute right-4 top-4 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+            {successMessage}
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           {availableLecturerSlots.map((lecturer) => (
             <div className="rounded-xl border border-border p-4" key={lecturer.id}>
               <p className="text-sm font-semibold text-heading">{lecturer.lecturer}</p>
               <p className="text-xs text-text/72">{lecturer.department}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 grid gap-2">
                 {lecturer.slots.map((slot) => (
-                  <button
-                    className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-text/72 hover:bg-tint"
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
                     key={slot.id}
-                    onClick={() =>
-                      setSelectedSlot({
-                        lecturer: lecturer.lecturer,
-                        date: slot.date,
-                        start: slot.start,
-                        end: slot.end,
-                      })
-                    }
-                    type="button"
                   >
-                    {slot.date} • {slot.start}
-                  </button>
+                    <div className="text-xs font-medium text-text/72">
+                      {slot.date} • {slot.start}
+                    </div>
+                    <Button
+                      className="h-8 px-3 text-xs"
+                      onClick={() => confirmBooking(slot, lecturer.lecturer)}
+                      variant="secondary"
+                    >
+                      Confirm
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -116,47 +141,6 @@ export default function StudentBookingPage() {
           ))}
         </div>
       </Card>
-
-      {selectedSlot ? (
-        <div className="fixed inset-0 z-40 bg-text/35 p-4">
-          <div className="flex h-full items-center justify-center">
-            <Card className="w-full max-w-lg">
-              <h2 className="text-lg font-semibold text-heading">Confirm booking</h2>
-              <p className="mt-2 text-sm text-text/72">{selectedSlot.lecturer}</p>
-              <p className="mt-1 text-sm text-text/72">
-                {selectedSlot.date} • {selectedSlot.start} - {selectedSlot.end}
-              </p>
-              <div className="mt-5 flex justify-end gap-2">
-                <Button onClick={() => setSelectedSlot(null)} variant="ghost">
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    setBookings((prev) => [
-                      {
-                        id: `sb-${Date.now()}`,
-                        lecturer: selectedSlot.lecturer,
-                        purpose: "Consultation",
-                        date: selectedSlot.date,
-                        time: `${selectedSlot.start} - ${selectedSlot.end}`,
-                        status: "Pending",
-                      },
-                      ...prev,
-                    ]);
-                    setSelectedSlot(null);
-                    toast({
-                      title: "Booking submitted",
-                      message: "Your request was sent for lecturer approval.",
-                    });
-                  }}
-                >
-                  Confirm booking
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
