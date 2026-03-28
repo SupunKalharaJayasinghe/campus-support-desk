@@ -49,6 +49,7 @@ export default function StudentDashboardPage() {
   };
 
   const validateSecurityForm = () => {
+    // Frontend validation: enforce mandatory fields before calling change-password API.
     if (!currentPassword) {
       return "Current password is required";
     }

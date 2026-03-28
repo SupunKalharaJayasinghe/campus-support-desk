@@ -10,7 +10,7 @@ const DashboardLatestNotificationGate = dynamic(
 
 const STUDENT_LINKS = [
   { label: "Dashboard", href: "/student" },
-  { label: "Notifications", href: "/student/notifications" },
+  { label: "Notifications", href: "/notifications" },
   { label: "Book Lecturer", href: "/student/booking" },
   { label: "Report Lost Item", href: "/student/lost-items" },
   { label: "Announcements", href: "/student/announcements" },
@@ -31,7 +31,7 @@ export default function StudentLayout({
             <DashboardLatestNotificationGate
               dashboardPath="/student"
               fallbackRole="STUDENT"
-              notificationsHref="/student/notifications"
+              notificationsHref="/notifications"
             />
             {children}
           </Container>
@@ -40,3 +40,4 @@ export default function StudentLayout({
     </RoleGuard>
   );
 }
+

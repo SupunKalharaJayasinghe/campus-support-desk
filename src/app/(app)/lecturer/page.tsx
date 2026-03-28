@@ -26,7 +26,7 @@ export default function LecturerDashboardPage() {
       </div>
 
       <LatestNotificationSection
-        href="/lecturer/notifications"
+        href="/notifications"
         item={latestNotification}
       />
 
@@ -46,7 +46,7 @@ export default function LecturerDashboardPage() {
       </section>
 
       <RecentNotificationsCard
-        href="/lecturer/notifications"
+        href="/notifications"
         items={scopedNotifications}
         title="Recent Alerts"
       />

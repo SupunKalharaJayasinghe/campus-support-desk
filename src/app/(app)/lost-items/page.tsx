@@ -19,7 +19,7 @@ export default function LostItemsDashboardPage() {
       </div>
 
       <LatestNotificationSection
-        href="/lost-items/notifications"
+        href="/notifications"
         item={latestNotification}
       />
 
@@ -39,7 +39,7 @@ export default function LostItemsDashboardPage() {
       </section>
 
       <RecentNotificationsCard
-        href="/lost-items/notifications"
+        href="/notifications"
         items={notifications}
       />
     </div>

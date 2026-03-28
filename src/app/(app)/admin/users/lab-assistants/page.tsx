@@ -401,12 +401,14 @@ export default function LabAssistantsPage() {
 
   const save = async () => {
     const fullName = collapseSpaces(form.fullName);
+    // Frontend validation: lab assistant must have a display name.
     if (!fullName) {
       setFormError("Full name is required");
       return;
     }
     setSaving(true);
     try {
+      // Scope lists are optional, but notify when saving an unrestricted assistant.
       if (form.facultyIds.length === 0 && form.degreeProgramIds.length === 0 && form.moduleIds.length === 0) {
         toast({ title: "No support scope selected", message: "Lab assistant will be saved without eligibility restrictions.", variant: "info" });
       }

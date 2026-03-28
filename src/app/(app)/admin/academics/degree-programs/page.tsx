@@ -391,6 +391,7 @@ export default function DegreeProgramsPage() {
     const credits = Number(form.credits);
     const durationYears = Number(form.durationYears);
 
+    // Frontend validation for degree setup before API save.
     if (!/^[A-Z]{2,6}$/.test(code)) nextErrors.code = "Use 2–6 uppercase letters";
     if (!name) nextErrors.name = "Program name is required";
     if (!form.facultyCode) nextErrors.facultyCode = "Select a faculty";

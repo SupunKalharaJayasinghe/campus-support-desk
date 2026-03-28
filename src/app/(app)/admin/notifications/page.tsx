@@ -599,6 +599,7 @@ export default function AdminNotificationsPage() {
 
   const validateCompose = () => {
     const nextErrors: ComposeErrors = {};
+    // Frontend validation: base required fields.
     if (!composeForm.title.trim()) nextErrors.title = "Title is required.";
     if (!composeForm.message.trim()) nextErrors.message = "Message is required.";
     if (composeForm.audienceType === "Role" && !composeForm.roleTarget) {
@@ -611,6 +612,8 @@ export default function AdminNotificationsPage() {
       nextErrors.audience = "Select a semester target.";
     }
     if (composeForm.audienceType === "Degree Program") {
+      // Frontend validation: Degree Program targeting needs faculty + degree and either
+      // all-intakes/all-subgroups or at least one explicit selection.
       if (!composeForm.degreeFacultyCode || !composeForm.degreeCodeTarget) {
         if (!composeForm.programTarget) {
           nextErrors.audience = "Select faculty and degree targets.";
@@ -625,6 +628,7 @@ export default function AdminNotificationsPage() {
       composeForm.deliveryMode === "schedule" &&
       (!composeForm.scheduleDate || !composeForm.scheduleTime)
     ) {
+      // Frontend validation: scheduled sends must include both date and time.
       nextErrors.schedule = "Schedule date and time are required.";
     }
     setComposeErrors(nextErrors);

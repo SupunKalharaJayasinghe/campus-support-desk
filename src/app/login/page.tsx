@@ -27,6 +27,7 @@ export default function LoginPage() {
     }
 
     const trimmedId = campusIdOrEmail.trim();
+    // Frontend validation: block submit until both identifier and password are filled.
     if (!trimmedId || !password) {
       setError("Campus ID/email and password are required");
       return;
@@ -89,6 +90,7 @@ export default function LoginPage() {
       }
 
       const user = payload?.user;
+      // Frontend validation: protect session persistence from malformed API payloads.
       if (!user?.id || !user?.role) {
         throw new Error("Invalid login response");
       }

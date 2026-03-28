@@ -5,8 +5,8 @@ import Container from "@/components/ui/Container";
 const LECTURER_LINKS = [
   { label: "Dashboard", href: "/lecturer" },
   { label: "Availability", href: "/lecturer/availability" },
-  { label: "Bookings", href: "/lecturer/booking" },
-  { label: "Notifications", href: "/lecturer/notifications" },
+  { label: "Bookings", href: "/lecturer/bookings" },
+  { label: "Notifications", href: "/notifications" },
   { label: "Posts", href: "/lecturer/posts" },
 ];
 
@@ -26,3 +26,4 @@ export default function LecturerLayout({
     </RoleGuard>
   );
 }
+

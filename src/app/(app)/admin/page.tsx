@@ -263,7 +263,7 @@ export default function AdminDashboardPage() {
       />
 
       <LatestNotificationSection
-        href="/admin/notifications"
+        href="/notifications"
         item={ADMIN_LATEST_NOTIFICATION}
         subtitle="Most recent notification targeted to admin users."
       />

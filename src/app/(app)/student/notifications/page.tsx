@@ -1,13 +1,5 @@
-"use client";
-
-import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { redirect } from "next/navigation";
 
 export default function StudentNotificationsPage() {
-  return (
-    <NotificationCenter
-      role="STUDENT"
-      subtitle="Student alerts and announcements targeted to your academic scope."
-      title="Notifications"
-    />
-  );
+  redirect("/notifications");
 }

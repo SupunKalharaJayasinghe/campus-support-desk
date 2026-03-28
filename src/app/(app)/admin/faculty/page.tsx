@@ -267,6 +267,7 @@ export default function FacultyPage() {
     setErrors({});
   };
 
+  // Frontend validation for faculty create/edit form.
   const validateForm = () => {
     const nextErrors: FacultyFormErrors = {};
     const normalizedCode = normalizeCode(form.code.trim());
