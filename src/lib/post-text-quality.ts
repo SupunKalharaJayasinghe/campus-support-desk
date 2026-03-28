@@ -1,22 +1,25 @@
 /**
- * Rejects placeholder-style title/body text: all digits, repeated characters,
- * strict two-character alternation, whole-string repetition of a short unit,
- * or very low letter/digit variety (e.g. "adsasd").
+ * Rejects placeholder-style title/body text: all digits, repeated characters
+ * (case-insensitive), strict two-character alternation, whole-string repetition
+ * of a short unit, or very low letter/digit variety (e.g. "adsasd").
  */
 export function getPostTextQualityError(raw: string): string | null {
     const t = raw.trim();
     if (t.length === 0) return null;
 
+    const lower = t.toLowerCase();
+
     const digitsOnly = t.replace(/\s/g, "");
     if (digitsOnly.length > 0 && /^\d+$/.test(digitsOnly)) {
-        return "Can't be only numbers.";
+        return "Can't be only numbers (e.g. 11111 or 12345).";
     }
 
-    if (t.length >= 3 && /^(.)\1+$/.test(t)) {
-        return "Can't be the same character repeated.";
+    /** Same character or digit repeated, ignoring letter case (catches AaAaA, xxxxx). */
+    if (lower.length >= 3 && /^(.)\1+$/.test(lower)) {
+        return "Can't be repeating the same character or digit (e.g. aaaaa, xxxxx).";
     }
 
-    const lower = t.toLowerCase();
+    /** Strict ABAB… pattern, length ≥ 4 (catches asasas; avoids blocking "bob"/"eve"). */
     if (lower.length >= 4) {
         const a = lower[0];
         const b = lower[1];
@@ -29,7 +32,7 @@ export function getPostTextQualityError(raw: string): string | null {
                 }
             }
             if (alternating) {
-                return "Can't be a simple alternating pattern (like ababab).";
+                return "Can't be a back-and-forth pattern (e.g. asasas, ababab).";
             }
         }
     }

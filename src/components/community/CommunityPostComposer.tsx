@@ -9,7 +9,16 @@ import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
-import { getPostTextQualityError } from "@/lib/post-text-quality";
+import { COMMUNITY_POST_BODY_LIMITS } from "@/lib/validate-community-post-body";
+import {
+    getComposerAttachmentsError,
+    getComposerDescriptionError,
+    getComposerTagsError,
+    getComposerTitleError,
+    getSingleAttachmentUrlError,
+    isCommunityPostComposerValid,
+    isValidCommunityTag,
+} from "@/lib/community-post-composer-validation";
 
 const MAX_IMAGE_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -21,12 +30,6 @@ const CATEGORY_OPTIONS = [
 
 function cn(...classes: Array<string | undefined | false>) {
     return classes.filter(Boolean).join(" ");
-}
-
-/** Tag must start with # and have at least one non-whitespace character after it. */
-function isValidCommunityTag(raw: string): boolean {
-    const t = raw.trim();
-    return t.startsWith("#") && t.slice(1).trim().length > 0;
 }
 
 export type CommunityPostComposerProps = {
@@ -115,6 +118,8 @@ export default function CommunityPostComposer({
         setStatus(draftToEdit.status);
         setIsDraftSaved(true);
         setSubmitError("");
+        setValidationAttempted(false);
+        setAttachmentInputError("");
     }, [
         draftToEdit,
         draftToEdit?.id,
@@ -125,11 +130,22 @@ export default function CommunityPostComposer({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
     const [postConfirmOpen, setPostConfirmOpen] = useState(false);
+    /** After Save/Post click, show required-field and full client-side validation messages. */
+    const [validationAttempted, setValidationAttempted] = useState(false);
+    const [attachmentInputError, setAttachmentInputError] = useState("");
 
     const addTag = () => {
         const trimmed = tagInput.trim();
         if (!trimmed) {
             setTagInput("");
+            return;
+        }
+        if (tags.length >= COMMUNITY_POST_BODY_LIMITS.maxTags) {
+            setTagError(`At most ${COMMUNITY_POST_BODY_LIMITS.maxTags} tags allowed.`);
+            return;
+        }
+        if (trimmed.length > COMMUNITY_POST_BODY_LIMITS.tagMaxLength) {
+            setTagError(`Each tag must be at most ${COMMUNITY_POST_BODY_LIMITS.tagMaxLength} characters.`);
             return;
         }
         if (!isValidCommunityTag(trimmed)) {
@@ -161,15 +177,35 @@ export default function CommunityPostComposer({
 
     const addAttachment = () => {
         const trimmed = attachmentInput.trim();
-        if (trimmed && !attachments.includes(trimmed)) {
-            setAttachments((prev) => [...prev, trimmed]);
-            setIsDraftSaved(false);
+        if (!trimmed) {
+            setAttachmentInput("");
+            return;
         }
+        if (attachments.length >= COMMUNITY_POST_BODY_LIMITS.maxAttachments) {
+            setAttachmentInputError(
+                `At most ${COMMUNITY_POST_BODY_LIMITS.maxAttachments} attachment links allowed.`
+            );
+            return;
+        }
+        const urlErr = getSingleAttachmentUrlError(trimmed);
+        if (urlErr) {
+            setAttachmentInputError(urlErr);
+            return;
+        }
+        if (attachments.includes(trimmed)) {
+            setAttachmentInput("");
+            setAttachmentInputError("");
+            return;
+        }
+        setAttachmentInputError("");
+        setAttachments((prev) => [...prev, trimmed]);
+        setIsDraftSaved(false);
         setAttachmentInput("");
     };
 
     const removeAttachment = (url: string) => {
         setAttachments((prev) => prev.filter((a) => a !== url));
+        setAttachmentInputError("");
         setIsDraftSaved(false);
     };
 
@@ -211,8 +247,7 @@ export default function CommunityPostComposer({
     };
 
     const handleSaveDraft = async () => {
-        if (!title.trim() || !description.trim()) return;
-        if (getPostTextQualityError(title) || getPostTextQualityError(description)) return;
+        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
         const nextDraft: CommunityPostDraftInput = {
             id: draftId ?? undefined,
             title: title.trim(),
@@ -242,6 +277,8 @@ export default function CommunityPostComposer({
             setStatus("open");
             setIsDraftSaved(false);
             setSubmitError("");
+            setValidationAttempted(false);
+            setAttachmentInputError("");
             return;
         }
         setIsDraftSaved(true);
@@ -262,6 +299,8 @@ export default function CommunityPostComposer({
         setStatus("open");
         setIsDraftSaved(false);
         setSubmitError("");
+        setValidationAttempted(false);
+        setAttachmentInputError("");
         onDraftEditCancel?.();
     };
 
@@ -272,26 +311,33 @@ export default function CommunityPostComposer({
         handleComposerCancel();
     };
 
-    const tagsValid = tags.every((t) => isValidCommunityTag(t));
-    const titleQualityError = getPostTextQualityError(title);
-    const descriptionQualityError = getPostTextQualityError(description);
-    const isFormValid =
-        title.trim().length > 0 &&
-        description.trim().length > 0 &&
-        !titleQualityError &&
-        !descriptionQualityError &&
-        tagsValid;
+    const titleFieldError = getComposerTitleError(title, validationAttempted);
+    const descriptionFieldError = getComposerDescriptionError(description, validationAttempted);
+    const tagsListError = getComposerTagsError(tags);
+    const attachmentsListError = getComposerAttachmentsError(attachments);
+    const isFormValid = isCommunityPostComposerValid({
+        title,
+        description,
+        tags,
+        attachments,
+    });
     const saveDraftLabel = draftId ? "Update Draft" : "Save Draft";
 
+    const requestSaveDraft = () => {
+        setValidationAttempted(true);
+        void handleSaveDraft();
+    };
+
     const openPostConfirm = () => {
-        if (!isDraftSaved || !isFormValid || isSubmitting) return;
+        setValidationAttempted(true);
+        if (!isDraftSaved || isSubmitting) return;
+        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
         setPostConfirmOpen(true);
     };
 
     const executePost = async () => {
         if (!isDraftSaved) return;
-        if (!title.trim() || !description.trim()) return;
-        if (getPostTextQualityError(title) || getPostTextQualityError(description)) return;
+        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
 
         setPostConfirmOpen(false);
         setIsSubmitting(true);
@@ -365,6 +411,7 @@ export default function CommunityPostComposer({
             </div>
 
             <form
+                noValidate
                 onSubmit={(e) => e.preventDefault()}
                 className="space-y-5"
             >
@@ -380,21 +427,21 @@ export default function CommunityPostComposer({
                             setIsDraftSaved(false);
                         }}
                         autoFocus={!compact}
-                        aria-invalid={titleQualityError ? true : undefined}
-                        aria-describedby={titleQualityError ? "title-quality-error" : undefined}
+                        aria-invalid={titleFieldError ? true : undefined}
+                        aria-describedby={titleFieldError ? "title-field-error" : undefined}
                         className={cn(
                             "border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200",
-                            !!titleQualityError &&
+                            !!titleFieldError &&
                                 "border-red-300 focus-visible:border-red-500 focus-visible:ring-red-200"
                         )}
                     />
-                    {titleQualityError ? (
+                    {titleFieldError ? (
                         <p
-                            id="title-quality-error"
+                            id="title-field-error"
                             className="mt-2 text-xs font-medium text-red-600"
                             role="alert"
                         >
-                            {titleQualityError}
+                            {titleFieldError}
                         </p>
                     ) : null}
                 </div>
@@ -431,21 +478,21 @@ export default function CommunityPostComposer({
                             setDescription(e.target.value);
                             setIsDraftSaved(false);
                         }}
-                        aria-invalid={descriptionQualityError ? true : undefined}
-                        aria-describedby={descriptionQualityError ? "description-quality-error" : undefined}
+                        aria-invalid={descriptionFieldError ? true : undefined}
+                        aria-describedby={descriptionFieldError ? "description-field-error" : undefined}
                         className={cn(
                             "min-h-[100px] border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200 sm:min-h-[120px]",
-                            !!descriptionQualityError &&
+                            !!descriptionFieldError &&
                                 "border-red-300 focus-visible:border-red-500 focus-visible:ring-red-200"
                         )}
                     />
-                    {descriptionQualityError ? (
+                    {descriptionFieldError ? (
                         <p
-                            id="description-quality-error"
+                            id="description-field-error"
                             className="mt-2 text-xs font-medium text-red-600"
                             role="alert"
                         >
-                            {descriptionQualityError}
+                            {descriptionFieldError}
                         </p>
                     ) : null}
                 </div>
@@ -518,7 +565,7 @@ export default function CommunityPostComposer({
                             aria-describedby={tagError ? "tag-input-error" : undefined}
                             className={cn(
                                 "flex-1 border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200",
-                                tagError &&
+                                !!tagError &&
                                     "border-red-300 focus-visible:border-red-500 focus-visible:ring-red-200"
                             )}
                         />
@@ -536,11 +583,14 @@ export default function CommunityPostComposer({
                         <p id="tag-input-error" className="mt-2 text-xs font-medium text-red-600" role="alert">
                             {tagError}
                         </p>
-                    ) : (
+                    ) : null}
+                    {!tagError && !tagsListError ? (
                         <p className="mt-1 text-xs text-slate-500">
-                            Tags must start with # (for example #lost-and-found).
+                            Tags must start with # (for example #lost-and-found). Up to{" "}
+                            {COMMUNITY_POST_BODY_LIMITS.maxTags} tags,{" "}
+                            {COMMUNITY_POST_BODY_LIMITS.tagMaxLength} characters each.
                         </p>
-                    )}
+                    ) : null}
                     {tags.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">
                             {tags.map((tag) => (
@@ -560,10 +610,9 @@ export default function CommunityPostComposer({
                             ))}
                         </div>
                     )}
-                    {tags.length > 0 && !tagsValid ? (
-                        <p className="mt-2 text-xs font-medium text-red-600">
-                            Every tag must start with # and include text after it. Remove invalid tags and add them
-                            again (e.g. #study).
+                    {tags.length > 0 && tagsListError ? (
+                        <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                            {tagsListError}
                         </p>
                     ) : null}
                 </div>
@@ -575,11 +624,20 @@ export default function CommunityPostComposer({
                     </label>
                     <div className="flex gap-2">
                         <Input
-                            placeholder="Paste a URL and press Enter"
+                            placeholder="https://…"
                             value={attachmentInput}
-                            onChange={(e) => setAttachmentInput(e.target.value)}
+                            onChange={(e) => {
+                                setAttachmentInput(e.target.value);
+                                setAttachmentInputError("");
+                            }}
                             onKeyDown={handleAttachmentKeyDown}
-                            className="flex-1 border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200"
+                            aria-invalid={attachmentInputError ? true : undefined}
+                            aria-describedby={attachmentInputError ? "attachment-input-error" : undefined}
+                            className={cn(
+                                "flex-1 border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200",
+                                !!attachmentInputError &&
+                                    "border-red-300 focus-visible:border-red-500 focus-visible:ring-red-200"
+                            )}
                         />
                         <Button
                             type="button"
@@ -591,6 +649,19 @@ export default function CommunityPostComposer({
                             <Plus size={16} />
                         </Button>
                     </div>
+                    {attachmentInputError ? (
+                        <p id="attachment-input-error" className="mt-2 text-xs font-medium text-red-600" role="alert">
+                            {attachmentInputError}
+                        </p>
+                    ) : attachmentsListError ? (
+                        <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                            {attachmentsListError}
+                        </p>
+                    ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                            Http or https links only. Up to {COMMUNITY_POST_BODY_LIMITS.maxAttachments} links.
+                        </p>
+                    )}
                     {attachments.length > 0 && (
                         <ul className="mt-2 space-y-1">
                             {attachments.map((url) => (
@@ -641,8 +712,8 @@ export default function CommunityPostComposer({
                                 type="button"
                                 variant="primary"
                                 className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800"
-                                onClick={handleSaveDraft}
-                                disabled={!isFormValid}
+                                onClick={requestSaveDraft}
+                                disabled={isSubmitting}
                             >
                                 {saveDraftLabel}
                             </Button>
@@ -670,8 +741,8 @@ export default function CommunityPostComposer({
                                     type="button"
                                     variant="primary"
                                     className="rounded-full bg-blue-700 px-4 text-white hover:bg-blue-800 sm:px-6"
-                                    onClick={handleSaveDraft}
-                                    disabled={!isFormValid || isSubmitting}
+                                    onClick={requestSaveDraft}
+                                    disabled={isSubmitting}
                                 >
                                     {saveDraftLabel}
                                 </Button>
@@ -710,6 +781,11 @@ export default function CommunityPostComposer({
                     )}
                 </div>
 
+                {validationAttempted && !isFormValid ? (
+                    <p className="text-sm text-red-700" role="status" aria-live="polite">
+                        Please fix the highlighted fields before saving or posting.
+                    </p>
+                ) : null}
                 {submitError && <p className="text-sm font-medium text-red-700">{submitError}</p>}
             </form>
         </Card>
