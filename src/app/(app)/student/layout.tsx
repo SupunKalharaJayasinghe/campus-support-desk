@@ -67,9 +67,17 @@ const CAMPUS_GROUP: StudentNavGroup = {
   label: "Campus",
   items: [
     { label: "Book Lecturer", href: "/student/booking", icon: CalendarDays },
-    { label: "Report Lost Item", href: "/student/lost-items", icon: Search },
     { label: "Announcements", href: "/student/announcements", icon: Megaphone },
-    { label: "Help Requests", href: "/student/support", icon: HelpCircle },
+    
+  ],
+};
+  const SUPPORT_GROUP: StudentNavGroup = {
+  key: "support",
+  label: "Support",
+  items: [
+    
+    { label: "Report ", href: "/report-problem", icon: Search },
+    { label: "Community Help", href: "/community", icon: HelpCircle },
   ],
 };
 
@@ -77,6 +85,7 @@ const NAV_GROUPS: StudentNavGroup[] = [
   ACADEMICS_GROUP,
   GAMIFICATION_GROUP,
   CAMPUS_GROUP,
+  SUPPORT_GROUP,
 ];
 
 function isActivePath(pathname: string, href: string) {
