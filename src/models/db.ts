@@ -25,13 +25,14 @@ export async function connectDB() {
   }
 
   if (!cached.promise) {
+    const dbName = process.env.MONGODB_DB?.trim() || "UniHub";
     cached.promise = mongoose
       .connect(uri, {
-        dbName: "UniHub",
+        dbName,
         serverSelectionTimeoutMS: 5000,
       })
       .then((instance) => {
-        console.log("MongoDB Connected");
+        console.log(`MongoDB Connected to database: ${dbName}`);
         return instance;
       });
   }

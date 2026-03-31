@@ -59,7 +59,41 @@ type DbCommunityPost = {
     replies?: DbCommunityReply[];
 };
 
-const PROFILE_FALLBACK = {
+const PROFILE_FALLBACK: {
+    reputation: number;
+    joined: string;
+    about: string;
+    rank: number;
+    profileViews: number;
+    streakDays: number;
+    stats: {
+        posts: number;
+        replies: number;
+        helpful: number;
+    };
+    recentPosts: {
+        id: number;
+        title: string;
+        category: string;
+        time: string;
+        likes: number;
+        replies: number;
+    }[];
+    recentReplies: {
+        id: number;
+        postTitle: string;
+        content: string;
+        time: string;
+    }[];
+    archivedPosts: {
+        id: number;
+        title: string;
+        category: string;
+        time: string;
+        likes: number;
+        replies: number;
+    }[];
+} = {
     reputation: 1250,
     joined: "Aug 2024",
     about: "Passionate about helping classmates with coursework, project planning, and campus life tips.",
@@ -114,13 +148,29 @@ export default function CommunityProfilePage() {
     const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
     const [draftActionError, setDraftActionError] = useState<string | null>(null);
 
-    const profileData = useMemo(() => {
+    const [profileData, setProfileData] = useState(() => ({
+        ...PROFILE_FALLBACK,
+        name: "Current User",
+        role: "Student Member",
+        about: PROFILE_FALLBACK.about,
+        username: "-",
+        email: "-",
+        faculty: "Computing",
+        studyYear: "Year 2",
+        userId: "",
+    }));
+
+    useEffect(() => {
         const storedUser = readStoredUser();
         const settings = readCommunityProfileSettings();
 
-        return {
+        setProfileData({
             ...PROFILE_FALLBACK,
-            name: settings.displayName || storedUser?.name || storedUser?.username || "Current User",
+            name:
+                settings.displayName ||
+                storedUser?.name ||
+                storedUser?.username ||
+                "Current User",
             role: roleToCommunityLabel(storedUser?.role),
             about: settings.bio || PROFILE_FALLBACK.about,
             username: settings.username || storedUser?.username || "-",
@@ -128,7 +178,7 @@ export default function CommunityProfilePage() {
             faculty: settings.faculty,
             studyYear: settings.studyYear,
             userId: storedUser?.id || "",
-        };
+        });
     }, []);
 
     useEffect(() => {
