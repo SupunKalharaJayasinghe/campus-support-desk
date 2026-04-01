@@ -72,6 +72,12 @@ const CommunityDraftSchema = new Schema(
       ref: "CommunityUrgentPrepay",
       default: null,
     },
+    /** Last 4 digits when urgent is paid by card (demo flow; matches post storage). */
+    urgentCardLast4: {
+      type: String,
+      default: null,
+      maxlength: 4,
+    },
   },
   { timestamps: true }
 );

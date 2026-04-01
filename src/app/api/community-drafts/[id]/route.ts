@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
-import { type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
+import { getUrgentConfig, type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
 import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
@@ -17,7 +17,11 @@ type UpdateDraftPayload = {
   pictureUrl?: unknown;
   status?: unknown;
   userId?: unknown;
+  isUrgent?: unknown;
+  urgentLevel?: unknown;
+  urgentPaymentMethod?: unknown;
   urgentPrepayId?: unknown;
+  urgentCardLast4?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -44,6 +48,7 @@ function normalizeDraft(doc: {
   urgentFeePoints?: number | null;
   urgentPaymentMethod?: string | null;
   urgentPrepayId?: unknown;
+  urgentCardLast4?: string | null;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -67,6 +72,10 @@ function normalizeDraft(doc: {
         ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
         : null,
     urgentPrepayId: doc.urgentPrepayId ? String(doc.urgentPrepayId) : null,
+    urgentCardLast4:
+      typeof doc.urgentCardLast4 === "string" && /^\d{4}$/.test(doc.urgentCardLast4)
+        ? doc.urgentCardLast4
+        : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -127,11 +136,32 @@ export async function PATCH(
       return Response.json({ error: pictureNorm.error }, { status: 400 });
     }
 
+    const isUrgent = Boolean(body.isUrgent);
+    const urgentLevelRaw = toTrimmedString(body.urgentLevel) as UrgentLevel;
+    const urgentLevel: UrgentLevel =
+      urgentLevelRaw === "5days" || urgentLevelRaw === "7days" ? urgentLevelRaw : "2days";
+    const urgentPaymentMethodRaw = toTrimmedString(body.urgentPaymentMethod) as UrgentPaymentMethod;
+    const urgentPaymentMethod: UrgentPaymentMethod =
+      urgentPaymentMethodRaw === "card" ? "card" : "points";
+    const urgentCfg = getUrgentConfig(urgentLevel);
+
     const urgentPrepayIdRaw = toTrimmedString(body.urgentPrepayId);
     const urgentPrepayId =
       urgentPrepayIdRaw && mongoose.Types.ObjectId.isValid(urgentPrepayIdRaw)
         ? urgentPrepayIdRaw
         : null;
+
+    const urgentCardLast4Raw = toTrimmedString(body.urgentCardLast4);
+    let urgentCardLast4: string | null = null;
+    if (isUrgent && urgentPaymentMethod === "card") {
+      if (!/^\d{4}$/.test(urgentCardLast4Raw)) {
+        return Response.json(
+          { error: "Enter the last 4 digits of your card to save an urgent card draft." },
+          { status: 400 }
+        );
+      }
+      urgentCardLast4 = urgentCardLast4Raw;
+    }
 
     const updated = await CommunityDraft.findOneAndUpdate(
       { _id: params.id, author: userId },
@@ -144,7 +174,12 @@ export async function PATCH(
           attachments,
           status,
           pictureUrl: pictureNorm.value ?? null,
-          urgentPrepayId,
+          isUrgent,
+          urgentLevel: isUrgent ? urgentLevel : null,
+          urgentFeePoints: isUrgent ? urgentCfg.feePoints : null,
+          urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
+          urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
+          urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
         },
       },
       { new: true }

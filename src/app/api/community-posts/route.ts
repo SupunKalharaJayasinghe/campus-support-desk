@@ -160,19 +160,6 @@ export async function POST(req: Request) {
                 return;
               }
 
-              const updated = await CommunityProfileModel.findOneAndUpdate(
-                { userRef: authorId, points: { $gte: feePoints } },
-                { $inc: { points: -feePoints } },
-                { new: true, session }
-              );
-              if (!updated) {
-                // Insufficient points at consume-time (points may have changed since prepay).
-                return;
-              }
-
-              updated.level = getLevel(updated.points);
-              await updated.save({ session });
-
               prepay.consumedAt = now;
               await prepay.save({ session });
               consumedOk = true;

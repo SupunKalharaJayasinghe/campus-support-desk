@@ -194,6 +194,7 @@ export default function LoginPage() {
                       value={role}
                     >
                       <option value="SUPER_ADMIN">Administrator</option>
+                      <option value="COMMUNITY_ADMIN">Community Admin</option>
                       <option value="LECTURER">Lecturer</option>
                       <option value="LOST_ITEM_STAFF">Lost Item Officer</option>
                       <option value="STUDENT">Student</option>

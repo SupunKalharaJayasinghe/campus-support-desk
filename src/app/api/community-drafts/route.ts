@@ -26,6 +26,7 @@ type DraftPayload = {
   urgentLevel?: unknown;
   urgentPaymentMethod?: unknown;
   urgentPrepayId?: unknown;
+  urgentCardLast4?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -52,6 +53,7 @@ function normalizeDraft(doc: {
   urgentFeePoints?: number | null;
   urgentPaymentMethod?: string | null;
   urgentPrepayId?: unknown;
+  urgentCardLast4?: string | null;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -75,6 +77,10 @@ function normalizeDraft(doc: {
         ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
         : null,
     urgentPrepayId: doc.urgentPrepayId ? String(doc.urgentPrepayId) : null,
+    urgentCardLast4:
+      typeof doc.urgentCardLast4 === "string" && /^\d{4}$/.test(doc.urgentCardLast4)
+        ? doc.urgentCardLast4
+        : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -171,6 +177,18 @@ export async function POST(req: Request) {
         ? urgentPrepayIdRaw
         : null;
 
+    const urgentCardLast4Raw = toTrimmedString(body.urgentCardLast4);
+    let urgentCardLast4: string | null = null;
+    if (isUrgent && urgentPaymentMethod === "card") {
+      if (!/^\d{4}$/.test(urgentCardLast4Raw)) {
+        return Response.json(
+          { error: "Enter the last 4 digits of your card to save an urgent card draft." },
+          { status: 400 }
+        );
+      }
+      urgentCardLast4 = urgentCardLast4Raw;
+    }
+
     const draft = await CommunityDraft.create({
       title,
       description,
@@ -185,6 +203,7 @@ export async function POST(req: Request) {
       urgentFeePoints: isUrgent ? urgentCfg.feePoints : null,
       urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
       urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
+      urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
     });
 
     return Response.json(normalizeDraft(draft.toObject()), { status: 201 });

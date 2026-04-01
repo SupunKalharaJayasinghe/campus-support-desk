@@ -103,7 +103,7 @@ export default function LandingPage() {
                   A centralized platform for academic coordination, campus
                   services, and administrative operations.
                 </p>
-                <div className="mt-9">
+                <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                   <button
                     className="w-full rounded-2xl border-none bg-[#034AA6] px-8 py-3 text-sm font-semibold text-[#D9D9D9] transition-all duration-200 hover:bg-[#0339A6] hover:shadow-shadowHover sm:w-auto"
                     onClick={() => router.push('/login')}
@@ -111,7 +111,14 @@ export default function LandingPage() {
                   >
                     Login to Portal
                   </button>
-                  <p className="mt-3 text-xs tracking-[0.12em] text-text/62">
+                  <button
+                    className="w-full rounded-2xl border-2 border-[#034AA6] bg-transparent px-8 py-3 text-sm font-semibold text-[#034AA6] transition-all duration-200 hover:bg-[#034AA6]/10 sm:w-auto"
+                    onClick={() => router.push('/add-user')}
+                    type="button"
+                  >
+                    Add user
+                  </button>
+                  <p className="w-full basis-full text-xs tracking-[0.12em] text-text/62">
                     Authorized university members only
                   </p>
                 </div>
@@ -303,6 +310,14 @@ export default function LandingPage() {
                     href="/login"
                   >
                     Login
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
+                    href="/add-user"
+                  >
+                    Add user
                   </Link>
                 </li>
                 <li>

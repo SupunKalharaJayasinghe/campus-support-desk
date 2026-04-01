@@ -68,7 +68,7 @@ interface UserPersistedRecord {
   id: string;
   username: string;
   email: string;
-  role: "ADMIN" | "LECTURER" | "LAB_ASSISTANT" | "STUDENT";
+  role: "ADMIN" | "LECTURER" | "LAB_ASSISTANT" | "STUDENT" | "COMMUNITY_ADMIN";
   passwordHash: string;
   mustChangePassword: boolean;
   status: StudentStatus;

@@ -1,4 +1,9 @@
-export type AppRole = "SUPER_ADMIN" | "LECTURER" | "LOST_ITEM_STAFF" | "STUDENT";
+export type AppRole =
+  | "SUPER_ADMIN"
+  | "LECTURER"
+  | "LOST_ITEM_STAFF"
+  | "STUDENT"
+  | "COMMUNITY_ADMIN";
 
 export interface DemoUser {
   id: string;
@@ -17,6 +22,7 @@ export const HOME_BY_ROLE: Record<AppRole, string> = {
   LECTURER: "/lecturer",
   LOST_ITEM_STAFF: "/lost-items",
   STUDENT: "/student",
+  COMMUNITY_ADMIN: "/community-admin",
 };
 
 export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
@@ -24,6 +30,7 @@ export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
   LECTURER: "Lecturer Portal",
   LOST_ITEM_STAFF: "Lost & Found Staff",
   STUDENT: "Student Portal",
+  COMMUNITY_ADMIN: "Community Admin",
 };
 
 export function isDemoModeEnabled() {
@@ -50,7 +57,8 @@ export function isRole(value: string): value is AppRole {
     value === "SUPER_ADMIN" ||
     value === "LECTURER" ||
     value === "LOST_ITEM_STAFF" ||
-    value === "STUDENT"
+    value === "STUDENT" ||
+    value === "COMMUNITY_ADMIN"
   );
 }
 
@@ -72,6 +80,9 @@ export function getExpectedRoleForPath(pathname: string): AppRole | AppRole[] | 
   }
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return "SUPER_ADMIN";
+  }
+  if (pathname === "/community-admin" || pathname.startsWith("/community-admin/")) {
+    return "COMMUNITY_ADMIN";
   }
   return null;
 }
@@ -175,6 +186,9 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   }
   if (normalized === "STUDENT") {
     return "STUDENT";
+  }
+  if (normalized === "COMMUNITY_ADMIN") {
+    return "COMMUNITY_ADMIN";
   }
   return "LOST_ITEM_STAFF";
 }

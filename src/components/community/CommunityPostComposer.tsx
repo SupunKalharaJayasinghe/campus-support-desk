@@ -46,6 +46,12 @@ export type CommunityPostComposerProps = {
     /** Called when user cancels editing — clears form without deleting the draft in storage */
     onDraftEditCancel?: () => void;
     onPostSuccess?: (draftId?: string) => void;
+    /**
+     * When set with `onDraftSaved`, shows **Done** on the urgent panel: saves the draft to the DB
+     * then navigates. Use `#section-id` to smooth-scroll on the current page, or a path like
+     * `/community/profile#draft-posts` to open the drafts area after saving.
+     */
+    urgentDoneNavigatesTo?: string;
 };
 
 export type CommunityPostDraftInput = {
@@ -78,6 +84,8 @@ export type CommunityPostDraft = {
     urgentFeePoints?: number | null;
     urgentPaymentMethod: UrgentPaymentMethod | null;
     urgentPrepayId?: string | null;
+    /** Last 4 digits when draft was saved with urgent + card (used when posting without re-entering the full number). */
+    urgentCardLast4?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -91,6 +99,7 @@ export default function CommunityPostComposer({
     onDraftDeleted,
     onDraftEditCancel,
     onPostSuccess,
+    urgentDoneNavigatesTo,
 }: CommunityPostComposerProps) {
     const router = useRouter();
 
@@ -121,6 +130,8 @@ export default function CommunityPostComposer({
     const [cardExpiry, setCardExpiry] = useState("");
     const [cardCvc, setCardCvc] = useState("");
     const [cardError, setCardError] = useState("");
+    /** From server when editing a draft saved with card — allows posting without re-entering full PAN. */
+    const [urgentCardLast4FromDraft, setUrgentCardLast4FromDraft] = useState<string | null>(null);
 
     const [isDraftSaved, setIsDraftSaved] = useState(false);
 
@@ -128,6 +139,7 @@ export default function CommunityPostComposer({
     const [urgentPrepayId, setUrgentPrepayId] = useState<string | null>(null);
     const [payingUrgent, setPayingUrgent] = useState(false);
     const [payError, setPayError] = useState("");
+    const [urgentDoneBusy, setUrgentDoneBusy] = useState(false);
     const urgentPrepayIdRef = useRef<string | null>(null);
     urgentPrepayIdRef.current = urgentPrepayId;
 
@@ -228,6 +240,10 @@ export default function CommunityPostComposer({
         setUrgentLevel(draftToEdit.urgentLevel ?? "2days");
         setUrgentPaymentMethod(draftToEdit.urgentPaymentMethod ?? "points");
         setUrgentPrepayId(draftToEdit.urgentPrepayId ?? null);
+        const dLast4 = draftToEdit.urgentCardLast4;
+        setUrgentCardLast4FromDraft(
+            typeof dLast4 === "string" && /^\d{4}$/.test(dLast4) ? dLast4 : null
+        );
         setCardNumber("");
         setCardExpiry("");
         setCardCvc("");
@@ -363,8 +379,13 @@ export default function CommunityPostComposer({
         }
     };
 
-    const handleSaveDraft = async () => {
-        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
+    const handleSaveDraft = async (opts?: { rethrow?: boolean }): Promise<boolean> => {
+        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) {
+            if (opts?.rethrow) {
+                throw new Error("Add a title and details (and fix any tag/link errors) before saving.");
+            }
+            return false;
+        }
 
         const nextUrgentPaymentMethod: UrgentPaymentMethod = (() => {
             if (!isUrgent) return urgentPaymentMethod;
@@ -387,19 +408,53 @@ export default function CommunityPostComposer({
             urgentPaymentMethod: isUrgent ? nextUrgentPaymentMethod : null,
             urgentCardLast4:
                 isUrgent && nextUrgentPaymentMethod === "card"
-                    ? cardNumber.replace(/\s+/g, "").slice(-4) || undefined
+                    ? (() => {
+                          const fromInput = cardNumber.replace(/\s+/g, "").slice(-4);
+                          if (/^\d{4}$/.test(fromInput)) return fromInput;
+                          if (urgentCardLast4FromDraft && /^\d{4}$/.test(urgentCardLast4FromDraft)) {
+                              return urgentCardLast4FromDraft;
+                          }
+                          return undefined;
+                      })()
                     : undefined,
             urgentPrepayId:
                 isUrgent && nextUrgentPaymentMethod === "points"
                     ? urgentPrepayId
                     : null,
         };
-        const savedDraft = (await onDraftSaved?.(nextDraft)) ?? null;
+
+        let savedDraft: CommunityPostDraft | null = null;
+        try {
+            savedDraft = (await onDraftSaved?.(nextDraft)) ?? null;
+        } catch (e) {
+            if (opts?.rethrow) throw e;
+            return false;
+        }
+
+        if (onDraftSaved && !savedDraft?.id) {
+            if (opts?.rethrow) {
+                throw new Error("Draft did not save. Try again or check that you are logged in.");
+            }
+            return false;
+        }
+
         if (savedDraft?.id) {
             setDraftId(savedDraft.id);
         }
+        const sLast4 = savedDraft?.urgentCardLast4;
+        if (typeof sLast4 === "string" && /^\d{4}$/.test(sLast4)) {
+            setUrgentCardLast4FromDraft(sLast4);
+        }
         if (resetAfterDraftSave) {
-            void cancelUrgentPrepay();
+            /** If the draft in MongoDB still holds a points prepay, do not cancel — that would refund and delete the prepay. */
+            const prepayPersistedOnDraft =
+                savedDraft?.urgentPaymentMethod === "points" &&
+                Boolean(savedDraft?.urgentPrepayId);
+            if (!prepayPersistedOnDraft) {
+                void cancelUrgentPrepay();
+            } else {
+                setUrgentPrepayId(null);
+            }
             setDraftId(null);
             setTitle("");
             setDescription("");
@@ -419,14 +474,78 @@ export default function CommunityPostComposer({
             setCardExpiry("");
             setCardCvc("");
             setCardError("");
+            setUrgentCardLast4FromDraft(null);
             setIsDraftSaved(false);
             setSubmitError("");
             setValidationAttempted(false);
             setAttachmentInputError("");
             setPayError("");
-            return;
+            return true;
         }
         setIsDraftSaved(true);
+        return true;
+    };
+
+    const goToDraftsAfterUrgentDone = () => {
+        const target = urgentDoneNavigatesTo?.trim();
+        if (!target) return;
+        if (target.startsWith("#")) {
+            const id = target.slice(1);
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            return;
+        }
+        router.push(target);
+    };
+
+    const handleUrgentDoneClick = async () => {
+        if (!urgentDoneNavigatesTo?.trim() || !onDraftSaved) return;
+        setValidationAttempted(true);
+        setSubmitError("");
+        setCardError("");
+        if (!isCommunityPostComposerValid({ title, description, tags, attachments })) {
+            setSubmitError("Add a title and details before finishing urgent setup.");
+            return;
+        }
+        if (isUrgent && urgentPaymentMethod === "points" && !urgentPrepayId) {
+            setSubmitError("Click Pay to deduct points for urgent, or choose card payment.");
+            return;
+        }
+        if (isUrgent && urgentPaymentMethod === "card") {
+            const raw = cardNumber.replace(/\s+/g, "");
+            let last4: string | null = null;
+            if (raw.length >= 12 && /^\d{4}$/.test(raw.slice(-4))) {
+                last4 = raw.slice(-4);
+            } else if (urgentCardLast4FromDraft && /^\d{4}$/.test(urgentCardLast4FromDraft)) {
+                last4 = urgentCardLast4FromDraft;
+            }
+            if (!last4) {
+                setCardError(
+                    "Enter a valid card number so we can store the last 4 digits on your draft."
+                );
+                return;
+            }
+            const usingFullCard = raw.length >= 12;
+            if (usingFullCard) {
+                if (!cardExpiry.trim()) {
+                    setCardError("Enter card expiry (MM/YY).");
+                    return;
+                }
+                if (!cardCvc.trim()) {
+                    setCardError("Enter card CVC.");
+                    return;
+                }
+            }
+        }
+
+        setUrgentDoneBusy(true);
+        try {
+            await handleSaveDraft({ rethrow: true });
+            goToDraftsAfterUrgentDone();
+        } catch (e) {
+            setSubmitError(e instanceof Error ? e.message : "Could not save draft.");
+        } finally {
+            setUrgentDoneBusy(false);
+        }
     };
 
     const handleComposerCancel = () => {
@@ -450,6 +569,7 @@ export default function CommunityPostComposer({
         setCardExpiry("");
         setCardCvc("");
         setCardError("");
+        setUrgentCardLast4FromDraft(null);
         setIsDraftSaved(false);
         setSubmitError("");
         setValidationAttempted(false);
@@ -536,9 +656,14 @@ export default function CommunityPostComposer({
                 setCommunityPoints(data.newPoints);
             }
             setIsDraftSaved(false);
-            // After paying, automatically save/update the draft with urgent + prepay id.
+            // After paying, persist draft so urgentPrepayId is stored in MongoDB (draft links to prepay).
             setValidationAttempted(true);
-            await handleSaveDraft();
+            const savedOk = await handleSaveDraft();
+            if (!savedOk) {
+                setPayError(
+                    "Points were deducted. Click Save Draft or Done so your prepayment is stored on the draft."
+                );
+            }
         } catch (e) {
             setPayError(e instanceof Error ? e.message : "Payment failed.");
         } finally {
@@ -550,20 +675,30 @@ export default function CommunityPostComposer({
         if (!isDraftSaved) return;
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
 
+        let urgentCardLast4Resolved: string | null = null;
         if (isUrgent && urgentPaymentMethod === "card") {
             const raw = cardNumber.replace(/\s+/g, "");
-            const last4 = raw.slice(-4);
-            if (raw.length < 12 || last4.length !== 4 || !/^\d{4}$/.test(last4)) {
-                setCardError("Enter a valid card number (digits only).");
+            if (raw.length >= 12 && /^\d{4}$/.test(raw.slice(-4))) {
+                urgentCardLast4Resolved = raw.slice(-4);
+            } else if (urgentCardLast4FromDraft && /^\d{4}$/.test(urgentCardLast4FromDraft)) {
+                urgentCardLast4Resolved = urgentCardLast4FromDraft;
+            }
+            if (!urgentCardLast4Resolved) {
+                setCardError(
+                    "Enter a valid card number (digits only), or use the card saved on this draft."
+                );
                 return;
             }
-            if (!cardExpiry.trim()) {
-                setCardError("Enter card expiry (MM/YY).");
-                return;
-            }
-            if (!cardCvc.trim()) {
-                setCardError("Enter card CVC.");
-                return;
+            const usingFullCard = raw.length >= 12;
+            if (usingFullCard) {
+                if (!cardExpiry.trim()) {
+                    setCardError("Enter card expiry (MM/YY).");
+                    return;
+                }
+                if (!cardCvc.trim()) {
+                    setCardError("Enter card CVC.");
+                    return;
+                }
             }
             setCardError("");
         }
@@ -602,8 +737,8 @@ export default function CommunityPostComposer({
                     urgentLevel: isUrgent ? urgentLevel : null,
                     urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
                     urgentCardLast4:
-                        isUrgent && urgentPaymentMethod === "card"
-                            ? cardNumber.replace(/\s+/g, "").slice(-4)
+                        isUrgent && urgentPaymentMethod === "card" && urgentCardLast4Resolved
+                            ? urgentCardLast4Resolved
                             : null,
                     urgentPrepayId:
                         isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
@@ -965,6 +1100,9 @@ export default function CommunityPostComposer({
                                     if (!next && urgentPrepayIdRef.current) {
                                         void cancelUrgentPrepay();
                                     }
+                                    if (!next) {
+                                        setUrgentCardLast4FromDraft(null);
+                                    }
                                     setIsUrgent(next);
                                     setIsDraftSaved(false);
                                     setSubmitError("");
@@ -991,7 +1129,8 @@ export default function CommunityPostComposer({
 
                     {urgentLocked ? (
                         <p className="mt-2 text-xs text-slate-600">
-                            Urgent and payment details can’t be changed when updating a saved draft.
+                            While editing this saved draft, urgent duration, payment method, and card fields are
+                            read-only.
                         </p>
                     ) : null}
 
@@ -1075,6 +1214,11 @@ export default function CommunityPostComposer({
                                 <label className="mb-1.5 block text-sm font-medium text-slate-700">
                                     Payment method
                                 </label>
+                                <p className="mb-2 text-xs text-slate-600">
+                                    Use <span className="font-medium text-slate-800">points</span> or{" "}
+                                    <span className="font-medium text-slate-800">card</span> — card does not deduct
+                                    your community points (demo checkout; only last 4 digits are stored).
+                                </p>
                                 <div className="flex flex-wrap gap-3">
                                     {(["points", "card"] as const).map((m) => {
                                         const insufficient =
@@ -1086,6 +1230,7 @@ export default function CommunityPostComposer({
                                                 key={m}
                                                 className={cn(
                                                     "flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm",
+                                                    urgentLocked && "pointer-events-none cursor-not-allowed opacity-70",
                                                     urgentPaymentMethod === m
                                                         ? "border-blue-400 bg-white text-slate-800"
                                                         : "border-blue-100 bg-white/70 text-slate-700"
@@ -1102,6 +1247,9 @@ export default function CommunityPostComposer({
                                                             void cancelUrgentPrepay();
                                                         }
                                                         setUrgentPaymentMethod(m);
+                                                        if (m === "points") {
+                                                            setUrgentCardLast4FromDraft(null);
+                                                        }
                                                         setIsDraftSaved(false);
                                                         setCardError("");
                                                     }}
@@ -1126,7 +1274,13 @@ export default function CommunityPostComposer({
 
                             {urgentPaymentMethod === "card" ? (
                                 <div className="sm:col-span-2">
-                                    <p className="text-xs text-slate-600">
+                                    {urgentCardLast4FromDraft ? (
+                                        <p className="text-xs font-medium text-emerald-800">
+                                            Card on file: ending in {urgentCardLast4FromDraft} — enter a new card
+                                            below to replace, or post with this card.
+                                        </p>
+                                    ) : null}
+                                    <p className="mt-1 text-xs text-slate-600">
                                         Card payment is a demo flow (no real charge). We only store the last 4 digits.
                                     </p>
                                     <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -1169,6 +1323,30 @@ export default function CommunityPostComposer({
                                             {cardError}
                                         </p>
                                     ) : null}
+                                </div>
+                            ) : null}
+
+                            {isUrgent &&
+                            !urgentLocked &&
+                            urgentDoneNavigatesTo?.trim() &&
+                            onDraftSaved ? (
+                                <div className="sm:col-span-2 mt-1 flex justify-end border-t border-blue-100 pt-3">
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        className="rounded-full bg-blue-700 px-6 text-white hover:bg-blue-800 disabled:cursor-not-allowed"
+                                        disabled={urgentDoneBusy}
+                                        onClick={() => void handleUrgentDoneClick()}
+                                    >
+                                        {urgentDoneBusy ? (
+                                            <>
+                                                <Loader2 className="mr-1 inline h-4 w-4 animate-spin" />
+                                                Saving…
+                                            </>
+                                        ) : (
+                                            "Done"
+                                        )}
+                                    </Button>
                                 </div>
                             ) : null}
                         </div>

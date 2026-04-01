@@ -41,24 +41,57 @@ export async function POST(req: Request) {
       return Response.json({ error: "Valid prepayId is required" }, { status: 400 });
     }
 
-    // Prepay no longer deducts points up-front, so cancel just removes the reservation token.
-    const prepay = await CommunityUrgentPrepayModel.findOne({
-      _id: prepayIdRaw,
-      userRef: userId,
-      consumedAt: null,
-      expiresAt: { $gt: new Date() },
-    });
+    // Cancel refunds points (only if prepay not consumed).
+    const session = await mongoose.startSession();
+    let newPoints: number | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const now = new Date();
+        const prepay = await CommunityUrgentPrepayModel.findOne(
+          {
+            _id: prepayIdRaw,
+            userRef: userId,
+            consumedAt: null,
+            expiresAt: { $gt: now },
+          },
+          null,
+          { session }
+        );
+        if (!prepay) {
+          const profile = await CommunityProfileModel.findOne(
+            { userRef: userId },
+            null,
+            { session }
+          ).lean();
+          const row = profile && !Array.isArray(profile) ? profile : null;
+          newPoints = Number((row as { points?: number } | null)?.points ?? 0);
+          return;
+        }
 
-    if (prepay) {
-      await prepay.deleteOne();
+        const feePoints = Number(prepay.feePoints ?? 0);
+        const updated = await CommunityProfileModel.findOneAndUpdate(
+          { userRef: userId },
+          { $inc: { points: feePoints } },
+          { new: true, session }
+        );
+        if (!updated) {
+          return;
+        }
+        updated.level = getLevel(updated.points);
+        await updated.save({ session });
+
+        await prepay.deleteOne({ session });
+        newPoints = Number(updated.points ?? 0);
+      });
+    } finally {
+      session.endSession();
     }
 
-    const profile = await CommunityProfileModel.findOne({ userRef: userId }).lean();
-    if (!profile) {
+    if (!Number.isFinite(newPoints ?? NaN)) {
       return Response.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    return Response.json({ newPoints: Number(profile.points ?? 0) });
+    return Response.json({ newPoints });
   } catch (error) {
     console.error("community-urgent-prepay cancel failed", error);
     return Response.json({ error: "Failed to cancel prepayment" }, { status: 500 });

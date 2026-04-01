@@ -35,6 +35,7 @@ import CommunityPostComposer, {
     type CommunityPostDraft,
 } from "@/components/community/CommunityPostComposer";
 import communityBackground from "@/app/images/community/community2.jpg";
+import { saveCommunityDraftApi } from "@/lib/community-draft-api";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import { readStoredUser } from "@/lib/rbac";
 
@@ -463,53 +464,11 @@ export default function CommunityProfilePage() {
 
     const handleDraftSaved = useCallback(
         async (draft: CommunityPostDraftInput) => {
-            const storedUser = readStoredUser();
-            const profileSettings = readCommunityProfileSettings();
-            const authorDisplayName =
-                profileSettings.displayName.trim() ||
-                storedUser?.name?.trim() ||
-                "Current User";
-
-            const payload = {
-                title: draft.title,
-                description: draft.description,
-                category: draft.category,
-                tags: draft.tags,
-                attachments: draft.attachments,
-                pictureUrl: draft.pictureUrl,
-                status: draft.status,
-                isUrgent: draft.isUrgent,
-                urgentLevel: draft.urgentLevel,
-                urgentPaymentMethod: draft.urgentPaymentMethod,
-                author: storedUser?.id,
-                authorName: authorDisplayName,
-                authorUsername: storedUser?.username ?? "",
-                authorEmail: storedUser?.email ?? "",
-                authorDisplayName,
-                userId: storedUser?.id ?? "",
-            };
-
-            const endpoint = draft.id
-                ? `/api/community-drafts/${encodeURIComponent(draft.id)}`
-                : "/api/community-drafts";
-            const method = draft.id ? "PATCH" : "POST";
-
-            const res = await fetch(endpoint, {
-                method,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            if (!res.ok) {
-                const body = (await res.json().catch(() => null)) as
-                    | { error?: string }
-                    | null;
-                const message = body?.error || "Failed to save draft";
+            const savedDraft = await saveCommunityDraftApi(draft).catch((e) => {
+                const message = e instanceof Error ? e.message : "Failed to save draft";
                 setDraftActionError(message);
-                throw new Error(message);
-            }
-
-            const savedDraft = (await res.json()) as CommunityPostDraft;
+                throw e instanceof Error ? e : new Error(message);
+            });
             setDraftPosts((prev) => {
                 const exists = prev.some((item) => item.id === savedDraft.id);
                 const next = exists
@@ -638,7 +597,8 @@ export default function CommunityProfilePage() {
                         isUrgent: draft.isUrgent,
                         urgentLevel: draft.urgentLevel,
                         urgentPaymentMethod: draft.urgentPaymentMethod,
-                        urgentPrepayId: (draft as unknown as { urgentPrepayId?: string | null }).urgentPrepayId ?? null,
+                        urgentPrepayId: draft.urgentPrepayId ?? null,
+                        urgentCardLast4: draft.urgentCardLast4 ?? null,
                         author: storedUser?.id,
                         authorName: authorDisplayName,
                         authorUsername: storedUser?.username ?? "",
@@ -942,6 +902,7 @@ export default function CommunityProfilePage() {
                             resetAfterDraftSave
                             draftToEdit={null}
                             onDraftSaved={handleDraftSaved}
+                            urgentDoneNavigatesTo="#draft-posts"
                             onDraftDeleted={(draftId) => {
                                 handleDraftDeleted(draftId).catch(() => undefined);
                             }}

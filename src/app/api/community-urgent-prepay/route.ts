@@ -45,31 +45,60 @@ export async function POST(req: Request) {
     const cfg = getUrgentConfig(urgentLevel);
     const feePoints = cfg.feePoints;
 
-    // Reserve an urgent prepayment token (no deduction yet).
-    // Points are deducted only when the urgent post is successfully created (consuming this prepay).
-    const profile = await CommunityProfileModel.findOne({ userRef: userId }).lean();
-    const currentPoints = Number(profile?.points ?? 0);
-    if (!Number.isFinite(currentPoints) || currentPoints < feePoints) {
+    // Deduct points now and create a refundable prepay token.
+    // If the user cancels before consuming it, we refund the points.
+    const session = await mongoose.startSession();
+    let prepayId: string | null = null;
+    let newPoints: number | null = null;
+    let expiresAtIso: string | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const updated = await CommunityProfileModel.findOneAndUpdate(
+          { userRef: userId, points: { $gte: feePoints } },
+          { $inc: { points: -feePoints } },
+          { new: true, session }
+        );
+        if (!updated) {
+          return;
+        }
+
+        updated.level = getLevel(updated.points);
+        await updated.save({ session });
+
+        const expiresAt = new Date(Date.now() + PREPAY_TTL_MS);
+        expiresAtIso = expiresAt.toISOString();
+        const prepay = await CommunityUrgentPrepayModel.create(
+          [
+            {
+              userRef: userId,
+              urgentLevel,
+              feePoints,
+              expiresAt,
+            },
+          ],
+          { session }
+        );
+
+        prepayId = String(prepay[0]?._id ?? "");
+        newPoints = Number(updated.points ?? 0);
+      });
+    } finally {
+      session.endSession();
+    }
+
+    if (!prepayId || !Number.isFinite(newPoints ?? NaN) || !expiresAtIso) {
       return Response.json(
         { error: "Not enough points for this urgent fee." },
         { status: 402 }
       );
     }
 
-    const expiresAt = new Date(Date.now() + PREPAY_TTL_MS);
-    const prepay = await CommunityUrgentPrepayModel.create({
-      userRef: userId,
-      urgentLevel,
-      feePoints,
-      expiresAt,
-    });
-
     return Response.json({
-      prepayId: String(prepay._id),
-      newPoints: currentPoints,
+      prepayId,
+      newPoints,
       urgentLevel,
       feePoints,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: expiresAtIso,
     });
   } catch (error) {
     console.error("community-urgent-prepay POST failed", error);
