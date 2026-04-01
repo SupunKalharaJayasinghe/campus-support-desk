@@ -9,8 +9,8 @@ import {
     CirclePlus,
     Clock,
     BookOpen,
+    ArrowLeft,
     Home,
-    LogOut,
     Menu,
     MessageSquare,
     Search,
@@ -24,7 +24,7 @@ import {
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
-import { clearDemoSession, readStoredUser } from "@/lib/rbac";
+import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import {
     COMMUNITY_POST_REPORT_REASONS,
@@ -546,8 +546,7 @@ export default function CommunityPage() {
         void loadRepliesForPost(postId);
     };
 
-    const handleLogout = () => {
-        clearDemoSession();
+    const handleBackToStudentPage = () => {
         setIsProfileMenuOpen(false);
         router.push("/student");
     };
@@ -634,10 +633,10 @@ export default function CommunityPage() {
                                         </Link>
                                         <button
                                             type="button"
-                                            onClick={handleLogout}
+                                            onClick={handleBackToStudentPage}
                                             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-blue-50"
                                         >
-                                            <LogOut size={16} /> Logout
+                                            <ArrowLeft size={16} /> Back to student page
                                         </button>
                                     </div>
                                 </>
@@ -748,10 +747,10 @@ export default function CommunityPage() {
 
                         <button
                             type="button"
-                            onClick={handleLogout}
-                            className="mt-auto flex items-center gap-3 rounded-xl bg-red-400 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
+                            onClick={handleBackToStudentPage}
+                            className="mt-auto flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
                         >
-                            <LogOut size={18} /> Logout
+                            <ArrowLeft size={18} /> Back to student page
                         </button>
                     </div>
                 </aside>

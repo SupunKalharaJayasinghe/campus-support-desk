@@ -15,8 +15,8 @@ import {
     FilePenLine,
     FileText,
     Flame,
+    ArrowLeft,
     Home,
-    LogOut,
     Menu,
     MessageSquare,
     Search,
@@ -35,7 +35,7 @@ import CommunityPostComposer, {
 } from "@/components/community/CommunityPostComposer";
 import communityBackground from "@/app/images/community/community2.jpg";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
-import { clearDemoSession, readStoredUser } from "@/lib/rbac";
+import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
     _id: string;
@@ -306,9 +306,15 @@ export default function CommunityProfilePage() {
         );
     }, [profileData.recentReplies, searchQuery]);
 
-    const handleLogout = () => {
-        clearDemoSession();
-        setIsProfileMenuOpen(false);
+    /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
+    const closeSidebarIfMobile = useCallback(() => {
+        if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+            setSidebarOpen(false);
+        }
+    }, []);
+
+    const handleBackToStudentPage = () => {
+        closeSidebarIfMobile();
         router.push("/student");
     };
 
@@ -611,13 +617,6 @@ export default function CommunityProfilePage() {
         }
     }, [draftPostConfirm, handleDraftPostNow]);
 
-    /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
-    const closeSidebarIfMobile = useCallback(() => {
-        if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
-            setSidebarOpen(false);
-        }
-    }, []);
-
     return (
         <main
             className="relative h-screen overflow-hidden text-[#0f0f0f]"
@@ -767,12 +766,11 @@ export default function CommunityProfilePage() {
                             
 
                             <button
-                            type="button"
-                            onClick={handleLogout}
-                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-200"
-                        >
-                            
-                            <LogOut size={18} /> Logout
+                                type="button"
+                                onClick={handleBackToStudentPage}
+                                className="flex w-full items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
+                            >
+                                <ArrowLeft size={18} /> Back to student page
                             </button>
                         
                             
