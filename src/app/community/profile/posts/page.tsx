@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Eye, FileText, MessageSquare, ThumbsUp } from "lucide-react";
 import Card from "@/components/ui/Card";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
 import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
@@ -13,6 +14,8 @@ type DbCommunityReply = {
   message: string;
   createdAt?: string;
   isAccepted?: boolean;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
 };
 
 type DbCommunityPost = {
@@ -250,7 +253,18 @@ export default function CommunityProfilePostsPage() {
                               : "Mark Accepted"}
                           </button>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        {(reply.message ?? "").trim() ? (
+                          <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        ) : reply.attachmentUrl ? (
+                          <p className="mt-1 text-xs italic text-slate-500">Attachment only</p>
+                        ) : null}
+                        {reply.attachmentUrl ? (
+                          <CommunityReplyAttachment
+                            attachmentUrl={reply.attachmentUrl}
+                            attachmentName={reply.attachmentName ?? undefined}
+                            imageClassName="max-h-32"
+                          />
+                        ) : null}
                       </div>
                     ))}
                   </div>

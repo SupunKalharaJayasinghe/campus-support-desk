@@ -1,5 +1,9 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
+import {
+  normalizeOptionalReplyAttachmentUrl,
+  normalizeReplyAttachmentName,
+} from "@/lib/community-reply-attachment";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
@@ -20,13 +24,12 @@ export async function POST(req: Request) {
       authorName,
       authorDisplayName,
       message,
+      attachmentUrl,
+      attachmentName,
     } = body;
 
-    if (!postId || !message) {
-      return Response.json(
-        { error: "postId and message are required" },
-        { status: 400 }
-      );
+    if (!postId) {
+      return Response.json({ error: "postId is required" }, { status: 400 });
     }
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
@@ -62,6 +65,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const attachmentNorm = normalizeOptionalReplyAttachmentUrl(attachmentUrl);
+    if (!attachmentNorm.ok) {
+      return Response.json({ error: attachmentNorm.error }, { status: 400 });
+    }
+    const messageTrim = String(message ?? "").trim();
+    if (!messageTrim && !attachmentNorm.value) {
+      return Response.json(
+        { error: "Add a message or attach a file." },
+        { status: 400 }
+      );
+    }
+    const attachmentLabel = normalizeReplyAttachmentName(attachmentName);
+
     const reply = await CommunityReply.create({
       postId,
       author: authorId,
@@ -69,7 +85,9 @@ export async function POST(req: Request) {
         String(authorDisplayName ?? "").trim() ||
         String(authorName ?? "").trim() ||
         "Community User",
-      message: String(message).trim(),
+      message: messageTrim,
+      attachmentUrl: attachmentNorm.value ?? null,
+      attachmentName: attachmentNorm.value ? (attachmentLabel ?? null) : null,
     });
 
     return Response.json(

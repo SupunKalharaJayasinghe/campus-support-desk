@@ -29,6 +29,7 @@ import {
     X,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
 import CommunityPostComposer, {
     type CommunityPostDraftInput,
     type CommunityPostDraft,
@@ -44,6 +45,8 @@ type DbCommunityReply = {
     message: string;
     createdAt?: string;
     isAccepted?: boolean;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
 };
 
 type DbCommunityPost = {
@@ -768,7 +771,7 @@ export default function CommunityProfilePage() {
                             <button
                                 type="button"
                                 onClick={handleBackToStudentPage}
-                                className="flex w-full items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
+                                className="flex w-full items-center gap-3 rounded-xl bg-red-100 px-3 py-2.5 text-sm font-semibold text-red-900 hover:bg-red-900 hover:text-white"
                             >
                                 <ArrowLeft size={18} /> Back to student page
                             </button>
@@ -1025,9 +1028,24 @@ export default function CommunityProfilePage() {
                                                                             : "Mark Accepted"}
                                                                     </button>
                                                                 </div>
-                                                                <p className="mt-1 whitespace-pre-wrap">
-                                                                    {reply.message}
-                                                                </p>
+                                                                {(reply.message ?? "").trim() ? (
+                                                                    <p className="mt-1 whitespace-pre-wrap">
+                                                                        {reply.message}
+                                                                    </p>
+                                                                ) : reply.attachmentUrl ? (
+                                                                    <p className="mt-1 text-xs italic text-slate-500">
+                                                                        Attachment only
+                                                                    </p>
+                                                                ) : null}
+                                                                {reply.attachmentUrl ? (
+                                                                    <CommunityReplyAttachment
+                                                                        attachmentUrl={reply.attachmentUrl}
+                                                                        attachmentName={
+                                                                            reply.attachmentName ?? undefined
+                                                                        }
+                                                                        imageClassName="max-h-32"
+                                                                    />
+                                                                ) : null}
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1147,9 +1165,24 @@ export default function CommunityProfilePage() {
                                                                         : "Mark Accepted"}
                                                                 </button>
                                                             </div>
-                                                            <p className="mt-1 whitespace-pre-wrap">
-                                                                {reply.message}
-                                                            </p>
+                                                            {(reply.message ?? "").trim() ? (
+                                                                <p className="mt-1 whitespace-pre-wrap">
+                                                                    {reply.message}
+                                                                </p>
+                                                            ) : reply.attachmentUrl ? (
+                                                                <p className="mt-1 text-xs italic text-slate-500">
+                                                                    Attachment only
+                                                                </p>
+                                                            ) : null}
+                                                            {reply.attachmentUrl ? (
+                                                                <CommunityReplyAttachment
+                                                                    attachmentUrl={reply.attachmentUrl}
+                                                                    attachmentName={
+                                                                        reply.attachmentName ?? undefined
+                                                                    }
+                                                                    imageClassName="max-h-32"
+                                                                />
+                                                            ) : null}
                                                         </div>
                                                     ))}
                                                 </div>

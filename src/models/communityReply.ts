@@ -21,9 +21,25 @@ const CommunityReplySchema = new Schema(
     maxLength: 50,
   },
 
+  /** May be empty when the reply is attachment-only */
   message: {
     type: String,
-    required: true,
+    default: "",
+  },
+
+  /** Optional: https URL or data URL (PDF, image, Word, plain text) */
+  attachmentUrl: {
+    type: String,
+    maxLength: 2_500_000,
+    default: null,
+  },
+
+  /** Original file name for display when attachmentUrl is set */
+  attachmentName: {
+    type: String,
+    trim: true,
+    maxLength: 200,
+    default: null,
   },
 
   upvotes: {
@@ -39,5 +55,14 @@ const CommunityReplySchema = new Schema(
 { timestamps: true }
 );
 
-export default mongoose.models.CommunityReply ||
-mongoose.model("CommunityReply", CommunityReplySchema);
+const communityReplyModelName = "CommunityReply";
+
+if (
+  process.env.NODE_ENV === "development" &&
+  mongoose.models[communityReplyModelName]
+) {
+  delete mongoose.models[communityReplyModelName];
+}
+
+export default mongoose.models[communityReplyModelName] ||
+  mongoose.model(communityReplyModelName, CommunityReplySchema);
