@@ -1,5 +1,6 @@
 import { connectDB } from "@/lib/mongodb";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
+import { type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
 import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
@@ -16,6 +17,7 @@ type UpdateDraftPayload = {
   pictureUrl?: unknown;
   status?: unknown;
   userId?: unknown;
+  urgentPrepayId?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -37,6 +39,11 @@ function normalizeDraft(doc: {
   attachments?: string[];
   pictureUrl?: string | null;
   status?: string;
+  isUrgent?: boolean;
+  urgentLevel?: string | null;
+  urgentFeePoints?: number | null;
+  urgentPaymentMethod?: string | null;
+  urgentPrepayId?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -49,6 +56,17 @@ function normalizeDraft(doc: {
     attachments: Array.isArray(doc.attachments) ? doc.attachments : [],
     pictureUrl: typeof doc.pictureUrl === "string" ? doc.pictureUrl : "",
     status: doc.status === "resolved" ? "resolved" : "open",
+    isUrgent: Boolean(doc.isUrgent),
+    urgentLevel:
+      doc.urgentLevel === "2days" || doc.urgentLevel === "5days" || doc.urgentLevel === "7days"
+        ? (doc.urgentLevel as UrgentLevel)
+        : null,
+    urgentFeePoints: typeof doc.urgentFeePoints === "number" ? doc.urgentFeePoints : null,
+    urgentPaymentMethod:
+      doc.urgentPaymentMethod === "points" || doc.urgentPaymentMethod === "card"
+        ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
+        : null,
+    urgentPrepayId: doc.urgentPrepayId ? String(doc.urgentPrepayId) : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -109,6 +127,12 @@ export async function PATCH(
       return Response.json({ error: pictureNorm.error }, { status: 400 });
     }
 
+    const urgentPrepayIdRaw = toTrimmedString(body.urgentPrepayId);
+    const urgentPrepayId =
+      urgentPrepayIdRaw && mongoose.Types.ObjectId.isValid(urgentPrepayIdRaw)
+        ? urgentPrepayIdRaw
+        : null;
+
     const updated = await CommunityDraft.findOneAndUpdate(
       { _id: params.id, author: userId },
       {
@@ -120,6 +144,7 @@ export async function PATCH(
           attachments,
           status,
           pictureUrl: pictureNorm.value ?? null,
+          urgentPrepayId,
         },
       },
       { new: true }

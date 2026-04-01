@@ -160,6 +160,7 @@ export default function CommunityProfilePage() {
         email: "-",
         faculty: "Computing",
         studyYear: "Year 2",
+        points: 0,
         userId: "",
     }));
 
@@ -182,6 +183,59 @@ export default function CommunityProfilePage() {
             studyYear: settings.studyYear,
             userId: storedUser?.id || "",
         });
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadDbProfile() {
+            const storedUser = readStoredUser();
+            const userId = storedUser?.id;
+            if (!userId) return;
+            try {
+                const res = await fetch(
+                    `/api/community-profile?userId=${encodeURIComponent(userId)}`
+                );
+                if (!res.ok) return;
+                const db = (await res.json().catch(() => null)) as
+                    | {
+                          displayName?: string;
+                          username?: string;
+                          email?: string;
+                          bio?: string;
+                          faculty?: string;
+                          studyYear?: string;
+                          status?: "PUBLIC" | "PRIVATE";
+                          points?: number;
+                      }
+                    | null;
+                if (!db || cancelled) return;
+
+                setProfileData((prev) => ({
+                    ...prev,
+                    name:
+                        String(db.displayName ?? "").trim() ||
+                        prev.name ||
+                        storedUser?.name ||
+                        storedUser?.username ||
+                        "Current User",
+                    about: String(db.bio ?? "").trim() || prev.about,
+                    username: String(db.username ?? "").trim() || prev.username,
+                    email: String(db.email ?? "").trim() || prev.email,
+                    faculty: String(db.faculty ?? "").trim() || prev.faculty,
+                    studyYear: String(db.studyYear ?? "").trim() || prev.studyYear,
+                    points:
+                        typeof db.points === "number" && Number.isFinite(db.points)
+                            ? db.points
+                            : prev.points,
+                }));
+            } catch {
+                // ignore — local settings already shown
+            }
+        }
+        loadDbProfile();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -424,6 +478,9 @@ export default function CommunityProfilePage() {
                 attachments: draft.attachments,
                 pictureUrl: draft.pictureUrl,
                 status: draft.status,
+                isUrgent: draft.isUrgent,
+                urgentLevel: draft.urgentLevel,
+                urgentPaymentMethod: draft.urgentPaymentMethod,
                 author: storedUser?.id,
                 authorName: authorDisplayName,
                 authorUsername: storedUser?.username ?? "",
@@ -578,6 +635,10 @@ export default function CommunityProfilePage() {
                         attachments: draft.attachments,
                         pictureUrl: draft.pictureUrl,
                         status: draft.status,
+                        isUrgent: draft.isUrgent,
+                        urgentLevel: draft.urgentLevel,
+                        urgentPaymentMethod: draft.urgentPaymentMethod,
+                        urgentPrepayId: (draft as unknown as { urgentPrepayId?: string | null }).urgentPrepayId ?? null,
                         author: storedUser?.id,
                         authorName: authorDisplayName,
                         authorUsername: storedUser?.username ?? "",
@@ -835,6 +896,13 @@ export default function CommunityProfilePage() {
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reputation</p>
                             <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.reputation}</p>
+                        </Card>
+                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+                            <p className="mb-2 inline-flex rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                                <Award size={16} />
+                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Points</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.points}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-blue-100 p-2 text-blue-700">

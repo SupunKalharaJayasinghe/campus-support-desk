@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Paperclip, Plus, Send, Tag, X } from "lucide-react";
 import Card from "@/components/ui/Card";
@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
+import { getUrgentConfig, URGENT_LEVELS, type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
 import { COMMUNITY_POST_BODY_LIMITS } from "@/lib/validate-community-post-body";
 import {
     getComposerAttachmentsError,
@@ -56,6 +57,11 @@ export type CommunityPostDraftInput = {
     attachments: string[];
     pictureUrl?: string;
     status: "open" | "resolved";
+    isUrgent: boolean;
+    urgentLevel: UrgentLevel | null;
+    urgentPaymentMethod: UrgentPaymentMethod | null;
+    urgentCardLast4?: string;
+    urgentPrepayId?: string | null;
 };
 
 export type CommunityPostDraft = {
@@ -67,6 +73,11 @@ export type CommunityPostDraft = {
     attachments: string[];
     pictureUrl: string;
     status: "open" | "resolved";
+    isUrgent: boolean;
+    urgentLevel: UrgentLevel | null;
+    urgentFeePoints?: number | null;
+    urgentPaymentMethod: UrgentPaymentMethod | null;
+    urgentPrepayId?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -97,7 +108,104 @@ export default function CommunityPostComposer({
     const [status, setStatus] = useState<"open" | "resolved">("open");
     const [draftId, setDraftId] = useState<string | null>(null);
 
+    const [isUrgent, setIsUrgent] = useState(false);
+    const [urgentLevel, setUrgentLevel] = useState<UrgentLevel>("2days");
+    const [urgentPaymentMethod, setUrgentPaymentMethod] = useState<UrgentPaymentMethod>("points");
+    const urgentCfg = getUrgentConfig(urgentLevel);
+
+    const [communityPoints, setCommunityPoints] = useState<number | null>(null);
+    const [pointsLoading, setPointsLoading] = useState(false);
+    const [pointsError, setPointsError] = useState("");
+
+    const [cardNumber, setCardNumber] = useState("");
+    const [cardExpiry, setCardExpiry] = useState("");
+    const [cardCvc, setCardCvc] = useState("");
+    const [cardError, setCardError] = useState("");
+
     const [isDraftSaved, setIsDraftSaved] = useState(false);
+
+    /** Set after successful Pay — must be sent when posting urgent + points (points deducted at Pay). */
+    const [urgentPrepayId, setUrgentPrepayId] = useState<string | null>(null);
+    const [payingUrgent, setPayingUrgent] = useState(false);
+    const [payError, setPayError] = useState("");
+    const urgentPrepayIdRef = useRef<string | null>(null);
+    urgentPrepayIdRef.current = urgentPrepayId;
+
+    const urgentLocked = Boolean(draftToEdit?.id);
+
+    const cancelUrgentPrepay = useCallback(async () => {
+        const id = urgentPrepayIdRef.current;
+        if (!id) return;
+        const storedUser = readStoredUser();
+        if (!storedUser?.id) {
+            setUrgentPrepayId(null);
+            return;
+        }
+        try {
+            const res = await fetch("/api/community-urgent-prepay/cancel", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId: storedUser.id,
+                    username: storedUser.username ?? "",
+                    email: storedUser.email ?? "",
+                    name: storedUser.name ?? "",
+                    prepayId: id,
+                }),
+            });
+            const data = (await res.json().catch(() => null)) as
+                | { newPoints?: number }
+                | null;
+            if (res.ok && typeof data?.newPoints === "number" && Number.isFinite(data.newPoints)) {
+                setCommunityPoints(data.newPoints);
+            }
+        } catch {
+            // ignore
+        } finally {
+            setUrgentPrepayId(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        // Load current community points for payment choice UX.
+        const user = readStoredUser();
+        const userId = user?.id;
+        if (!userId) {
+            setCommunityPoints(null);
+            return;
+        }
+        let cancelled = false;
+        setPointsLoading(true);
+        setPointsError("");
+        fetch(`/api/community-profile?userId=${encodeURIComponent(userId)}`)
+            .then(async (res) => {
+                const body = (await res.json().catch(() => null)) as { points?: number; message?: string } | null;
+                // No CommunityProfile document yet — treat as 0 points (same as new users).
+                if (res.status === 404) {
+                    if (!cancelled) {
+                        setCommunityPoints(0);
+                        setPointsError("");
+                    }
+                    return;
+                }
+                if (!res.ok) throw new Error(body?.message || "Failed to load points");
+                const pts = Number(body?.points);
+                if (!cancelled) setCommunityPoints(Number.isFinite(pts) ? pts : 0);
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setCommunityPoints(null);
+                    setPointsError(err instanceof Error ? err.message : "Failed to load points");
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setPointsLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     useEffect(() => {
         if (!draftToEdit) return;
         setDraftId(draftToEdit.id);
@@ -116,10 +224,19 @@ export default function CommunityPostComposer({
         );
         setPictureError("");
         setStatus(draftToEdit.status);
+        setIsUrgent(Boolean(draftToEdit.isUrgent));
+        setUrgentLevel(draftToEdit.urgentLevel ?? "2days");
+        setUrgentPaymentMethod(draftToEdit.urgentPaymentMethod ?? "points");
+        setUrgentPrepayId(draftToEdit.urgentPrepayId ?? null);
+        setCardNumber("");
+        setCardExpiry("");
+        setCardCvc("");
+        setCardError("");
         setIsDraftSaved(true);
         setSubmitError("");
         setValidationAttempted(false);
         setAttachmentInputError("");
+        setPayError("");
     }, [
         draftToEdit,
         draftToEdit?.id,
@@ -248,6 +365,14 @@ export default function CommunityPostComposer({
 
     const handleSaveDraft = async () => {
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
+
+        const nextUrgentPaymentMethod: UrgentPaymentMethod = (() => {
+            if (!isUrgent) return urgentPaymentMethod;
+            if (urgentPaymentMethod !== "points") return urgentPaymentMethod;
+            const pts = communityPoints ?? 0;
+            return pts >= urgentCfg.feePoints ? "points" : "card";
+        })();
+
         const nextDraft: CommunityPostDraftInput = {
             id: draftId ?? undefined,
             title: title.trim(),
@@ -257,12 +382,24 @@ export default function CommunityPostComposer({
             attachments,
             pictureUrl: pictureUrl.trim() || undefined,
             status,
+            isUrgent,
+            urgentLevel: isUrgent ? urgentLevel : null,
+            urgentPaymentMethod: isUrgent ? nextUrgentPaymentMethod : null,
+            urgentCardLast4:
+                isUrgent && nextUrgentPaymentMethod === "card"
+                    ? cardNumber.replace(/\s+/g, "").slice(-4) || undefined
+                    : undefined,
+            urgentPrepayId:
+                isUrgent && nextUrgentPaymentMethod === "points"
+                    ? urgentPrepayId
+                    : null,
         };
         const savedDraft = (await onDraftSaved?.(nextDraft)) ?? null;
         if (savedDraft?.id) {
             setDraftId(savedDraft.id);
         }
         if (resetAfterDraftSave) {
+            void cancelUrgentPrepay();
             setDraftId(null);
             setTitle("");
             setDescription("");
@@ -275,16 +412,25 @@ export default function CommunityPostComposer({
             setPictureUrl("");
             setPictureError("");
             setStatus("open");
+            setIsUrgent(false);
+            setUrgentLevel("2days");
+            setUrgentPaymentMethod("points");
+            setCardNumber("");
+            setCardExpiry("");
+            setCardCvc("");
+            setCardError("");
             setIsDraftSaved(false);
             setSubmitError("");
             setValidationAttempted(false);
             setAttachmentInputError("");
+            setPayError("");
             return;
         }
         setIsDraftSaved(true);
     };
 
     const handleComposerCancel = () => {
+        void cancelUrgentPrepay();
         setDraftId(null);
         setTitle("");
         setDescription("");
@@ -297,10 +443,18 @@ export default function CommunityPostComposer({
         setPictureUrl("");
         setPictureError("");
         setStatus("open");
+        setIsUrgent(false);
+        setUrgentLevel("2days");
+        setUrgentPaymentMethod("points");
+        setCardNumber("");
+        setCardExpiry("");
+        setCardCvc("");
+        setCardError("");
         setIsDraftSaved(false);
         setSubmitError("");
         setValidationAttempted(false);
         setAttachmentInputError("");
+        setPayError("");
         onDraftEditCancel?.();
     };
 
@@ -332,12 +486,92 @@ export default function CommunityPostComposer({
         setValidationAttempted(true);
         if (!isDraftSaved || isSubmitting) return;
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
+        if (isUrgent && urgentPaymentMethod === "points" && !urgentPrepayId) {
+            setSubmitError("Click Pay to deduct points for urgent, or choose card payment.");
+            return;
+        }
         setPostConfirmOpen(true);
+    };
+
+    const handleUrgentPay = async () => {
+        if (urgentLocked || !isUrgent || urgentPaymentMethod !== "points") return;
+        if (!title.trim() || !description.trim()) {
+            setValidationAttempted(true);
+            setPayError("Please fill Title and Details before paying.");
+            return;
+        }
+        const storedUser = readStoredUser();
+        if (!storedUser?.id) {
+            setPayError("Log in to pay with points.");
+            return;
+        }
+        if (communityPoints !== null && communityPoints < urgentCfg.feePoints) {
+            setPayError("Not enough points for this fee.");
+            return;
+        }
+        setPayingUrgent(true);
+        setPayError("");
+        try {
+            const res = await fetch("/api/community-urgent-prepay", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId: storedUser.id,
+                    username: storedUser.username ?? "",
+                    email: storedUser.email ?? "",
+                    name: storedUser.name ?? "",
+                    urgentLevel,
+                }),
+            });
+            const data = (await res.json().catch(() => null)) as
+                | { error?: string; prepayId?: string; newPoints?: number }
+                | null;
+            if (!res.ok) {
+                throw new Error(data?.error || "Payment failed.");
+            }
+            if (data?.prepayId) {
+                setUrgentPrepayId(String(data.prepayId));
+            }
+            if (typeof data?.newPoints === "number" && Number.isFinite(data.newPoints)) {
+                setCommunityPoints(data.newPoints);
+            }
+            setIsDraftSaved(false);
+            // After paying, automatically save/update the draft with urgent + prepay id.
+            setValidationAttempted(true);
+            await handleSaveDraft();
+        } catch (e) {
+            setPayError(e instanceof Error ? e.message : "Payment failed.");
+        } finally {
+            setPayingUrgent(false);
+        }
     };
 
     const executePost = async () => {
         if (!isDraftSaved) return;
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
+
+        if (isUrgent && urgentPaymentMethod === "card") {
+            const raw = cardNumber.replace(/\s+/g, "");
+            const last4 = raw.slice(-4);
+            if (raw.length < 12 || last4.length !== 4 || !/^\d{4}$/.test(last4)) {
+                setCardError("Enter a valid card number (digits only).");
+                return;
+            }
+            if (!cardExpiry.trim()) {
+                setCardError("Enter card expiry (MM/YY).");
+                return;
+            }
+            if (!cardCvc.trim()) {
+                setCardError("Enter card CVC.");
+                return;
+            }
+            setCardError("");
+        }
+
+        if (isUrgent && urgentPaymentMethod === "points" && !urgentPrepayId) {
+            setSubmitError("Click Pay to deduct points for urgent, or choose card payment.");
+            return;
+        }
 
         setPostConfirmOpen(false);
         setIsSubmitting(true);
@@ -364,12 +598,26 @@ export default function CommunityPostComposer({
                     authorUsername: storedUser?.username ?? "",
                     authorEmail: storedUser?.email ?? "",
                     authorDisplayName,
+                    isUrgent,
+                    urgentLevel: isUrgent ? urgentLevel : null,
+                    urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
+                    urgentCardLast4:
+                        isUrgent && urgentPaymentMethod === "card"
+                            ? cardNumber.replace(/\s+/g, "").slice(-4)
+                            : null,
+                    urgentPrepayId:
+                        isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
                 }),
             });
 
             if (!res.ok) {
                 const data = await res.json().catch(() => null);
                 setSubmitError(data?.error ?? "Failed to create post.");
+                // If points are insufficient, encourage switching to card.
+                const msg = String(data?.error ?? "");
+                if (msg.toLowerCase().includes("card")) {
+                    setUrgentPaymentMethod("card");
+                }
                 return;
             }
 
@@ -703,6 +951,228 @@ export default function CommunityPostComposer({
                             </label>
                         ))}
                     </div>
+                </div>
+
+                <div className="rounded-2xl border border-blue-100 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800">
+                            <input
+                                type="checkbox"
+                                checked={isUrgent}
+                                disabled={urgentLocked}
+                                onChange={(e) => {
+                                    const next = e.target.checked;
+                                    if (!next && urgentPrepayIdRef.current) {
+                                        void cancelUrgentPrepay();
+                                    }
+                                    setIsUrgent(next);
+                                    setIsDraftSaved(false);
+                                    setSubmitError("");
+                                }}
+                                className="h-4 w-4 accent-red-600 disabled:opacity-60"
+                            />
+                            Mark as urgent
+                        </label>
+                        <div className="text-xs text-slate-600">
+                            {pointsLoading ? (
+                                "Loading points…"
+                            ) : pointsError ? (
+                                <span className="text-red-600">{pointsError}</span>
+                            ) : communityPoints === null ? (
+                                "Login to use points"
+                            ) : (
+                                <>
+                                    Your points:{" "}
+                                    <span className="font-semibold text-slate-800">{communityPoints}</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {urgentLocked ? (
+                        <p className="mt-2 text-xs text-slate-600">
+                            Urgent and payment details can’t be changed when updating a saved draft.
+                        </p>
+                    ) : null}
+
+                    {isUrgent ? (
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                                    Urgent duration
+                                </label>
+                                <select
+                                    className="w-full rounded-2xl border border-blue-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100"
+                                    value={urgentLevel}
+                                    disabled={urgentLocked}
+                                    onChange={async (e) => {
+                                        const v = e.target.value as UrgentLevel;
+                                        if (v === "2days" || v === "5days" || v === "7days") {
+                                            if (v !== urgentLevel && urgentPrepayIdRef.current) {
+                                                await cancelUrgentPrepay();
+                                            }
+                                            setUrgentLevel(v);
+                                            setPayError("");
+                                            setIsDraftSaved(false);
+                                        }
+                                    }}
+                                >
+                                    {URGENT_LEVELS.map((opt) => (
+                                        <option key={opt.level} value={opt.level}>
+                                            {opt.label} — {opt.feePoints} points
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Urgent fee:{" "}
+                                    <span className="font-semibold text-slate-800">{urgentCfg.feePoints}</span>{" "}
+                                    points
+                                </p>
+                                {urgentPaymentMethod === "points" && !urgentLocked ? (
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            disabled={
+                                                payingUrgent ||
+                                                !!urgentPrepayId ||
+                                                (communityPoints !== null &&
+                                                    communityPoints < urgentCfg.feePoints)
+                                            }
+                                            onClick={() => void handleUrgentPay()}
+                                            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                        >
+                                            {payingUrgent ? (
+                                                <>
+                                                    <Loader2 className="mr-1 inline h-4 w-4 animate-spin" />
+                                                    Paying…
+                                                </>
+                                            ) : urgentPrepayId ? (
+                                                "Paid"
+                                            ) : (
+                                                `Pay ${urgentCfg.feePoints} points`
+                                            )}
+                                        </Button>
+                                        {urgentPrepayId ? (
+                                            <span className="text-xs font-medium text-green-700">
+                                                Fee deducted from your profile — you can post.
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-slate-500">
+                                                Pay now to deduct points before posting.
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : null}
+                                {payError ? (
+                                    <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                                        {payError}
+                                    </p>
+                                ) : null}
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                                    Payment method
+                                </label>
+                                <div className="flex flex-wrap gap-3">
+                                    {(["points", "card"] as const).map((m) => {
+                                        const insufficient =
+                                            m === "points" &&
+                                            communityPoints !== null &&
+                                            communityPoints < urgentCfg.feePoints;
+                                        return (
+                                            <label
+                                                key={m}
+                                                className={cn(
+                                                    "flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm",
+                                                    urgentPaymentMethod === m
+                                                        ? "border-blue-400 bg-white text-slate-800"
+                                                        : "border-blue-100 bg-white/70 text-slate-700"
+                                                )}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="urgent-payment-method"
+                                                    value={m}
+                                                    disabled={urgentLocked || insufficient}
+                                                    checked={urgentPaymentMethod === m}
+                                                    onChange={() => {
+                                                        if (m === "card" && urgentPrepayIdRef.current) {
+                                                            void cancelUrgentPrepay();
+                                                        }
+                                                        setUrgentPaymentMethod(m);
+                                                        setIsDraftSaved(false);
+                                                        setCardError("");
+                                                    }}
+                                                    className="accent-blue-700 disabled:opacity-60"
+                                                />
+                                                <span className="capitalize">{m}</span>
+                                                {insufficient ? (
+                                                    <span className="ml-1 text-xs text-red-600">
+                                                        (not enough points)
+                                                    </span>
+                                                ) : null}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {communityPoints !== null && communityPoints < urgentCfg.feePoints ? (
+                                    <p className="mt-2 text-xs font-medium text-red-700">
+                                        Not enough points for urgent — please pay by card.
+                                    </p>
+                                ) : null}
+                            </div>
+
+                            {urgentPaymentMethod === "card" ? (
+                                <div className="sm:col-span-2">
+                                    <p className="text-xs text-slate-600">
+                                        Card payment is a demo flow (no real charge). We only store the last 4 digits.
+                                    </p>
+                                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                        <Input
+                                            placeholder="Card number"
+                                            value={cardNumber}
+                                            onChange={(e) => {
+                                                setCardNumber(e.target.value);
+                                                setCardError("");
+                                                setIsDraftSaved(false);
+                                            }}
+                                            disabled={urgentLocked}
+                                            className="border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200 disabled:bg-slate-100"
+                                        />
+                                        <Input
+                                            placeholder="MM/YY"
+                                            value={cardExpiry}
+                                            onChange={(e) => {
+                                                setCardExpiry(e.target.value);
+                                                setCardError("");
+                                                setIsDraftSaved(false);
+                                            }}
+                                            disabled={urgentLocked}
+                                            className="border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200 disabled:bg-slate-100"
+                                        />
+                                        <Input
+                                            placeholder="CVC"
+                                            value={cardCvc}
+                                            onChange={(e) => {
+                                                setCardCvc(e.target.value);
+                                                setCardError("");
+                                                setIsDraftSaved(false);
+                                            }}
+                                            disabled={urgentLocked}
+                                            className="border-blue-200 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-200 disabled:bg-slate-100"
+                                        />
+                                    </div>
+                                    {cardError ? (
+                                        <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                                            {cardError}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="border-t border-blue-100 pt-4">

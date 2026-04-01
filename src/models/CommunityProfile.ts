@@ -16,6 +16,48 @@ const CommunityProfileSchema = new Schema(
       maxLength: 30,
     },
 
+    username: {
+      type: String,
+      trim: true,
+      maxLength: 40,
+      default: "",
+    },
+
+    email: {
+      type: String,
+      trim: true,
+      maxLength: 120,
+      default: "",
+    },
+
+    bio: {
+      type: String,
+      trim: true,
+      maxLength: 500,
+      default: "",
+    },
+
+    faculty: {
+      type: String,
+      trim: true,
+      maxLength: 80,
+      default: "Computing",
+    },
+
+    studyYear: {
+      type: String,
+      trim: true,
+      maxLength: 40,
+      default: "Year 2",
+    },
+
+    avatarUrl: {
+      type: String,
+      trim: true,
+      maxLength: 2048,
+      default: "",
+    },
+
     points: {
       type: Number,
       default: 0,
@@ -27,7 +69,7 @@ const CommunityProfileSchema = new Schema(
       default: "BEGINNER",
     },
 
-    status : {
+    status: {
       type: String,
       enum: ["PUBLIC", "PRIVATE"],
       default: "PUBLIC",

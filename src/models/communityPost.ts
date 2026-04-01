@@ -62,6 +62,49 @@ const CommunityPostSchema = new Schema(
     default: "not_resolved",
   },
   
+  // URGENT FEATURE
+isUrgent: {
+  type: Boolean,
+  default: false,
+},
+
+urgentLevel: {
+  type: String,
+  enum: ["2days", "5days", "7days"],
+  default: null,
+},
+
+urgentExpiresAt: {
+  type: Date,
+  default: null,
+},
+
+urgentFeePoints: {
+  type: Number,
+  default: null,
+},
+
+urgentPaymentMethod: {
+  type: String,
+  enum: ["points", "card"],
+  default: null,
+},
+
+urgentPaymentStatus: {
+  type: String,
+  enum: ["unpaid", "paid"],
+  default: "unpaid",
+},
+
+urgentPointsUsed: {
+  type: Number,
+  default: 0,
+},
+
+urgentCardPaymentRef: {
+  type: String,
+  default: null,
+},
 },
 { timestamps: true }
 );

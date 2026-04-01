@@ -43,6 +43,35 @@ const CommunityDraftSchema = new Schema(
       required: true,
       index: true,
     },
+
+    // URGENT + PAYMENT (stored on draft; locked during draft updates)
+    isUrgent: {
+      type: Boolean,
+      default: false,
+    },
+    urgentLevel: {
+      type: String,
+      enum: ["2days", "5days", "7days"],
+      default: null,
+    },
+    urgentFeePoints: {
+      type: Number,
+      default: null,
+    },
+    urgentPaymentMethod: {
+      type: String,
+      enum: ["points", "card"],
+      default: null,
+    },
+    /**
+     * When urgent is paid by points *before* posting, we store a short-lived prepay id on the draft.
+     * Posting consumes the prepay so points are not deducted twice.
+     */
+    urgentPrepayId: {
+      type: Schema.Types.ObjectId,
+      ref: "CommunityUrgentPrepay",
+      default: null,
+    },
   },
   { timestamps: true }
 );
