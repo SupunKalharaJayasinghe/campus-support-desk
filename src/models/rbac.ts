@@ -159,6 +159,7 @@ export function authHeaders() {
 
   return {
     "x-user-id": user.id,
+    "x-user-role": user.role,
   } as Record<string, string>;
 }
 

@@ -92,6 +92,21 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
     updatedAt: "2026-03-31T09:10:00.000Z",
     isDeleted: false,
   },
+  {
+    id: "slot-lec-kperera-2026-04-03-1030",
+    lecturerId: "lec-kperera",
+    date: "2026-04-03",
+    startTime: "10:30",
+    endTime: "11:00",
+    sessionType: "Academic Consultation",
+    mode: "ONLINE",
+    location: "",
+    status: "BOOKED",
+    bookingId: "booking-demo-2",
+    createdAt: "2026-04-01T10:00:00.000Z",
+    updatedAt: "2026-04-01T10:00:00.000Z",
+    isDeleted: false,
+  },
 ];
 
 const globalForConsultationAvailabilityStore = globalThis as typeof globalThis & {

@@ -50,6 +50,21 @@ const INITIAL_CONSULTATION_BOOKINGS: ConsultationBookingPersistedRecord[] = [
     createdAt: "2026-04-01T07:55:00.000Z",
     updatedAt: "2026-04-01T08:00:00.000Z",
   },
+  {
+    id: "booking-demo-2",
+    slotId: "slot-lec-kperera-2026-04-03-1030",
+    lecturerId: "lec-kperera",
+    studentId: "stu-demo-1",
+    purpose: "Academic Consultation",
+    status: "CONFIRMED",
+    confirmedAt: "2026-04-02T06:30:00.000Z",
+    completedAt: null,
+    cancelledAt: null,
+    cancelledByRole: null,
+    cancelledReason: "",
+    createdAt: "2026-04-02T06:20:00.000Z",
+    updatedAt: "2026-04-02T06:30:00.000Z",
+  },
 ];
 
 const globalForConsultationBookingStore = globalThis as typeof globalThis & {

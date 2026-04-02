@@ -27,6 +27,8 @@ export type StudentMeta = {
   status: string;
 };
 
+export type ConsultationActorRole = "LECTURER" | "STUDENT";
+
 export function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -37,6 +39,15 @@ export function asObject(value: unknown): Record<string, unknown> | null {
 
 export function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+export function readHeaderRole(request: Request) {
+  const role = collapseSpaces(request.headers.get("x-user-role")).toUpperCase();
+  if (role === "LECTURER" || role === "STUDENT") {
+    return role as ConsultationActorRole;
+  }
+
+  return "";
 }
 
 export function readId(value: unknown) {
@@ -225,9 +236,14 @@ export async function resolveCurrentLecturerId(
   fallbackLecturerId?: string
 ) {
   const headerUserId = String(request.headers.get("x-user-id") ?? "").trim();
+  const headerRole = readHeaderRole(request);
   const fallbackId = String(fallbackLecturerId ?? "").trim();
 
   if (!mongooseConnection) {
+    if (headerRole !== "LECTURER") {
+      return "";
+    }
+
     const directLecturerId =
       (headerUserId && findLecturerInMemoryById(headerUserId)?.id) || fallbackId;
     if (!directLecturerId) {
@@ -270,9 +286,14 @@ export async function resolveCurrentStudentId(
   fallbackStudentId?: string
 ) {
   const headerUserId = String(request.headers.get("x-user-id") ?? "").trim();
+  const headerRole = readHeaderRole(request);
   const fallbackId = String(fallbackStudentId ?? "").trim();
 
   if (!mongooseConnection) {
+    if (headerRole !== "STUDENT") {
+      return "";
+    }
+
     const directStudentId =
       (headerUserId && findStudentInMemoryById(headerUserId)?.id) || fallbackId;
 
@@ -299,6 +320,38 @@ export async function resolveCurrentStudentId(
   }
 
   return studentId;
+}
+
+export async function resolveCurrentConsultationActor(
+  request: Request,
+  mongooseConnection: mongoose.Mongoose | null,
+  fallbackIds?: {
+    lecturerId?: string;
+    studentId?: string;
+  }
+) {
+  const [lecturerId, studentId] = await Promise.all([
+    resolveCurrentLecturerId(
+      request,
+      mongooseConnection,
+      String(fallbackIds?.lecturerId ?? "").trim()
+    ),
+    resolveCurrentStudentId(
+      request,
+      mongooseConnection,
+      String(fallbackIds?.studentId ?? "").trim()
+    ),
+  ]);
+
+  if (lecturerId) {
+    return { role: "LECTURER" as const, actorId: lecturerId };
+  }
+
+  if (studentId) {
+    return { role: "STUDENT" as const, actorId: studentId };
+  }
+
+  return { role: "" as const, actorId: "" };
 }
 
 export function toApiBooking(

@@ -1,4 +1,5 @@
 import { authHeaders, readStoredUser } from "@/lib/rbac";
+import { getConsultationNotificationTypeLabel, type ConsultationNotificationType } from "@/models/consultation-notification";
 import type { ConsultationSlotMode, ConsultationSlotStatus } from "@/models/consultation-availability";
 import type { ConsultationBookingStatus } from "@/models/consultation-booking";
 
@@ -53,6 +54,20 @@ export interface ConsultationBookingApiRecord {
   student: StudentMeta | null;
 }
 
+export interface ConsultationNotificationApiRecord {
+  id: string;
+  bookingId: string;
+  recipientRole: "STUDENT" | "LECTURER";
+  recipientId: string;
+  type: ConsultationNotificationType;
+  title: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  unread: boolean;
+}
+
 type CollectionResponse<T> = {
   items: T[];
   total: number;
@@ -95,7 +110,11 @@ export function getCurrentConsultationActorIds() {
           : "lec-kperera"
         : "",
     studentId:
-      user?.role === "STUDENT" ? rawId || "stu-demo-1" : "",
+      user?.role === "STUDENT"
+        ? rawId && rawId.startsWith("stu-")
+          ? rawId
+          : "stu-demo-1"
+        : "",
   };
 }
 
@@ -107,6 +126,12 @@ export function toConsultationModeLabel(mode: ConsultationSlotMode) {
     return "Hybrid";
   }
   return "In-Person";
+}
+
+export function toConsultationNotificationLabel(
+  type: ConsultationNotificationType
+) {
+  return getConsultationNotificationTypeLabel(type);
 }
 
 function appendQueryParam(searchParams: URLSearchParams, key: string, value: string) {
@@ -222,6 +247,35 @@ export async function updateConsultationBooking(
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function listConsultationNotifications() {
+  const { lecturerId, studentId } = getCurrentConsultationActorIds();
+  const searchParams = new URLSearchParams();
+  appendQueryParam(searchParams, "lecturerId", lecturerId);
+  appendQueryParam(searchParams, "studentId", studentId);
+  const query = searchParams.toString();
+
+  return requestJson<CollectionResponse<ConsultationNotificationApiRecord>>(
+    `/api/consultation-notifications${query ? `?${query}` : ""}`
+  );
+}
+
+export async function markAllConsultationNotificationsRead() {
+  const { lecturerId, studentId } = getCurrentConsultationActorIds();
+  const searchParams = new URLSearchParams();
+  appendQueryParam(searchParams, "lecturerId", lecturerId);
+  appendQueryParam(searchParams, "studentId", studentId);
+  const query = searchParams.toString();
+
+  return requestJson<{ ok: true; changed: number }>(
+    `/api/consultation-notifications${query ? `?${query}` : ""}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark-all-read" }),
     }
   );
 }
