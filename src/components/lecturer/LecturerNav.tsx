@@ -6,6 +6,7 @@ import { clearDemoSession } from "@/lib/rbac";
 
 const NAV_LINKS = [
   { href: "/lecturer", label: "Dashboard" },
+  { href: "/lecturer/quizzes", label: "Quizzes" },
   { href: "/lecturer/availability", label: "Availability" },
   { href: "/lecturer/bookings", label: "Bookings" },
   { href: "/lecturer/notifications", label: "Notifications" },

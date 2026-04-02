@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
@@ -26,7 +27,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import { readStoredUser } from "@/lib/rbac";
+import { readStoredUser, type DemoUser } from "@/lib/rbac";
 import {
   collapseValidationWhitespace,
   countValidationMessages,
@@ -48,6 +49,12 @@ interface ModuleOfferingOption {
   moduleName: string;
   intakeName: string;
   termCode: string;
+}
+
+interface LecturerLookupRecord {
+  id: string;
+  email: string;
+  fullName: string;
 }
 
 interface QuizOptionForm {
@@ -344,6 +351,20 @@ async function readJson<T>(response: Response) {
   return payload.data as T;
 }
 
+async function readLooseJson<T>(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | (T & { error?: string; message?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      collapseSpaces(payload?.error ?? payload?.message) || "Request failed"
+    );
+  }
+
+  return payload as T;
+}
+
 function parseModuleOfferings(payload: unknown) {
   if (!payload || typeof payload !== "object") return [];
   const items = Array.isArray((payload as { items?: unknown }).items)
@@ -367,6 +388,91 @@ function parseModuleOfferings(payload: unknown) {
       } satisfies ModuleOfferingOption;
     })
     .filter((item): item is ModuleOfferingOption => Boolean(item));
+}
+
+function parseLecturerItems(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const items = Array.isArray((payload as { items?: unknown }).items)
+    ? ((payload as { items: unknown[] }).items as unknown[])
+    : [];
+
+  return items
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+
+      const row = item as Record<string, unknown>;
+      const id = collapseSpaces(row.id ?? row._id);
+      const email = collapseSpaces(row.email).toLowerCase();
+      const fullName = collapseSpaces(row.fullName ?? row.name);
+
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        email,
+        fullName,
+      } satisfies LecturerLookupRecord;
+    })
+    .filter((item): item is LecturerLookupRecord => Boolean(item));
+}
+
+function findBestLecturerMatch(items: LecturerLookupRecord[], user: DemoUser) {
+  const sessionEmail = normalizeText(user.email);
+  const sessionName = normalizeText(user.name);
+
+  if (sessionEmail) {
+    const emailMatch = items.find((item) => normalizeText(item.email) === sessionEmail);
+    if (emailMatch) {
+      return emailMatch;
+    }
+  }
+
+  if (sessionName) {
+    const nameMatch = items.find((item) => normalizeText(item.fullName) === sessionName);
+    if (nameMatch) {
+      return nameMatch;
+    }
+  }
+
+  return items.length === 1 ? items[0] : null;
+}
+
+async function resolveLecturerRecord(user: DemoUser) {
+  const candidates = [user.email, user.username, user.name]
+    .map((value) => collapseSpaces(value))
+    .filter(Boolean);
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    const normalized = normalizeText(candidate);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+
+    const payload = await readLooseJson<{ items?: unknown }>(
+      await fetch(
+        `/api/lecturers?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
+        {
+          cache: "no-store",
+        }
+      )
+    );
+
+    const match = findBestLecturerMatch(parseLecturerItems(payload), user);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
 }
 
 function parseQuizzes(payload: unknown) {
@@ -847,8 +953,14 @@ function QuizModalShell({
 }
 
 export default function AdminQuizzesPage() {
+  const pathname = usePathname();
   const { toast } = useToast();
   const currentUser = useMemo(() => readStoredUser(), []);
+  const isLecturerView = pathname.startsWith("/lecturer") || currentUser?.role === "LECTURER";
+  const pageTitle = isLecturerView ? "My Quizzes" : "Quiz Management";
+  const pageDescription = isLecturerView
+    ? "Create quizzes for your assigned module offerings, publish them to students, and review results from one workspace."
+    : "Build quizzes, publish them to students, and review performance from a single management workspace.";
 
   const [quizzes, setQuizzes] = useState<QuizRecord[]>([]);
   const [moduleOfferings, setModuleOfferings] = useState<ModuleOfferingOption[]>([]);
@@ -935,25 +1047,55 @@ export default function AdminQuizzesPage() {
 
   const loadModuleOfferings = useCallback(async () => {
     try {
-      const response = await fetch("/api/module-offerings?page=1&pageSize=100&sort=module", {
-        cache: "no-store",
-      });
-      const payload = await readJson<unknown>(response);
+      if (isLecturerView) {
+        if (!currentUser) {
+          setModuleOfferings([]);
+          return;
+        }
+
+        const lecturer = await resolveLecturerRecord(currentUser);
+        if (!lecturer) {
+          setModuleOfferings([]);
+          return;
+        }
+
+        const payload = await readLooseJson<unknown>(
+          await fetch(
+            `/api/lecturers/${encodeURIComponent(lecturer.id)}/offerings`,
+            {
+              cache: "no-store",
+            }
+          )
+        );
+        setModuleOfferings(parseModuleOfferings(payload));
+        return;
+      }
+
+      const payload = await readLooseJson<unknown>(
+        await fetch("/api/module-offerings?page=1&pageSize=100&sort=module", {
+          cache: "no-store",
+        })
+      );
       setModuleOfferings(parseModuleOfferings(payload));
     } catch {
       setModuleOfferings([]);
     }
-  }, []);
+  }, [currentUser, isLecturerView]);
 
   const loadQuizzes = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
+      if (isLecturerView && !currentUser?.id) {
+        throw new Error("Unable to resolve the current lecturer identity.");
+      }
+
       const params = new URLSearchParams({
         page: String(page),
         limit: String(pageSize),
       });
+      if (isLecturerView && currentUser?.id) params.set("createdBy", currentUser.id);
       if (moduleOfferingFilter) params.set("moduleOfferingId", moduleOfferingFilter);
       if (statusFilter) params.set("status", statusFilter);
       if (deferredSearch) params.set("search", deferredSearch);
@@ -988,7 +1130,16 @@ export default function AdminQuizzesPage() {
     } finally {
       setLoading(false);
     }
-  }, [deferredSearch, moduleOfferingFilter, page, pageSize, sortOption, statusFilter]);
+  }, [
+    currentUser?.id,
+    deferredSearch,
+    isLecturerView,
+    moduleOfferingFilter,
+    page,
+    pageSize,
+    sortOption,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     void loadModuleOfferings();
@@ -1465,15 +1616,41 @@ export default function AdminQuizzesPage() {
         actions={
           <Button
             className="h-11 gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+            disabled={isLecturerView && moduleOfferings.length === 0}
             onClick={() => openBuilder("create")}
+            title={
+              isLecturerView && moduleOfferings.length === 0
+                ? "You need an assigned module offering before creating a quiz."
+                : undefined
+            }
           >
             <Plus size={16} />
             Create Quiz
           </Button>
         }
-        description="Build quizzes, publish them to students, and review performance from a single management workspace."
-        title="Quiz Management"
+        description={pageDescription}
+        title={pageTitle}
       />
+
+      {isLecturerView && !loading && moduleOfferings.length === 0 ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <ShieldAlert size={22} />
+            </span>
+            <div>
+              <h2 className="text-xl font-semibold text-amber-900">
+                No module offerings assigned yet
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-amber-900/80">
+                A lecturer can only create quizzes for assigned module offerings. Once an
+                offering is assigned and you publish a quiz here, it will appear on the
+                matching student quiz pages automatically.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       {error ? (
         <Card className="border-red-200 bg-red-50">
@@ -1525,7 +1702,9 @@ export default function AdminQuizzesPage() {
                 }}
                 value={moduleOfferingFilter}
               >
-                <option value="">All module offerings</option>
+                <option value="">
+                  {isLecturerView ? "All my module offerings" : "All module offerings"}
+                </option>
                 {moduleOfferings.map((offering) => (
                   <option key={offering.id} value={offering.id}>
                     {offering.moduleCode} · {offering.termCode || "—"}

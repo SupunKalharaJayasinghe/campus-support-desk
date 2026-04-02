@@ -1,7 +1,8 @@
 import type { AppRole, DemoUser } from "@/models/rbac";
+import type { ConsultationBookingStatus } from "@/models/consultation-booking";
 
 export type NotificationType = "Announcement" | "System";
-export type BookingStatus = "Pending" | "Approved" | "Declined" | "Completed";
+export type BookingStatus = ConsultationBookingStatus;
 export type PostStatus = "Draft" | "Open" | "Resolved" | "Archived";
 export type PostCategory = "Academic Question" | "Study Material" | "Lost Item";
 
@@ -253,7 +254,7 @@ export const studentBookings: StudentBooking[] = [
     purpose: "Project guidance",
     date: "Mar 03, 2026",
     time: "10:30 AM",
-    status: "Approved",
+    status: "CONFIRMED",
   },
   {
     id: "sb2",
@@ -261,7 +262,7 @@ export const studentBookings: StudentBooking[] = [
     purpose: "Exam revision",
     date: "Mar 05, 2026",
     time: "1:00 PM",
-    status: "Pending",
+    status: "PENDING",
   },
   {
     id: "sb3",
@@ -269,7 +270,7 @@ export const studentBookings: StudentBooking[] = [
     purpose: "Lab feedback",
     date: "Feb 24, 2026",
     time: "9:00 AM",
-    status: "Completed",
+    status: "COMPLETED",
   },
 ];
 
@@ -405,7 +406,7 @@ export const lecturerBookingRequests: LecturerBookingRequest[] = [
     date: "2026-02-27",
     start: "09:00",
     end: "09:30",
-    status: "Pending",
+    status: "PENDING",
   },
   {
     id: "lr2",
@@ -414,7 +415,7 @@ export const lecturerBookingRequests: LecturerBookingRequest[] = [
     date: "2026-02-28",
     start: "13:00",
     end: "13:30",
-    status: "Pending",
+    status: "PENDING",
   },
   {
     id: "lr3",
@@ -423,7 +424,7 @@ export const lecturerBookingRequests: LecturerBookingRequest[] = [
     date: "2026-03-02",
     start: "11:30",
     end: "12:00",
-    status: "Approved",
+    status: "CONFIRMED",
   },
 ];
 
