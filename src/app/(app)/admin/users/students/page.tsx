@@ -615,6 +615,7 @@ export default function StudentsAdminPage() {
       facultyId?: string;
       degreeProgramId?: string;
       stream?: StudentStream;
+      status?: "" | StudentStatus;
     }) => {
       const intakeId = String(input.intakeId ?? "").trim();
       if (!intakeId) {
@@ -639,7 +640,9 @@ export default function StudentsAdminPage() {
         if (input.stream === "WEEKDAY" || input.stream === "WEEKEND") {
           params.set("stream", input.stream);
         }
-        params.set("status", "ACTIVE");
+        if (input.status === "ACTIVE" || input.status === "INACTIVE") {
+          params.set("status", input.status);
+        }
 
         const response = await fetch(
           `/api/intakes/${encodeURIComponent(intakeId)}/subgroups?${params.toString()}`,
@@ -801,6 +804,7 @@ export default function StudentsAdminPage() {
   };
 
   const openEditModal = (student: StudentRecord) => {
+    const enrollment = student.latestEnrollment;
     setModal({ mode: "edit", targetId: student.id });
     setForm({
       firstName: student.firstName,
@@ -809,24 +813,33 @@ export default function StudentsAdminPage() {
       phone: student.phone,
       optionalEmail: student.optionalEmail,
       status: student.status,
-      facultyId: "",
-      degreeProgramId: "",
-      intakeId: "",
-      stream: "WEEKDAY",
-      subgroup: "",
-      enrollmentStatus: "ACTIVE",
+      facultyId: enrollment?.facultyId ?? "",
+      degreeProgramId: enrollment?.degreeProgramId ?? "",
+      intakeId: enrollment?.intakeId ?? "",
+      stream: enrollment?.stream ?? "WEEKDAY",
+      subgroup: enrollment?.subgroup ?? "",
+      enrollmentStatus: enrollment?.status ?? "ACTIVE",
       studentId: student.studentId,
       email: student.email,
     });
     setDegreeOptions([]);
     setIntakeOptions([]);
     setSubgroupOptions([]);
-    setSelectedIntakeTerm("");
+    setSelectedIntakeTerm(enrollment?.currentTerm ?? "");
     setFormError("");
     setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
     setIsLoadingSubgroups(false);
+    if (enrollment?.intakeId) {
+      void loadIntakeTerm(enrollment.intakeId);
+      void loadSubgroups({
+        intakeId: enrollment.intakeId,
+        facultyId: enrollment.facultyId,
+        degreeProgramId: enrollment.degreeProgramId,
+        stream: enrollment.stream,
+      });
+    }
   };
 
   const closeModal = () => {
@@ -863,6 +876,12 @@ export default function StudentsAdminPage() {
       }
       if (!form.studentId || !form.email) {
         return "Student ID and email preview are required";
+      }
+    }
+    if (modal?.mode === "edit" && form.intakeId) {
+      const subgroup = collapseSpaces(form.subgroup);
+      if (subgroup && !subgroupOptions.some((item) => item.code === subgroup)) {
+        return "Select subgroup from the list";
       }
     }
 
@@ -933,6 +952,29 @@ export default function StudentsAdminPage() {
             body: JSON.stringify(payload),
           })
         );
+
+        const targetStudent = students.find(
+          (item) => item.id === String(modal.targetId ?? "")
+        );
+        const targetEnrollment = targetStudent?.latestEnrollment ?? null;
+
+        if (targetEnrollment && form.intakeId) {
+          await readJson<unknown>(
+            await fetch(
+              `/api/enrollments/${encodeURIComponent(targetEnrollment.id)}`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  intakeId: form.intakeId,
+                  stream: form.stream,
+                  subgroup: collapseSpaces(form.subgroup) || null,
+                  status: form.enrollmentStatus,
+                }),
+              }
+            )
+          );
+        }
 
         toast({
           title: "Saved",
@@ -1044,6 +1086,16 @@ export default function StudentsAdminPage() {
       ),
     [degreeOptions, form.facultyId]
   );
+  const editTargetStudent = useMemo(() => {
+    if (!modal || modal.mode !== "edit" || !modal.targetId) {
+      return null;
+    }
+
+    return students.find((item) => item.id === modal.targetId) ?? null;
+  }, [modal, students]);
+  const editLatestEnrollment = editTargetStudent?.latestEnrollment ?? null;
+  const editIntakeDisplay =
+    editLatestEnrollment?.intakeName || editLatestEnrollment?.intakeId || form.intakeId;
   const subgroupSelectValue = collapseSpaces(form.subgroup);
 
   return (
@@ -1457,6 +1509,7 @@ export default function StudentsAdminPage() {
                             facultyId: form.facultyId,
                             degreeProgramId: form.degreeProgramId,
                             stream: form.stream,
+                            status: "ACTIVE",
                           });
                         }}
                         value={form.intakeId}
@@ -1509,6 +1562,7 @@ export default function StudentsAdminPage() {
                             facultyId: form.facultyId,
                             degreeProgramId: form.degreeProgramId,
                             stream,
+                            status: "ACTIVE",
                           });
                         }}
                         value={form.stream}
@@ -1575,15 +1629,118 @@ export default function StudentsAdminPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="sm:col-span-2 rounded-2xl border border-border bg-tint px-4 py-3 text-sm text-text/70">
-                    Manage program enrollments from the student profile page. {" "}
-                    <Link
-                      className="font-semibold text-[#034aa6] hover:text-[#0339a6]"
-                      href={`/admin/users/students/${encodeURIComponent(String(modal.targetId ?? ""))}`}
-                    >
-                      Open profile
-                    </Link>
-                  </div>
+                  <>
+                    {editLatestEnrollment ? (
+                      <>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-heading">
+                            Intake
+                          </label>
+                          <Input
+                            className="h-12"
+                            disabled
+                            value={editIntakeDisplay || "Current intake"}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-heading">
+                            Current Semester
+                          </label>
+                          <Input
+                            className="h-12"
+                            disabled
+                            value={selectedIntakeTerm || editLatestEnrollment.currentTerm || "-"}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-heading">
+                            Stream
+                          </label>
+                          <Input className="h-12" disabled value={form.stream} />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-heading">
+                            Subgroup
+                          </label>
+                          <Select
+                            className="h-12"
+                            disabled={isSaving || !form.intakeId}
+                            onChange={(event) => {
+                              const value = String(event.target.value ?? "").trim();
+                              setForm((previous) => ({
+                                ...previous,
+                                subgroup: value,
+                              }));
+                            }}
+                            value={subgroupSelectValue}
+                          >
+                            <option value="">
+                              {isLoadingSubgroups
+                                ? "Loading..."
+                                : subgroupOptions.length > 0
+                                  ? "No Subgroup"
+                                  : "No Subgroups Available"}
+                            </option>
+                            {subgroupOptions.map((option) => (
+                              <option key={option.code} value={option.code}>
+                                {option.code} ({option.count})
+                              </option>
+                            ))}
+                          </Select>
+                          <p className="mt-1 text-xs text-text/60">
+                            {form.intakeId
+                              ? subgroupOptions.length > 0
+                                ? "Select subgroup from intake subgroup list."
+                                : "No subgroups found for selected intake + stream."
+                              : "Intake is required to load subgroup options."}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium text-heading">
+                            Enrollment Status
+                          </label>
+                          <Select
+                            className="h-12"
+                            disabled={isSaving}
+                            onChange={(event) =>
+                              setForm((previous) => ({
+                                ...previous,
+                                enrollmentStatus: sanitizeStudentStatus(event.target.value),
+                              }))
+                            }
+                            value={form.enrollmentStatus}
+                          >
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="INACTIVE">INACTIVE</option>
+                          </Select>
+                        </div>
+
+                        <div className="sm:col-span-2 rounded-2xl border border-border bg-tint px-4 py-3 text-sm text-text/70">
+                          Need to manage all enrollments?{" "}
+                          <Link
+                            className="font-semibold text-[#034aa6] hover:text-[#0339a6]"
+                            href={`/admin/users/students/${encodeURIComponent(String(modal.targetId ?? ""))}`}
+                          >
+                            Open profile
+                          </Link>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="sm:col-span-2 rounded-2xl border border-border bg-tint px-4 py-3 text-sm text-text/70">
+                        No enrollments found for this student. Add enrollment from profile page.{" "}
+                        <Link
+                          className="font-semibold text-[#034aa6] hover:text-[#0339a6]"
+                          href={`/admin/users/students/${encodeURIComponent(String(modal.targetId ?? ""))}`}
+                        >
+                          Open profile
+                        </Link>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div>
