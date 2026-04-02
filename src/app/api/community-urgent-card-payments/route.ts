@@ -46,6 +46,7 @@ export async function GET(req: Request) {
         const panEncrypted = typeof row.panEncrypted === "string" ? row.panEncrypted : null;
         return {
           id: String(row._id),
+          userRef: row.userRef ? String(row.userRef) : null,
           status: row.status,
           amountRs: row.amountRs,
           urgentLevel: row.urgentLevel,

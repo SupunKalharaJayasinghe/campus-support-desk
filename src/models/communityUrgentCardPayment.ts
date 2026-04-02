@@ -26,8 +26,7 @@ const CommunityUrgentCardPaymentSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "consumed"],
-      default: "pending",
+      default: "Done",
       index: true,
     },
     amountRs: { type: Number, required: true },

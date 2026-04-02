@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import UrgentPaymentDoneDialog from "@/components/community/UrgentPaymentDoneDialog";
 import { COMMUNITY_URGENT_CARD_PAYMENT_DONE_SESSION_KEY } from "@/lib/community-urgent-payment-done-ui";
 import { readStoredUser } from "@/lib/rbac";
 
 type PaymentRow = {
   id: string;
+  userRef: string | null;
   status: string;
   amountRs: number;
   urgentLevel: string;
@@ -29,6 +31,29 @@ type PaymentRow = {
   createdAt: string | null;
 };
 
+function paymentRowSearchHaystack(row: PaymentRow, includeDecryptedPan: boolean) {
+  const parts = [
+    row.id,
+    row.userRef ?? "",
+    row.displayName,
+    row.userEmail,
+    row.userUsername,
+    String(row.amountRs),
+    row.urgentLevel,
+    row.status,
+    row.cardMaskedDisplay,
+    row.cardLast4,
+    row.postRef ?? "",
+    row.draftRef ?? "",
+    row.createdAt ?? "",
+    row.cvcVerified ? `verified ${row.cvcLength ?? ""}` : "",
+  ];
+  if (includeDecryptedPan && row.cardNumberDecrypted) {
+    parts.push(row.cardNumberDecrypted);
+  }
+  return parts.join(" ").toLowerCase();
+}
+
 export default function CommunityAdminUrgentPaymentsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,6 +63,7 @@ export default function CommunityAdminUrgentPaymentsPage() {
   const [showDecrypted, setShowDecrypted] = useState(false);
   const [decryptionAvailable, setDecryptionAvailable] = useState(false);
   const [paymentDoneOpen, setPaymentDoneOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const user = readStoredUser();
@@ -118,31 +144,26 @@ export default function CommunityAdminUrgentPaymentsPage() {
     }
   };
 
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((row) => paymentRowSearchHaystack(row, showDecrypted).includes(q));
+  }, [items, searchQuery, showDecrypted]);
+
   return (
     <div className="space-y-6">
-      <Card className="rounded-2xl border border-border/90 bg-card/90 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-heading">Payment records</h2>
-            <p className="mt-1 max-w-2xl text-sm text-text/75">
-              Each row is created when a member completes the urgent card step. CVC is never stored.
-              Set <code className="rounded bg-slate-100 px-1">COMMUNITY_URGENT_PAYMENT_KEY</code>{" "}
-              (16+ chars) on the server to encrypt full card numbers; use &quot;Show decrypted PAN&quot;
-              only on trusted admin devices.
-            </p>
-          </div>
-          {decryptionAvailable ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-full"
-              onClick={() => setShowDecrypted((v) => !v)}
-            >
-              {showDecrypted ? "Hide decrypted PAN" : "Show decrypted PAN"}
-            </Button>
-          ) : null}
+      {decryptionAvailable ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            className="rounded-full"
+            onClick={() => setShowDecrypted((v) => !v)}
+          >
+            {showDecrypted ? "Hide decrypted PAN" : "Show decrypted PAN"}
+          </Button>
         </div>
-      </Card>
+      ) : null}
 
       {error ? (
         <p className="text-sm font-medium text-red-600" role="alert">
@@ -150,10 +171,34 @@ export default function CommunityAdminUrgentPaymentsPage() {
         </p>
       ) : null}
 
-      {loading ? (
+      {!error ? (
+        <section id="filters" className="scroll-mt-6">
+          <Card
+            title="Search"
+            description="Filter payment records by username, email, or user ID."
+            className="border-l-[3px] border-l-sky-500 bg-gradient-to-br from-card to-sky-500/[0.04]"
+          >
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by username, email, or user ID"
+              aria-label="Search payment records"
+            />
+            {searchQuery.trim() && items.length > 0 ? (
+              <p className="mt-2 text-xs text-text/65">
+                {filteredItems.length} of {items.length} shown
+              </p>
+            ) : null}
+          </Card>
+        </section>
+      ) : null}
+
+      {error ? null : loading ? (
         <p className="text-sm text-text/70">Loading…</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-text/70">No card payment records yet.</p>
+      ) : filteredItems.length === 0 ? (
+        <p className="text-sm text-text/70">No records match your search.</p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border/90 bg-card/90 shadow-sm">
           <table className="min-w-[960px] w-full border-collapse text-left text-sm">
@@ -167,11 +212,11 @@ export default function CommunityAdminUrgentPaymentsPage() {
                 <th className="px-3 py-2">Expiry</th>
                 <th className="px-3 py-2">CVC</th>
                 <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Draft / Post</th>
+                <th className="px-3 py-2">Post ID</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((row) => (
+              {filteredItems.map((row) => (
                 <tr key={row.id} className="border-b border-border/60 align-top">
                   <td className="px-3 py-2 whitespace-nowrap text-text/80">
                     {row.createdAt ? row.createdAt.slice(0, 16).replace("T", " ") : "—"}
@@ -195,15 +240,8 @@ export default function CommunityAdminUrgentPaymentsPage() {
                     {row.cvcVerified ? `Verified (${row.cvcLength ?? "?"} digits)` : "—"}
                   </td>
                   <td className="px-3 py-2 text-text/80">{row.status}</td>
-                  <td className="px-3 py-2 text-xs text-text/70">
-                    {row.draftRef || row.postRef ? (
-                      <>
-                        {row.draftRef ? <div>Draft: {row.draftRef}</div> : null}
-                        {row.postRef ? <div>Post: {row.postRef}</div> : null}
-                      </>
-                    ) : (
-                      "—"
-                    )}
+                  <td className="px-3 py-2 font-mono text-xs text-text/80">
+                    {row.postRef || row.draftRef || "—"}
                   </td>
                 </tr>
               ))}
