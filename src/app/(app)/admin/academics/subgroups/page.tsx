@@ -22,6 +22,17 @@ type TermCode =
   | "Y4S2";
 type AllocationMode = "GROUP_COUNT" | "STUDENTS_PER_SUBGROUP";
 
+interface FacultyOption {
+  code: string;
+  name: string;
+}
+
+interface DegreeOption {
+  code: string;
+  name: string;
+  facultyCode: string;
+}
+
 interface IntakeOption {
   id: string;
   name: string;
@@ -81,6 +92,14 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeAcademicCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 6);
 }
 
 function parseTermCode(value: unknown): TermCode | null {
@@ -147,6 +166,57 @@ function parseIntakes(payload: unknown) {
       } satisfies IntakeOption;
     })
     .filter((item): item is IntakeOption => Boolean(item));
+}
+
+function parseFaculties(payload: unknown) {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const code = normalizeAcademicCode(item.code);
+      if (!code) {
+        return null;
+      }
+
+      return {
+        code,
+        name: collapseSpaces(item.name) || code,
+      } satisfies FacultyOption;
+    })
+    .filter((item): item is FacultyOption => Boolean(item));
+}
+
+function parseDegrees(payload: unknown) {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+
+  return rows
+    .map((row) => {
+      const item = asObject(row);
+      if (!item) {
+        return null;
+      }
+
+      const code = normalizeAcademicCode(item.code ?? item.id);
+      const facultyCode = normalizeAcademicCode(item.facultyCode);
+      if (!code || !facultyCode) {
+        return null;
+      }
+
+      return {
+        code,
+        name: collapseSpaces(item.name) || code,
+        facultyCode,
+      } satisfies DegreeOption;
+    })
+    .filter((item): item is DegreeOption => Boolean(item));
 }
 
 function parseDistributionSummary(
@@ -253,6 +323,12 @@ export default function SubgroupsPage() {
   const { toast } = useToast();
   const { setActiveWindow } = useAdminContext();
 
+  const [faculties, setFaculties] = useState<FacultyOption[]>([]);
+  const [degrees, setDegrees] = useState<DegreeOption[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState("");
+  const [selectedDegree, setSelectedDegree] = useState("");
+  const [isLoadingFaculties, setIsLoadingFaculties] = useState(true);
+  const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
   const [intakes, setIntakes] = useState<IntakeOption[]>([]);
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(true);
   const [selectedIntakeId, setSelectedIntakeId] = useState("");
@@ -275,6 +351,14 @@ export default function SubgroupsPage() {
   const parsedStudentsPerSubgroup = toPositiveInteger(studentsPerSubgroupInput);
 
   const validationError = useMemo(() => {
+    if (!selectedFaculty) {
+      return "Select a faculty";
+    }
+
+    if (!selectedDegree) {
+      return "Select a degree";
+    }
+
     if (!selectedIntakeId) {
       return "Select an intake";
     }
@@ -292,6 +376,8 @@ export default function SubgroupsPage() {
     mode,
     parsedStudentsPerSubgroup,
     parsedSubgroupCount,
+    selectedDegree,
+    selectedFaculty,
     selectedIntakeId,
   ]);
 
@@ -388,16 +474,129 @@ export default function SubgroupsPage() {
 
   useEffect(() => {
     let mounted = true;
+    setIsLoadingFaculties(true);
+
+    void (async () => {
+      try {
+        const nextFaculties = parseFaculties(
+          await readJson<unknown>(
+            await fetch("/api/faculties", {
+              cache: "no-store",
+            })
+          )
+        );
+        if (!mounted) {
+          return;
+        }
+
+        setFaculties(nextFaculties);
+        setSelectedFaculty((previous) =>
+          previous && nextFaculties.some((item) => item.code === previous)
+            ? previous
+            : nextFaculties[0]?.code ?? ""
+        );
+      } catch {
+        if (!mounted) {
+          return;
+        }
+
+        setFaculties([]);
+        setSelectedFaculty("");
+      } finally {
+        if (mounted) {
+          setIsLoadingFaculties(false);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedFaculty) {
+      setDegrees([]);
+      setSelectedDegree("");
+      return;
+    }
+
+    let mounted = true;
+    setIsLoadingDegrees(true);
+
+    void (async () => {
+      try {
+        const params = new URLSearchParams({
+          facultyId: selectedFaculty,
+          status: "ACTIVE",
+        });
+        const nextDegrees = parseDegrees(
+          await readJson<unknown>(
+            await fetch(`/api/degrees?${params.toString()}`, {
+              cache: "no-store",
+            })
+          )
+        ).filter((item) => item.facultyCode === selectedFaculty);
+
+        if (!mounted) {
+          return;
+        }
+
+        setDegrees(nextDegrees);
+        setSelectedDegree((previous) =>
+          previous && nextDegrees.some((item) => item.code === previous)
+            ? previous
+            : nextDegrees[0]?.code ?? ""
+        );
+      } catch {
+        if (!mounted) {
+          return;
+        }
+
+        setDegrees([]);
+        setSelectedDegree("");
+      } finally {
+        if (!mounted) {
+          return;
+        }
+
+        setIsLoadingDegrees(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedFaculty]);
+
+  useEffect(() => {
+    if (!selectedFaculty || !selectedDegree) {
+      setIntakes([]);
+      setSelectedIntakeId("");
+      setIsLoadingIntakes(false);
+      return;
+    }
+
+    let mounted = true;
     setIsLoadingIntakes(true);
 
     void (async () => {
       try {
-        const payload = await readJson<unknown>(
-          await fetch("/api/intakes?page=1&pageSize=100&sort=az&status=ACTIVE", {
-            cache: "no-store",
-          })
+        const params = new URLSearchParams({
+          page: "1",
+          pageSize: "100",
+          sort: "az",
+          status: "ACTIVE",
+          facultyId: selectedFaculty,
+          degreeProgramId: selectedDegree,
+        });
+        const nextIntakes = parseIntakes(
+          await readJson<unknown>(
+            await fetch(`/api/intakes?${params.toString()}`, {
+              cache: "no-store",
+            })
+          )
         );
-        const nextIntakes = parseIntakes(payload);
         if (!mounted) {
           return;
         }
@@ -431,7 +630,7 @@ export default function SubgroupsPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [selectedDegree, selectedFaculty]);
 
   useEffect(() => {
     if (!selectedIntakeId || !selectedIntake) {
@@ -488,6 +687,18 @@ export default function SubgroupsPage() {
     })();
   }, [selectedIntakeId, selectedTerm]);
 
+  useEffect(() => {
+    setPreview(null);
+  }, [
+    mode,
+    selectedDegree,
+    selectedFaculty,
+    selectedIntakeId,
+    selectedTerm,
+    studentsPerSubgroupInput,
+    subgroupCountInput,
+  ]);
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageHeader
@@ -496,19 +707,75 @@ export default function SubgroupsPage() {
       />
 
       <Card accent>
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.2fr_1fr_1fr]">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+              Faculty
+            </label>
+            <Select
+              className="h-12"
+              disabled={isLoadingFaculties}
+              onChange={(event) => {
+                setSelectedFaculty(normalizeAcademicCode(event.target.value));
+              }}
+              value={selectedFaculty}
+            >
+              <option value="">
+                {isLoadingFaculties ? "Loading faculties..." : "Select faculty"}
+              </option>
+              {faculties.map((faculty) => (
+                <option key={faculty.code} value={faculty.code}>
+                  {faculty.code} - {faculty.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+              Degree
+            </label>
+            <Select
+              className="h-12"
+              disabled={!selectedFaculty || isLoadingDegrees}
+              onChange={(event) => {
+                setSelectedDegree(normalizeAcademicCode(event.target.value));
+              }}
+              value={selectedDegree}
+            >
+              <option value="">
+                {!selectedFaculty
+                  ? "Select faculty first"
+                  : isLoadingDegrees
+                    ? "Loading degrees..."
+                    : "Select degree"}
+              </option>
+              {degrees.map((degree) => (
+                <option key={degree.code} value={degree.code}>
+                  {degree.code} - {degree.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
               Intake
             </label>
             <Select
               className="h-12"
-              disabled={isLoadingIntakes}
-              onChange={(event) => setSelectedIntakeId(String(event.target.value ?? "").trim())}
+              disabled={!selectedDegree || isLoadingIntakes}
+              onChange={(event) =>
+                setSelectedIntakeId(String(event.target.value ?? "").trim())
+              }
               value={selectedIntakeId}
             >
               <option value="">
-                {isLoadingIntakes ? "Loading intakes..." : "Select intake"}
+                {!selectedDegree
+                  ? "Select degree first"
+                  : isLoadingIntakes
+                    ? "Loading intakes..."
+                    : "Select intake"}
               </option>
               {intakes.map((intake) => (
                 <option key={intake.id} value={intake.id}>
@@ -543,7 +810,7 @@ export default function SubgroupsPage() {
 
           <div className="rounded-2xl border border-border bg-tint px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Intake Student Count
+              Filtered Intake Student Count
             </p>
             <p className="mt-2 text-2xl font-semibold text-heading">
               {isLoadingHeadcount ? "..." : headcount ?? 0}
