@@ -4,6 +4,10 @@ import "@/models/GamificationPoints";
 import "@/models/Student";
 import "@/models/Trophy";
 import {
+  buildDemoTrophiesPayload,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
+import {
   getCurrentLevel,
   getLevelBadge,
   getLevelComparison,
@@ -41,19 +45,27 @@ export async function GET(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const studentId = String(params.studentId ?? "").trim();
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
       );
+    }
+
+    if (!mongooseConnection) {
+      const demoPayload = buildDemoTrophiesPayload(studentId);
+      if (!demoPayload || !hasDemoStudent(studentId)) {
+        return NextResponse.json(
+          { success: false, error: "Student not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: demoPayload,
+      });
     }
 
     const student = await StudentModel.findById(studentId)

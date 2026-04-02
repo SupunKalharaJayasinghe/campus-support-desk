@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import "@/models/GamificationPoints";
 import "@/models/Grade";
 import "@/models/Student";
+import {
+  buildDemoGamificationResyncResult,
+  buildDemoGamificationSnapshot,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { recalculateStudentPoints } from "@/lib/points-engine";
 import { connectMongoose } from "@/lib/mongoose";
 import { StudentModel } from "@/models/Student";
@@ -20,19 +25,32 @@ export async function POST(
     // TODO: Enforce proper RBAC middleware once auth layer is implemented.
     // For now, the endpoint is accessible but should only be called from admin UI.
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const studentId = collapseSpaces(params.studentId);
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
       );
+    }
+
+    if (!mongooseConnection) {
+      if (!hasDemoStudent(studentId)) {
+        return NextResponse.json(
+          { success: false, error: "Student not found" },
+          { status: 404 }
+        );
+      }
+
+      await request.json().catch(() => null);
+
+      return NextResponse.json({
+        success: true,
+        data: buildDemoGamificationResyncResult(
+          studentId,
+          buildDemoGamificationSnapshot(studentId),
+          buildDemoGamificationSnapshot(studentId)
+        ),
+      });
     }
 
     const studentExists = Boolean(

@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { Schema, type InferSchemaType } from "mongoose";
 
 const UserBadgeSchema = new Schema(
   {
@@ -18,21 +18,13 @@ const UserBadgeSchema = new Schema(
       type: Date,
       default: Date.now,
     },
-    source: {
-      type: String,
-      trim: true,
-      default: "",
-    },
   },
-  {
-    timestamps: true,
-    versionKey: false,
-  }
+  { timestamps: true }
 );
 
 UserBadgeSchema.index({ userId: 1, badgeId: 1 }, { unique: true });
 
-const UserBadgeModel =
-  mongoose.models.UserBadge || mongoose.model("UserBadge", UserBadgeSchema);
+export type UserBadgeDocument = InferSchemaType<typeof UserBadgeSchema>;
 
-export default UserBadgeModel;
+export default mongoose.models.UserBadge ||
+  mongoose.model("UserBadge", UserBadgeSchema);

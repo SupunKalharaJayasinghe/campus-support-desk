@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildDemoLeaderboardData } from "@/lib/demo-student-analytics";
 import { connectMongoose } from "@/lib/mongoose";
 import {
   buildLeaderboardData,
@@ -10,16 +11,9 @@ import {
 export async function GET(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const scopeOptions = parseScopeOptions(searchParams);
-    const validationError = validateScopeOptions(scopeOptions);
+    const validationError = validateScopeOptions(scopeOptions, !mongooseConnection);
     if (validationError) {
       return NextResponse.json(
         { success: false, error: validationError },
@@ -33,13 +27,21 @@ export async function GET(request: Request) {
         ? Math.min(50, Math.floor(limitValue))
         : 10;
 
-    const leaderboard = await buildLeaderboardData({
-      scope: scopeOptions.scope as LeaderboardScope,
-      facultyId: scopeOptions.facultyId,
-      degreeProgramId: scopeOptions.degreeProgramId,
-      intakeId: scopeOptions.intakeId,
-      moduleOfferingId: scopeOptions.moduleOfferingId,
-    });
+    const leaderboard = mongooseConnection
+      ? await buildLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        })
+      : buildDemoLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        });
 
     return NextResponse.json({
       success: true,

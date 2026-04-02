@@ -19,7 +19,7 @@ import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import { isDemoModeEnabled, readStoredUser, type DemoUser } from "@/lib/rbac";
+import { resolveCurrentStudentRecord } from "@/lib/student-session";
 
 type QuestionType = "mcq" | "true-false" | "short-answer";
 
@@ -137,10 +137,6 @@ function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-function normalizeText(value: unknown) {
-  return collapseSpaces(value).toLowerCase();
-}
-
 function formatTimer(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safe / 3600);
@@ -163,115 +159,10 @@ async function readJson<T>(response: Response) {
   return (await response.json().catch(() => null)) as T | null;
 }
 
-function parseStudentItems(payload: unknown): StudentLookupRecord[] {
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-  const items = (payload as { items?: unknown }).items;
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-      const row = item as Record<string, unknown>;
-      const id = collapseSpaces(row.id ?? row._id);
-      const studentId = collapseSpaces(row.studentId);
-      if (!id || !studentId) return null;
-      return {
-        id,
-        studentId,
-        email: collapseSpaces(row.email).toLowerCase(),
-        firstName: collapseSpaces(row.firstName),
-        lastName: collapseSpaces(row.lastName),
-      } satisfies StudentLookupRecord;
-    })
-    .filter((item): item is StudentLookupRecord => Boolean(item));
-}
-
 function buildStudentName(student: StudentLookupRecord) {
   return `${collapseSpaces(student.firstName)} ${collapseSpaces(student.lastName)}`.trim();
 }
 
-function findBestStudentMatch(items: StudentLookupRecord[], user: DemoUser) {
-  const sessionEmail = normalizeText(user.email);
-  const sessionUsername = normalizeText(user.username);
-  const sessionId = normalizeText(user.id);
-  const sessionName = normalizeText(user.name);
-
-  if (sessionEmail) {
-    const emailMatch = items.find((item) => normalizeText(item.email) === sessionEmail);
-    if (emailMatch) return emailMatch;
-  }
-  if (sessionUsername) {
-    const usernameMatch = items.find((item) => normalizeText(item.studentId) === sessionUsername);
-    if (usernameMatch) return usernameMatch;
-  }
-  if (sessionId) {
-    const idMatch = items.find(
-      (item) => normalizeText(item.id) === sessionId || normalizeText(item.studentId) === sessionId
-    );
-    if (idMatch) return idMatch;
-  }
-  if (sessionName) {
-    const nameMatch = items.find((item) => normalizeText(buildStudentName(item)) === sessionName);
-    if (nameMatch) return nameMatch;
-  }
-  return items.length === 1 ? items[0] : null;
-}
-
-async function resolveStudentRecord(user: DemoUser) {
-  const candidates = [user.email, user.username, user.id, user.name]
-    .map((value) => collapseSpaces(value))
-    .filter(Boolean);
-  const seen = new Set<string>();
-  let hadSuccessfulLookup = false;
-  let lastLookupError = "";
-
-  for (const candidate of candidates) {
-    const normalized = normalizeText(candidate);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-
-    const response = await fetch(
-      `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
-      { cache: "no-store" }
-    );
-    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
-      response
-    );
-    if (!response.ok) {
-      lastLookupError =
-        collapseSpaces(payload?.error ?? payload?.message) ||
-        "Failed to look up your student profile.";
-      continue;
-    }
-    hadSuccessfulLookup = true;
-    const match = findBestStudentMatch(parseStudentItems(payload), user);
-    if (match) return match;
-  }
-
-  if (isDemoModeEnabled()) {
-    const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
-      cache: "no-store",
-    });
-    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
-      response
-    );
-    if (response.ok) {
-      hadSuccessfulLookup = true;
-      return parseStudentItems(payload)[0] ?? null;
-    }
-
-    lastLookupError =
-      collapseSpaces(payload?.error ?? payload?.message) ||
-      "Failed to look up your student profile.";
-  }
-
-  if (!hadSuccessfulLookup && lastLookupError) {
-    throw new Error(lastLookupError);
-  }
-
-  return null;
-}
 
 function LoadingSkeleton() {
   return (
@@ -601,17 +492,7 @@ export default function StudentQuizAttemptPage() {
     setProfileMissing(false);
 
     try {
-      const effectiveUser =
-        readStoredUser() ??
-        (isDemoModeEnabled()
-          ? ({ id: "", name: "Demo Student", role: "STUDENT" } satisfies DemoUser)
-          : null);
-
-      if (!effectiveUser) {
-        throw new Error("No student session found. Please sign in again.");
-      }
-
-      const resolvedStudent = await resolveStudentRecord(effectiveUser);
+      const resolvedStudent = await resolveCurrentStudentRecord();
       if (!resolvedStudent) {
         setStudentRecord(null);
         setPreviewQuiz(null);

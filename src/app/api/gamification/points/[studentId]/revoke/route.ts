@@ -54,8 +54,11 @@ export async function POST(
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
+        {
+          success: false,
+          error: "Points revocation is unavailable in demo mode",
+        },
+        { status: 501 }
       );
     }
 

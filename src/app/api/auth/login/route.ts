@@ -73,15 +73,19 @@ export async function POST(request: Request) {
 
     const role = toAppRoleFromUserRole(user.role);
     let displayName = String(user.username ?? "User").trim();
+    let studentRegistrationNumber = "";
 
     const studentRef = String(user.studentRef ?? "").trim();
     if (studentRef) {
       const studentRow = await StudentModel.findById(studentRef)
-        .select({ firstName: 1, lastName: 1 })
+        .select({ studentId: 1, firstName: 1, lastName: 1 })
         .lean()
         .exec()
         .catch(() => null);
       const student = asObject(studentRow);
+      studentRegistrationNumber = String(student?.studentId ?? "")
+        .trim()
+        .toUpperCase();
       const firstName = String(student?.firstName ?? "").trim();
       const lastName = String(student?.lastName ?? "").trim();
       if (firstName || lastName) {
@@ -126,6 +130,8 @@ export async function POST(request: Request) {
         name: displayName || "User",
         username: String(user.username ?? "").trim(),
         email: String(user.email ?? "").trim().toLowerCase(),
+        studentRef: studentRef || undefined,
+        studentRegistrationNumber: studentRegistrationNumber || undefined,
         mustChangePassword: Boolean(user.mustChangePassword),
       },
     });

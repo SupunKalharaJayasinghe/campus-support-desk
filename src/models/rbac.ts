@@ -6,6 +6,8 @@ export interface DemoUser {
   role: AppRole;
   username?: string;
   email?: string;
+  studentRef?: string;
+  studentRegistrationNumber?: string;
   mustChangePassword?: boolean;
 }
 
@@ -112,6 +114,12 @@ export function readStoredUser(): DemoUser | null {
       role: parsed.role as AppRole,
       username: typeof parsed.username === "string" ? parsed.username : undefined,
       email: typeof parsed.email === "string" ? parsed.email : undefined,
+      studentRef:
+        typeof parsed.studentRef === "string" ? parsed.studentRef : undefined,
+      studentRegistrationNumber:
+        typeof parsed.studentRegistrationNumber === "string"
+          ? parsed.studentRegistrationNumber
+          : undefined,
       mustChangePassword:
         typeof parsed.mustChangePassword === "boolean"
           ? parsed.mustChangePassword

@@ -28,8 +28,11 @@ export async function POST(request: Request) {
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
+        {
+          success: false,
+          error: "Manual points awards are unavailable in demo mode",
+        },
+        { status: 501 }
       );
     }
 

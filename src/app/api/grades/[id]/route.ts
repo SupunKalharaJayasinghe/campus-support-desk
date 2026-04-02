@@ -15,8 +15,11 @@ import { connectMongoose } from "@/lib/mongoose";
 import { findModuleOfferingById } from "@/lib/module-offering-store";
 import { findModuleById } from "@/lib/module-store";
 import {
-  awardPointsForGrade,
-  revokePointsForGrade,
+  buildDemoGamificationResyncResult,
+  buildDemoGamificationSnapshot,
+} from "@/lib/demo-student-analytics";
+import {
+  recalculateStudentPoints,
 } from "@/lib/points-engine";
 import { findStudentInMemoryById } from "@/lib/student-registration";
 import { GradeModel } from "@/models/Grade";
@@ -341,6 +344,8 @@ export async function PUT(
         );
       }
 
+      const beforeSnapshot = buildDemoGamificationSnapshot(current.studentId);
+
       const nextCaMarks = caMarks ?? current.caMarks;
       const nextFinalExamMarks = finalExamMarks ?? current.finalExamMarks;
       const shouldRecalculate = hasCaMarks || hasFinalExamMarks;
@@ -370,9 +375,19 @@ export async function PUT(
         );
       }
 
+      const xpAwarded = buildDemoGamificationResyncResult(
+        current.studentId,
+        beforeSnapshot,
+        buildDemoGamificationSnapshot(current.studentId)
+      );
+
       return NextResponse.json({
         success: true,
         data: toApiGrade(updated),
+        ...(xpAwarded.totalPointsAwarded !== 0 ||
+        xpAwarded.milestonesUnlocked.length > 0
+          ? { xpAwarded }
+          : {}),
       });
     }
 
@@ -417,6 +432,7 @@ export async function PUT(
         { status: 404 }
       );
     }
+    const studentRecordId = readId(current.studentId);
 
     const shouldRecalculate = hasCaMarks || hasFinalExamMarks;
 
@@ -460,17 +476,10 @@ export async function PUT(
       );
     }
 
-    let xpAwarded: Awaited<ReturnType<typeof awardPointsForGrade>> | null = null;
-    if (shouldRecalculate) {
+    let xpAwarded: Awaited<ReturnType<typeof recalculateStudentPoints>> | null = null;
+    if (shouldRecalculate && studentRecordId) {
       try {
-        const revokeResult = await revokePointsForGrade(gradeId, "Grade updated");
-        if (!revokeResult.success) {
-          console.error("Failed to revoke points for updated grade", {
-            gradeId,
-          });
-        }
-
-        const awardResult = await awardPointsForGrade(gradeId);
+        const awardResult = await recalculateStudentPoints(studentRecordId);
         if (
           awardResult.pointsAwarded.length > 0 ||
           awardResult.milestonesUnlocked.length > 0 ||
@@ -480,13 +489,14 @@ export async function PUT(
         }
 
         if (!awardResult.success && awardResult.errors.length > 0) {
-          console.error("Failed to auto-award points for updated grade", {
+          console.error("Failed to re-sync gamification after updating grade", {
+            studentId: studentRecordId,
             gradeId,
             errors: awardResult.errors,
           });
         }
       } catch (error) {
-        console.error("Failed to refresh points for updated grade", error);
+        console.error("Failed to re-sync gamification after updating grade", error);
       }
     }
 
@@ -522,12 +532,35 @@ export async function DELETE(
     }
 
     if (!mongooseConnection) {
+      const current = findGradeInMemoryById(gradeId);
+      if (!current) {
+        return NextResponse.json(
+          { success: false, error: "Grade not found" },
+          { status: 404 }
+        );
+      }
+
+      const beforeSnapshot = buildDemoGamificationSnapshot(current.studentId);
       const removed = deleteGradeInMemory(gradeId);
       if (!removed) {
         return NextResponse.json(
           { success: false, error: "Grade not found" },
           { status: 404 }
         );
+      }
+
+      const syncResult = buildDemoGamificationResyncResult(
+        removed.studentId,
+        beforeSnapshot,
+        buildDemoGamificationSnapshot(removed.studentId)
+      );
+
+      if (!syncResult.success && syncResult.errors.length > 0) {
+        console.error("Failed to re-sync demo gamification after deleting grade", {
+          studentId: removed.studentId,
+          gradeId,
+          errors: syncResult.errors,
+        });
       }
     } else {
       if (!mongoose.Types.ObjectId.isValid(gradeId)) {
@@ -538,7 +571,7 @@ export async function DELETE(
       }
 
       const current = await GradeModel.findById(gradeId)
-        .select("_id moduleOfferingId")
+        .select("_id moduleOfferingId studentId")
         .lean()
         .exec()
         .catch(() => null);
@@ -549,8 +582,9 @@ export async function DELETE(
         );
       }
 
-      const row = current as { moduleOfferingId?: unknown };
+      const row = current as { moduleOfferingId?: unknown; studentId?: unknown };
       const offeringId = collapseSpaces(row.moduleOfferingId);
+      const studentRecordId = readId(row.studentId);
 
       await GradeModel.deleteOne({ _id: gradeId }).catch(() => null);
 
@@ -567,15 +601,19 @@ export async function DELETE(
         }
       }
 
-      try {
-        const revokeResult = await revokePointsForGrade(gradeId, "Grade deleted");
-        if (!revokeResult.success) {
-          console.error("Failed to revoke points for deleted grade", {
-            gradeId,
-          });
+      if (studentRecordId) {
+        try {
+          const syncResult = await recalculateStudentPoints(studentRecordId);
+          if (!syncResult.success && syncResult.errors.length > 0) {
+            console.error("Failed to re-sync gamification after deleting grade", {
+              studentId: studentRecordId,
+              gradeId,
+              errors: syncResult.errors,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to re-sync gamification after deleting grade", error);
         }
-      } catch (error) {
-        console.error("Failed to revoke points for deleted grade", error);
       }
     }
 

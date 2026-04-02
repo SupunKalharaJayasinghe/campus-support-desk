@@ -148,12 +148,10 @@ function calculateCreditsCompleted(grades: IGrade[]) {
     return 0;
   }
 
-  const credits = passedGrades.map((grade) => extractCredits(grade));
-  const hasCompleteCredits = credits.every(
-    (credit): credit is number => credit !== null && credit > 0
-  );
-
-  if (!hasCompleteCredits) {
+  const credits = passedGrades
+    .map((grade) => extractCredits(grade))
+    .filter((credit): credit is number => credit !== null && credit > 0);
+  if (credits.length === 0) {
     return 0;
   }
 
