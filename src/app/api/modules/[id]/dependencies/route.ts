@@ -1,16 +1,11 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
-import "@/models/Intake";
+import "@/models/Module";
 import "@/models/ModuleOffering";
-import { findDegreeProgram } from "@/models/degree-program-store";
-import { findFaculty } from "@/models/faculty-store";
-import { findIntakeById } from "@/models/intake-store";
-import {
-  listModuleOfferingsByModuleId,
-  type ModuleOfferingRecord,
-} from "@/models/module-offering-store";
+import "@/models/Faculty";
 import { connectMongoose } from "@/models/mongoose";
-import { IntakeModel } from "@/models/Intake";
+import { FacultyModel } from "@/models/Faculty";
+import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
 interface ModuleDependencyItem {
@@ -27,28 +22,12 @@ interface ModuleDependencyItem {
   updatedAt: string;
 }
 
-interface IntakeLookup {
-  intakeId: string;
-  intakeName: string;
-  facultyCode: string;
-  degreeCode: string;
-}
-
-interface NormalizedDbOffering {
-  offeringId: string;
-  intakeId: string;
-  termCode: string;
-  syllabusVersion: string;
-  assignedLecturerIds: string[];
-  updatedAt: string;
-}
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
 }
 
 function normalizeAcademicCode(value: unknown) {
@@ -57,10 +36,6 @@ function normalizeAcademicCode(value: unknown) {
     .toUpperCase()
     .replace(/[^A-Z]/g, "")
     .slice(0, 6);
-}
-
-function normalizeSyllabusVersion(value: unknown) {
-  return value === "OLD" ? "OLD" : "NEW";
 }
 
 function toIsoDate(value: unknown) {
@@ -77,204 +52,69 @@ function toIsoDate(value: unknown) {
   return parsed.toISOString();
 }
 
-function toIntakeLookupFromStore(intakeId: string): IntakeLookup | null {
-  const intake = findIntakeById(intakeId);
-  if (!intake) {
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
-  return {
-    intakeId: intake.id,
-    intakeName: intake.name,
-    facultyCode: normalizeAcademicCode(intake.facultyCode),
-    degreeCode: normalizeAcademicCode(intake.degreeCode),
-  };
+  return value as Record<string, unknown>;
 }
 
-function toDependencyItem(
-  input: {
-    offeringId: string;
-    intakeId: string;
-    intakeName: string;
-    facultyCode: string;
-    degreeCode: string;
-    termCode: string;
-    syllabusVersion: string;
-    assignedLecturerIds: string[];
-    updatedAt: string;
+function toModuleLookup(value: unknown) {
+  const row = asObject(value);
+  if (!row) {
+    return null;
   }
-): ModuleDependencyItem {
-  const normalizedFacultyCode = normalizeAcademicCode(input.facultyCode);
-  const normalizedDegreeCode = normalizeAcademicCode(input.degreeCode);
-  const facultyName = normalizedFacultyCode
-    ? (findFaculty(normalizedFacultyCode)?.name ?? "")
-    : "";
-  const degreeRecord = normalizedDegreeCode
-    ? findDegreeProgram(normalizedDegreeCode)
-    : null;
-  const lecturerCount = Array.isArray(input.assignedLecturerIds)
-    ? input.assignedLecturerIds.filter((item) => Boolean(String(item ?? "").trim())).length
-    : 0;
 
-  return {
-    offeringId: String(input.offeringId ?? ""),
-    facultyCode: normalizedFacultyCode,
-    facultyName,
-    degreeId: normalizedDegreeCode,
-    degreeCode: degreeRecord?.code ?? normalizedDegreeCode,
-    intakeId: String(input.intakeId ?? ""),
-    intakeName: String(input.intakeName ?? ""),
-    termCode: String(input.termCode ?? ""),
-    syllabusVersion: normalizeSyllabusVersion(input.syllabusVersion),
-    lecturerCount,
-    updatedAt: toIsoDate(input.updatedAt) || new Date().toISOString(),
-  };
+  const id = String(row._id ?? row.id ?? "").trim();
+  const code = normalizeModuleCode(row.code);
+  if (!id || !code) {
+    return null;
+  }
+
+  return { id, code };
 }
 
-function normalizeDbOfferings(value: unknown): NormalizedDbOffering[] {
-  if (!Array.isArray(value)) {
-    return [];
+async function findModuleDocument(moduleParam: string) {
+  if (!moduleParam) {
+    return null;
   }
 
-  return value
-    .map((row) => {
-      const normalizedRow = asObject(row);
-      if (!normalizedRow) {
-        return null;
-      }
-
-      const offeringId = String(
-        normalizedRow._id ?? normalizedRow.id ?? ""
-      ).trim();
-      const intakeId = String(normalizedRow.intakeId ?? "").trim();
-      if (!offeringId || !intakeId) {
-        return null;
-      }
-
-      const lecturerSource =
-        normalizedRow.assignedLecturerIds ?? normalizedRow.assignedLecturers;
-      const assignedLecturerIds = Array.isArray(lecturerSource)
-        ? lecturerSource.map((item) => String(item ?? "").trim()).filter(Boolean)
-        : [];
-
-      return {
-        offeringId,
-        intakeId,
-        termCode: String(normalizedRow.termCode ?? "").trim(),
-        syllabusVersion: String(normalizedRow.syllabusVersion ?? "NEW"),
-        assignedLecturerIds,
-        updatedAt: toIsoDate(normalizedRow.updatedAt),
-      } satisfies NormalizedDbOffering;
-    })
-    .filter((row): row is NormalizedDbOffering => Boolean(row));
-}
-
-async function loadIntakesFromMongoose(
-  intakeIds: string[]
-): Promise<Map<string, IntakeLookup>> {
-  const map = new Map<string, IntakeLookup>();
-  const validObjectIds = intakeIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
-
-  if (validObjectIds.length === 0) {
-    return map;
-  }
-
-  const objectIds = validObjectIds.map((id) => new mongoose.Types.ObjectId(id));
-  const intakeRows = (await IntakeModel.find({
-    _id: { $in: objectIds },
-  })
-    .lean()
-    .exec()
-    .catch(() => [])) as unknown[];
-
-  intakeRows.forEach((row) => {
-    const normalizedRow = asObject(row);
-    if (!normalizedRow) {
-      return;
+  if (mongoose.Types.ObjectId.isValid(moduleParam)) {
+    const byId = await ModuleModel.findById(moduleParam).lean().exec().catch(() => null);
+    if (byId) {
+      return byId;
     }
-
-    const intakeId = String(normalizedRow._id ?? "").trim();
-    if (!intakeId) {
-      return;
-    }
-
-    const intakeName = String(normalizedRow.name ?? "").trim();
-    const facultyCode = normalizeAcademicCode(
-      normalizedRow.facultyCode ?? normalizedRow.facultyId
-    );
-    const degreeCode = normalizeAcademicCode(
-      normalizedRow.degreeCode ?? normalizedRow.degreeId
-    );
-
-    map.set(intakeId, {
-      intakeId,
-      intakeName,
-      facultyCode,
-      degreeCode,
-    });
-  });
-
-  return map;
-}
-
-function buildStoreDependencies(offerings: ModuleOfferingRecord[]): ModuleDependencyItem[] {
-  return offerings.map((offering) => {
-    const intakeLookup = toIntakeLookupFromStore(offering.intakeId);
-
-    return toDependencyItem({
-      offeringId: offering.id,
-      intakeId: offering.intakeId,
-      intakeName: intakeLookup?.intakeName ?? "",
-      facultyCode: intakeLookup?.facultyCode ?? "",
-      degreeCode: intakeLookup?.degreeCode ?? "",
-      termCode: offering.termCode,
-      syllabusVersion: offering.syllabusVersion,
-      assignedLecturerIds:
-        Array.isArray(offering.assignedLecturerIds) &&
-        offering.assignedLecturerIds.length > 0
-          ? offering.assignedLecturerIds
-          : offering.assignedLecturers,
-      updatedAt: offering.updatedAt,
-    });
-  });
-}
-
-async function buildMongooseDependencies(
-  moduleId: string
-): Promise<ModuleDependencyItem[]> {
-  const rows = (await ModuleOfferingModel.find({
-    moduleId,
-  })
-    .sort({ updatedAt: -1 })
-    .lean()
-    .exec()
-    .catch(() => [])) as unknown[];
-
-  const offerings = normalizeDbOfferings(rows);
-  if (offerings.length === 0) {
-    return [];
   }
 
-  const intakeIds = Array.from(new Set(offerings.map((offering) => offering.intakeId)));
-  const intakeLookupMap = await loadIntakesFromMongoose(intakeIds);
+  const code = normalizeModuleCode(moduleParam);
+  if (!code) {
+    return null;
+  }
 
-  return offerings.map((offering) => {
-    const storeIntake = toIntakeLookupFromStore(offering.intakeId);
-    const dbIntake = intakeLookupMap.get(offering.intakeId) ?? null;
-    const intakeLookup = storeIntake ?? dbIntake;
+  return ModuleModel.findOne({ code }).lean().exec().catch(() => null);
+}
 
-    return toDependencyItem({
-      offeringId: offering.offeringId,
-      intakeId: offering.intakeId,
-      intakeName: intakeLookup?.intakeName ?? "",
-      facultyCode: intakeLookup?.facultyCode ?? "",
-      degreeCode: intakeLookup?.degreeCode ?? "",
-      termCode: offering.termCode,
-      syllabusVersion: offering.syllabusVersion,
-      assignedLecturerIds: offering.assignedLecturerIds,
-      updatedAt: offering.updatedAt,
-    });
-  });
+function lecturerCountFromOffering(row: Record<string, unknown>) {
+  if (Array.isArray(row.assignedLecturerIds)) {
+    return row.assignedLecturerIds
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean).length;
+  }
+
+  if (Array.isArray(row.assignedLecturers)) {
+    return row.assignedLecturers
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          return "";
+        }
+        const one = item as Record<string, unknown>;
+        return String(one.lecturerId ?? one.id ?? one._id ?? "").trim();
+      })
+      .filter(Boolean).length;
+  }
+
+  return 0;
 }
 
 export async function GET(
@@ -282,21 +122,80 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const moduleId = String(params.id ?? "").trim();
-  if (!moduleId) {
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
+
+  const moduleParam = String(params.id ?? "").trim();
+  if (!moduleParam) {
     return NextResponse.json({ message: "Module id is required" }, { status: 400 });
   }
 
-  const mongooseDependencies = mongooseConnection
-    ? await buildMongooseDependencies(moduleId)
-    : [];
-  const items =
-    mongooseDependencies.length > 0
-      ? mongooseDependencies
-      : buildStoreDependencies(listModuleOfferingsByModuleId(moduleId));
+  const moduleLookup = toModuleLookup(await findModuleDocument(moduleParam));
+  if (!moduleLookup) {
+    return NextResponse.json({ message: "Module not found" }, { status: 404 });
+  }
+
+  const offeringRows = (await ModuleOfferingModel.find({
+    $or: [{ moduleId: moduleLookup.id }, { moduleCode: moduleLookup.code }],
+  })
+    .sort({ updatedAt: -1 })
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
+
+  const offerings = offeringRows
+    .map((row) => asObject(row))
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+
+  const facultyCodes = Array.from(
+    new Set(
+      offerings
+        .map((row) => normalizeAcademicCode(row.facultyCode ?? row.facultyId))
+        .filter(Boolean)
+    )
+  );
+
+  const facultyRows = (await FacultyModel.find(
+    { code: { $in: facultyCodes }, isDeleted: { $ne: true } },
+    { code: 1, name: 1 }
+  )
+    .lean()
+    .exec()
+    .catch(() => [])) as Array<{ code?: string; name?: string }>;
+  const facultyNameByCode = new Map(
+    facultyRows
+      .map((row) => [normalizeAcademicCode(row.code), String(row.name ?? "").trim()] as const)
+      .filter(([code]) => Boolean(code))
+  );
+
+  const items: ModuleDependencyItem[] = offerings.map((row) => {
+    const offeringId = String(row._id ?? row.id ?? "").trim();
+    const facultyCode = normalizeAcademicCode(row.facultyCode ?? row.facultyId);
+    const degreeCode = normalizeAcademicCode(row.degreeCode ?? row.degreeProgramId);
+    const intakeId = String(row.intakeId ?? "").trim();
+    const intakeName = String(row.intakeName ?? "").trim() || intakeId;
+
+    return {
+      offeringId,
+      facultyCode,
+      facultyName: facultyNameByCode.get(facultyCode) ?? "",
+      degreeId: degreeCode,
+      degreeCode,
+      intakeId,
+      intakeName,
+      termCode: String(row.termCode ?? "").trim(),
+      syllabusVersion: String(row.syllabusVersion ?? "NEW").trim() || "NEW",
+      lecturerCount: lecturerCountFromOffering(row),
+      updatedAt: toIsoDate(row.updatedAt) || new Date().toISOString(),
+    };
+  });
 
   return NextResponse.json({
-    moduleId,
+    moduleId: moduleLookup.id,
     totalOfferings: items.length,
     items,
   });

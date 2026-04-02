@@ -66,6 +66,11 @@ interface IntakeOption {
   currentTerm: string;
 }
 
+interface SubgroupOption {
+  code: string;
+  count: number;
+}
+
 interface EnrollmentFormState {
   facultyId: string;
   degreeProgramId: string;
@@ -279,6 +284,36 @@ function parseIntakes(payload: unknown): IntakeOption[] {
     .filter((row): row is IntakeOption => Boolean(row));
 }
 
+function parseSubgroups(payload: unknown): SubgroupOption[] {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+  const grouped = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const item = asObject(row);
+    if (!item) {
+      return;
+    }
+
+    const code = collapseSpaces(item.code);
+    if (!code) {
+      return;
+    }
+
+    const count = Math.max(0, Number(item.count) || 0);
+    grouped.set(code, (grouped.get(code) ?? 0) + count);
+  });
+
+  return Array.from(grouped.entries())
+    .sort((left, right) =>
+      left[0].localeCompare(right[0], undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    )
+    .map(([code, count]) => ({ code, count }));
+}
+
 export default function StudentProfilePage() {
   const params = useParams<{ id: string }>();
   const studentRecordId = String(params?.id ?? "").trim();
@@ -295,12 +330,14 @@ export default function StudentProfilePage() {
   const [faculties, setFaculties] = useState<FacultyOption[]>([]);
   const [degrees, setDegrees] = useState<DegreeOption[]>([]);
   const [intakes, setIntakes] = useState<IntakeOption[]>([]);
+  const [subgroupOptions, setSubgroupOptions] = useState<SubgroupOption[]>([]);
 
   const [form, setForm] = useState<EnrollmentFormState>(emptyEnrollmentForm());
   const [selectedIntakeTerm, setSelectedIntakeTerm] = useState("");
   const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
   const [isLoadingTerm, setIsLoadingTerm] = useState(false);
+  const [isLoadingSubgroups, setIsLoadingSubgroups] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -323,6 +360,8 @@ export default function StudentProfilePage() {
   const [selectedEditIntakeTerm, setSelectedEditIntakeTerm] = useState("");
   const [isLoadingEditIntakes, setIsLoadingEditIntakes] = useState(false);
   const [isLoadingEditTerm, setIsLoadingEditTerm] = useState(false);
+  const [editSubgroupOptions, setEditSubgroupOptions] = useState<SubgroupOption[]>([]);
+  const [isLoadingEditSubgroups, setIsLoadingEditSubgroups] = useState(false);
   const [isUpdatingEnrollment, setIsUpdatingEnrollment] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<EnrollmentRecord | null>(null);
@@ -330,6 +369,8 @@ export default function StudentProfilePage() {
 
   const termRequestIdRef = useRef(0);
   const editTermRequestIdRef = useRef(0);
+  const subgroupRequestIdRef = useRef(0);
+  const editSubgroupRequestIdRef = useRef(0);
 
   const loadStudent = useCallback(async () => {
     if (!studentRecordId) {
@@ -489,6 +530,79 @@ export default function StudentProfilePage() {
     }
   }, [intakes]);
 
+  const loadSubgroups = useCallback(
+    async (input: {
+      intakeId: string;
+      facultyId?: string;
+      degreeProgramId?: string;
+      stream?: StudentStream;
+    }) => {
+      const intakeId = String(input.intakeId ?? "").trim();
+      if (!intakeId) {
+        setSubgroupOptions([]);
+        return;
+      }
+
+      const requestId = subgroupRequestIdRef.current + 1;
+      subgroupRequestIdRef.current = requestId;
+      setIsLoadingSubgroups(true);
+
+      try {
+        const params = new URLSearchParams();
+        const facultyId = normalizeAcademicCode(input.facultyId);
+        const degreeProgramId = normalizeAcademicCode(input.degreeProgramId);
+        if (facultyId) {
+          params.set("facultyId", facultyId);
+        }
+        if (degreeProgramId) {
+          params.set("degreeProgramId", degreeProgramId);
+        }
+        if (input.stream === "WEEKDAY" || input.stream === "WEEKEND") {
+          params.set("stream", input.stream);
+        }
+        params.set("status", "ACTIVE");
+
+        const response = await fetch(
+          `/api/intakes/${encodeURIComponent(intakeId)}/subgroups?${params.toString()}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson<unknown>(response);
+        if (subgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const nextOptions = parseSubgroups(payload);
+        setSubgroupOptions(nextOptions);
+        setForm((previous) => {
+          if (previous.intakeId !== intakeId) {
+            return previous;
+          }
+
+          const subgroup = collapseSpaces(previous.subgroup);
+          if (!subgroup || nextOptions.some((item) => item.code === subgroup)) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            subgroup: "",
+          };
+        });
+      } catch {
+        if (subgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSubgroupOptions([]);
+      } finally {
+        if (subgroupRequestIdRef.current === requestId) {
+          setIsLoadingSubgroups(false);
+        }
+      }
+    },
+    []
+  );
+
   const loadEditIntakes = useCallback(
     async (
       facultyId: string,
@@ -595,6 +709,78 @@ export default function StudentProfilePage() {
     }
   }, [editIntakeOptions]);
 
+  const loadEditSubgroups = useCallback(
+    async (input: {
+      intakeId: string;
+      facultyId?: string;
+      degreeProgramId?: string;
+      stream?: StudentStream;
+    }) => {
+      const intakeId = String(input.intakeId ?? "").trim();
+      if (!intakeId) {
+        setEditSubgroupOptions([]);
+        return;
+      }
+
+      const requestId = editSubgroupRequestIdRef.current + 1;
+      editSubgroupRequestIdRef.current = requestId;
+      setIsLoadingEditSubgroups(true);
+
+      try {
+        const params = new URLSearchParams();
+        const facultyId = normalizeAcademicCode(input.facultyId);
+        const degreeProgramId = normalizeAcademicCode(input.degreeProgramId);
+        if (facultyId) {
+          params.set("facultyId", facultyId);
+        }
+        if (degreeProgramId) {
+          params.set("degreeProgramId", degreeProgramId);
+        }
+        if (input.stream === "WEEKDAY" || input.stream === "WEEKEND") {
+          params.set("stream", input.stream);
+        }
+
+        const response = await fetch(
+          `/api/intakes/${encodeURIComponent(intakeId)}/subgroups?${params.toString()}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson<unknown>(response);
+        if (editSubgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const nextOptions = parseSubgroups(payload);
+        setEditSubgroupOptions(nextOptions);
+        setEditForm((previous) => {
+          if (previous.intakeId !== intakeId) {
+            return previous;
+          }
+
+          const subgroup = collapseSpaces(previous.subgroup);
+          if (!subgroup || nextOptions.some((item) => item.code === subgroup)) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            subgroup: "",
+          };
+        });
+      } catch {
+        if (editSubgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setEditSubgroupOptions([]);
+      } finally {
+        if (editSubgroupRequestIdRef.current === requestId) {
+          setIsLoadingEditSubgroups(false);
+        }
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     setActiveWindow("Profile");
     void loadStudent();
@@ -618,6 +804,48 @@ export default function StudentProfilePage() {
     };
   }, [deleteTarget, editTarget, isModalOpen]);
 
+  useEffect(() => {
+    if (!isModalOpen || !form.intakeId) {
+      setSubgroupOptions([]);
+      return;
+    }
+
+    void loadSubgroups({
+      intakeId: form.intakeId,
+      facultyId: form.facultyId,
+      degreeProgramId: form.degreeProgramId,
+      stream: form.stream,
+    });
+  }, [
+    form.degreeProgramId,
+    form.facultyId,
+    form.intakeId,
+    form.stream,
+    isModalOpen,
+    loadSubgroups,
+  ]);
+
+  useEffect(() => {
+    if (!editTarget || !editForm.intakeId) {
+      setEditSubgroupOptions([]);
+      return;
+    }
+
+    void loadEditSubgroups({
+      intakeId: editForm.intakeId,
+      facultyId: editForm.facultyId,
+      degreeProgramId: editForm.degreeProgramId,
+      stream: editForm.stream,
+    });
+  }, [
+    editForm.degreeProgramId,
+    editForm.facultyId,
+    editForm.intakeId,
+    editForm.stream,
+    editTarget,
+    loadEditSubgroups,
+  ]);
+
   const selectedFacultyDegrees = useMemo(
     () => degrees.filter((item) => !form.facultyId || item.facultyCode === form.facultyId),
     [degrees, form.facultyId]
@@ -627,6 +855,8 @@ export default function StudentProfilePage() {
     setForm(emptyEnrollmentForm());
     setDegrees([]);
     setIntakes([]);
+    setSubgroupOptions([]);
+    setIsLoadingSubgroups(false);
     setSelectedIntakeTerm("");
     setFormError("");
     setIsModalOpen(true);
@@ -652,6 +882,8 @@ export default function StudentProfilePage() {
     });
     setEditFormError("");
     setSelectedEditIntakeTerm(enrollment.currentTerm);
+    setEditSubgroupOptions([]);
+    setIsLoadingEditSubgroups(false);
     void loadEditIntakes(enrollment.facultyId, enrollment.degreeProgramId, enrollment);
     void loadEditIntakeTerm(enrollment.intakeId);
   };
@@ -675,6 +907,8 @@ export default function StudentProfilePage() {
     setEditFormError("");
     setSelectedEditIntakeTerm("");
     setEditIntakeOptions([]);
+    setEditSubgroupOptions([]);
+    setIsLoadingEditSubgroups(false);
   };
 
   const saveEnrollment = async () => {
@@ -684,6 +918,11 @@ export default function StudentProfilePage() {
 
     if (!form.facultyId || !form.degreeProgramId || !form.intakeId || !form.stream) {
       setFormError("Faculty, degree, intake, and stream are required");
+      return;
+    }
+    const subgroup = collapseSpaces(form.subgroup);
+    if (subgroup && !subgroupOptions.some((item) => item.code === subgroup)) {
+      setFormError("Select subgroup from the list");
       return;
     }
 
@@ -731,6 +970,11 @@ export default function StudentProfilePage() {
 
     if (!editForm.intakeId || !editForm.stream) {
       setEditFormError("Intake and stream are required");
+      return;
+    }
+    const subgroup = collapseSpaces(editForm.subgroup);
+    if (subgroup && !editSubgroupOptions.some((item) => item.code === subgroup)) {
+      setEditFormError("Select subgroup from the list");
       return;
     }
 
@@ -995,9 +1239,12 @@ export default function StudentProfilePage() {
                         facultyId,
                         degreeProgramId: "",
                         intakeId: "",
+                        subgroup: "",
                       }));
                       setSelectedIntakeTerm("");
                       setIntakes([]);
+                      setSubgroupOptions([]);
+                      setIsLoadingSubgroups(false);
                       void loadDegrees(facultyId);
                     }}
                     value={form.facultyId}
@@ -1018,8 +1265,15 @@ export default function StudentProfilePage() {
                     disabled={isSaving || !form.facultyId || isLoadingDegrees}
                     onChange={(event) => {
                       const degreeProgramId = normalizeAcademicCode(event.target.value);
-                      setForm((previous) => ({ ...previous, degreeProgramId, intakeId: "" }));
+                      setForm((previous) => ({
+                        ...previous,
+                        degreeProgramId,
+                        intakeId: "",
+                        subgroup: "",
+                      }));
                       setSelectedIntakeTerm("");
+                      setSubgroupOptions([]);
+                      setIsLoadingSubgroups(false);
                       void loadIntakes(form.facultyId, degreeProgramId);
                     }}
                     value={form.degreeProgramId}
@@ -1040,7 +1294,12 @@ export default function StudentProfilePage() {
                     disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
                     onChange={(event) => {
                       const intakeId = String(event.target.value ?? "").trim();
-                      setForm((previous) => ({ ...previous, intakeId }));
+                      setForm((previous) => ({
+                        ...previous,
+                        intakeId,
+                        subgroup: "",
+                      }));
+                      setSubgroupOptions([]);
                       void loadIntakeTerm(intakeId);
                     }}
                     value={form.intakeId}
@@ -1072,6 +1331,7 @@ export default function StudentProfilePage() {
                       setForm((previous) => ({
                         ...previous,
                         stream: sanitizeStudentStream(event.target.value),
+                        subgroup: "",
                       }))
                     }
                     value={form.stream}
@@ -1083,15 +1343,37 @@ export default function StudentProfilePage() {
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-heading">Subgroup</label>
-                  <Input
+                  <Select
                     className="h-12"
-                    disabled={isSaving}
+                    disabled={isSaving || !form.intakeId}
                     onChange={(event) =>
-                      setForm((previous) => ({ ...previous, subgroup: event.target.value }))
+                      setForm((previous) => ({
+                        ...previous,
+                        subgroup: String(event.target.value ?? "").trim(),
+                      }))
                     }
-                    placeholder="Optional"
-                    value={form.subgroup}
-                  />
+                    value={collapseSpaces(form.subgroup)}
+                  >
+                    <option value="">
+                      {isLoadingSubgroups
+                        ? "Loading..."
+                        : subgroupOptions.length > 0
+                          ? "No Subgroup"
+                          : "No Subgroups Available"}
+                    </option>
+                    {subgroupOptions.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.code} ({option.count})
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="mt-1 text-xs text-text/60">
+                    {form.intakeId
+                      ? subgroupOptions.length > 0
+                        ? "Assign subgroup using this list only."
+                        : "No subgroups found for selected intake + stream."
+                      : "Select intake first to load subgroup options."}
+                  </p>
                 </div>
 
                 <div>
@@ -1151,7 +1433,9 @@ export default function StudentProfilePage() {
         formError={editFormError}
         intakeOptions={editIntakeOptions}
         loadingIntakes={isLoadingEditIntakes}
+        loadingSubgroups={isLoadingEditSubgroups}
         loadingTerm={isLoadingEditTerm}
+        subgroupOptions={editSubgroupOptions}
         onChange={(patch) =>
           setEditForm((previous) => ({
             ...previous,

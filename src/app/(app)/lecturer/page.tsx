@@ -4,26 +4,36 @@ import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/ToastProvider";
-import { listLecturerConsultationBookings, type ConsultationBookingApiRecord } from "@/lib/consultation-client";
+import {
+  listConsultationNotifications,
+  listLecturerConsultationBookings,
+  type ConsultationBookingApiRecord,
+  type ConsultationNotificationApiRecord,
+} from "@/lib/consultation-client";
 import {
   getConsultationBookingBadgeVariant,
   getConsultationBookingStatusLabel,
   isActiveConsultationBookingStatus,
 } from "@/models/consultation-booking";
-import { lecturerPosts, notificationsByRole } from "@/models/mockData";
 
 export default function LecturerDashboardPage() {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<ConsultationBookingApiRecord[]>([]);
+  const [notifications, setNotifications] = useState<ConsultationNotificationApiRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        const payload = await listLecturerConsultationBookings();
+        const [bookingPayload, notificationPayload] = await Promise.all([
+          listLecturerConsultationBookings(),
+          listConsultationNotifications(),
+        ]);
+
         if (!cancelled) {
-          setBookings(payload.items);
+          setBookings(bookingPayload.items);
+          setNotifications(notificationPayload.items);
         }
       } catch (error) {
         if (!cancelled) {
@@ -45,7 +55,7 @@ export default function LecturerDashboardPage() {
     };
   }, [toast]);
 
-  const unread = notificationsByRole.LECTURER.filter((item) => item.unread).length;
+  const unread = notifications.filter((item) => item.unread).length;
   const todayKey = new Date().toISOString().slice(0, 10);
   const pendingRequests = bookings.filter((item) => item.status === "PENDING").length;
   const upcomingSessions = useMemo(
@@ -61,7 +71,7 @@ export default function LecturerDashboardPage() {
   );
   const todaysSessions = upcomingSessions.filter((item) => item.slot?.date === todayKey);
   const scheduleItems = todaysSessions.length > 0 ? todaysSessions : upcomingSessions.slice(0, 3);
-  const recentActivity = notificationsByRole.LECTURER.slice(0, 3);
+  const recentActivity = notifications.slice(0, 3);
 
   return (
     <div className="space-y-8">
@@ -89,11 +99,11 @@ export default function LecturerDashboardPage() {
         </Card>
         <Card accent>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-text/72">Open student posts</p>
-            <Badge variant="primary">Community</Badge>
+            <p className="text-sm text-text/72">Upcoming sessions</p>
+            <Badge variant="primary">Schedule</Badge>
           </div>
-          <p className="mt-2 text-3xl font-semibold text-heading">{lecturerPosts.length}</p>
-          <p className="mt-1 text-xs text-text/60">Awaiting replies</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{upcomingSessions.length}</p>
+          <p className="mt-1 text-xs text-text/60">Future consultation bookings</p>
         </Card>
       </section>
 
@@ -142,7 +152,9 @@ export default function LecturerDashboardPage() {
                   <div>
                     <p className="text-sm font-semibold text-heading">{item.title}</p>
                     <p className="text-xs text-text/70">{item.message}</p>
-                    <p className="mt-1 text-[11px] text-text/55">{item.time}</p>
+                    <p className="mt-1 text-[11px] text-text/55">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </p>
                   </div>
                   <Badge variant={item.unread ? "primary" : "neutral"}>
                     {item.unread ? "Unread" : "Seen"}

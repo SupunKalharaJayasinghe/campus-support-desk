@@ -711,6 +711,7 @@ export default function AdminModulesPage() {
       new Set(form.applicableDegrees.map((degree) => normalizeAcademicCode(degree)).filter(Boolean))
     );
 
+    // Module code format/duplicate checks are enforced only during create.
     if (modal.mode === "add") {
       if (!/^[A-Z0-9]{2,10}$/.test(normalizedCode)) {
         toast({
@@ -731,6 +732,7 @@ export default function AdminModulesPage() {
       }
     }
 
+    // Core module metadata must be valid before submit.
     if (!name) {
       toast({
         title: "Failed",
@@ -758,6 +760,7 @@ export default function AdminModulesPage() {
       return;
     }
 
+    // At least one term and degree must be selected for the module scope.
     if (applicableTerms.length === 0) {
       toast({
         title: "Failed",
@@ -776,6 +779,7 @@ export default function AdminModulesPage() {
       return;
     }
 
+    // Prevent cross-faculty mismatch: each degree must belong to selected faculty.
     const invalidDegree = applicableDegrees.find(
       (degreeCode) =>
         !degrees.some(

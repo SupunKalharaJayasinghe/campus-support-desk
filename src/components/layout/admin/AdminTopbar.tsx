@@ -84,7 +84,7 @@ function labelForSegment(segment: string) {
 
 export default function AdminTopbar() {
   const pathname = usePathname();
-  const { activeWindow, scope } = useAdminContext();
+  const { activeWindow } = useAdminContext();
   const role = readStoredRole() ?? "SUPER_ADMIN";
   const user = readStoredUser();
 
@@ -126,10 +126,9 @@ export default function AdminTopbar() {
   const submenuLabel = activeItem?.label ?? fallbackWindowLabel;
   const submenuHref = activeItem?.href ?? pathname;
   const showSubmenu = Boolean(activeItem && activeSection?.key !== "dashboard");
-  const scopeLabel = `${scope.faculty} > ${scope.degree} > ${scope.intake} > ${scope.term}`;
   const breadcrumbTitle = showSubmenu
-    ? `${sectionLabel} > ${submenuLabel} | ${scopeLabel} | ${currentWindowLabel}`
-    : `${sectionLabel} | ${scopeLabel} | ${currentWindowLabel}`;
+    ? `${sectionLabel} > ${submenuLabel} | ${currentWindowLabel}`
+    : `${sectionLabel} | ${currentWindowLabel}`;
   const userLabel = user?.name ?? "Lakvidu Upasara";
 
   return (
@@ -161,8 +160,6 @@ export default function AdminTopbar() {
             ) : null}
           </div>
 
-          <span className="shrink-0 text-text/35">|</span>
-          <span className="truncate text-text/75">{scopeLabel}</span>
           <span className="shrink-0 text-text/35">|</span>
           <span className="truncate font-medium text-heading">{currentWindowLabel}</span>
         </nav>

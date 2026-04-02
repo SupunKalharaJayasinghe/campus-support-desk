@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Save, Search, X } from "lucide-react";
+import { Loader2, Plus, Save, Search, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -70,11 +70,25 @@ export interface OfferingModuleOption {
   defaultSyllabusVersion: SyllabusVersion;
 }
 
+export interface ModuleAssignmentSnapshot {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+  facultyId: string;
+  degreeProgramId: string;
+  intakeName: string;
+  termCode: string;
+  lecturers: OfferingStaffItem[];
+  labAssistants: OfferingStaffItem[];
+  status: OfferingStatus;
+}
+
 interface EditOfferingModalProps {
   mode: "add" | "edit";
   open: boolean;
   saving: boolean;
   loadingModules: boolean;
+  loadingModuleAssignments: boolean;
   loadingLecturers: boolean;
   loadingLabAssistants: boolean;
   offering: EditOfferingContext | null;
@@ -84,6 +98,7 @@ interface EditOfferingModalProps {
   intakeOptions: OfferingIntakeOption[];
   moduleOptions: OfferingModuleOption[];
   termOptions: string[];
+  moduleAssignments: ModuleAssignmentSnapshot[];
   eligibleLecturers: OfferingStaffItem[];
   eligibleLabAssistants: OfferingStaffItem[];
   onFacultyChange: (value: string) => void;
@@ -95,6 +110,8 @@ interface EditOfferingModalProps {
   onStatusChange: (value: OfferingStatus) => void;
   onToggleLecturer: (lecturerId: string) => void;
   onToggleLabAssistant: (labAssistantId: string) => void;
+  onAddAllLecturers: () => void;
+  onAddAllLabAssistants: () => void;
   onClose: () => void;
   onSave: () => void;
 }
@@ -108,6 +125,8 @@ interface StaffSectionProps {
   eligibleItems: OfferingStaffItem[];
   lookup: Map<string, OfferingStaffItem>;
   onToggle: (id: string) => void;
+  onAddAll: () => void;
+  onOpenPicker?: () => void;
   saving: boolean;
   emptyMessage: string;
 }
@@ -137,6 +156,8 @@ function StaffSection({
   eligibleItems,
   lookup,
   onToggle,
+  onAddAll,
+  onOpenPicker,
   saving,
   emptyMessage,
 }: StaffSectionProps) {
@@ -149,7 +170,22 @@ function StaffSection({
     <section className="rounded-2xl border border-border bg-white p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-heading">{title}</p>
-        <Badge variant="primary">{assignedIds.length}</Badge>
+        <div className="flex items-center gap-2">
+          <button
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={saving || loading || eligibleItems.length === 0}
+            onClick={onOpenPicker ?? onAddAll}
+            title={
+              onOpenPicker
+                ? `Select ${title.toLowerCase()}`
+                : `Add eligible ${title.toLowerCase()}`
+            }
+            type="button"
+          >
+            <Plus size={13} />
+          </button>
+          <Badge variant="primary">{assignedIds.length}</Badge>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -189,7 +225,7 @@ function StaffSection({
       <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
         {loading ? (
           <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
-            Loading eligible {title.toLowerCase()}...
+            Loading {title.toLowerCase()}...
           </p>
         ) : filteredItems.length === 0 ? (
           <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
@@ -223,11 +259,172 @@ function StaffSection({
   );
 }
 
+interface StaffPickerModalProps {
+  open: boolean;
+  title: string;
+  loading: boolean;
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  assignedIds: string[];
+  items: OfferingStaffItem[];
+  lookup: Map<string, OfferingStaffItem>;
+  onToggle: (id: string) => void;
+  onClose: () => void;
+  saving: boolean;
+  emptyMessage: string;
+}
+
+function StaffPickerModal({
+  open,
+  title,
+  loading,
+  searchValue,
+  onSearchChange,
+  assignedIds,
+  items,
+  lookup,
+  onToggle,
+  onClose,
+  saving,
+  emptyMessage,
+}: StaffPickerModalProps) {
+  if (!open) {
+    return null;
+  }
+
+  const query = normalizeSearch(searchValue);
+  const filteredItems = items.filter((item) => staffMatchesSearch(item, query));
+
+  return (
+    <div
+      className="fixed inset-0 z-[99] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[2px]"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) {
+          onClose();
+        }
+      }}
+      role="presentation"
+    >
+      <div
+        aria-modal="true"
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)]"
+        role="dialog"
+      >
+        <div className="overflow-y-auto px-6 py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                ASSIGN
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-heading">
+                Select {title}
+              </p>
+            </div>
+            <button
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={saving}
+              onClick={onClose}
+              type="button"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-border bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-heading">Selected {title}</p>
+              <Badge variant="primary">{assignedIds.length}</Badge>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {assignedIds.length === 0 ? (
+                <p className="text-sm text-text/65">No {title.toLowerCase()} assigned.</p>
+              ) : (
+                assignedIds.map((id) => (
+                  <button
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading hover:bg-slate-200"
+                    key={id}
+                    onClick={() => onToggle(id)}
+                    type="button"
+                  >
+                    {lookup.get(id)?.fullName ?? id}
+                    <X size={12} />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="relative mt-3">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/55"
+                size={14}
+              />
+              <Input
+                className="h-10 pl-8"
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder={`Search ${title.toLowerCase()}`}
+                value={searchValue}
+              />
+            </div>
+
+            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+              {loading ? (
+                <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
+                  Loading {title.toLowerCase()}...
+                </p>
+              ) : filteredItems.length === 0 ? (
+                <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">
+                  {emptyMessage}
+                </p>
+              ) : (
+                filteredItems.map((item) => (
+                  <label
+                    className="inline-flex w-full items-start gap-2 rounded-xl border border-border bg-tint px-2.5 py-2 text-sm text-heading"
+                    key={item.id}
+                  >
+                    <input
+                      checked={assignedIds.includes(item.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      disabled={saving}
+                      onChange={() => onToggle(item.id)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="font-semibold">{item.fullName}</span>
+                      <span className="block text-xs text-text/60">{item.email}</span>
+                      <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-text/58">
+                        {item.status || "ACTIVE"}
+                      </span>
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            <Button
+              className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+              disabled={saving}
+              onClick={onClose}
+              variant="secondary"
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EditOfferingModal({
   mode,
   open,
   saving,
   loadingModules,
+  loadingModuleAssignments,
   loadingLecturers,
   loadingLabAssistants,
   offering,
@@ -237,6 +434,7 @@ export default function EditOfferingModal({
   intakeOptions,
   moduleOptions,
   termOptions,
+  moduleAssignments,
   eligibleLecturers,
   eligibleLabAssistants,
   onFacultyChange,
@@ -248,11 +446,17 @@ export default function EditOfferingModal({
   onStatusChange,
   onToggleLecturer,
   onToggleLabAssistant,
+  onAddAllLecturers,
+  onAddAllLabAssistants,
   onClose,
   onSave,
 }: EditOfferingModalProps) {
   const [lecturerSearch, setLecturerSearch] = useState("");
   const [labAssistantSearch, setLabAssistantSearch] = useState("");
+  const [pickerKind, setPickerKind] = useState<"lecturers" | "labAssistants" | null>(
+    null
+  );
+  const [pickerSearch, setPickerSearch] = useState("");
 
   const lecturerLookup = useMemo(
     () => buildStaffLookup([...(offering?.lecturers ?? []), ...eligibleLecturers]),
@@ -265,8 +469,38 @@ export default function EditOfferingModal({
 
   const selectedFaculty = facultyOptions.find((item) => item.code === form.facultyId) ?? null;
   const selectedDegree = degreeOptions.find((item) => item.code === form.degreeProgramId) ?? null;
-  const selectedIntake = intakeOptions.find((item) => item.id === form.intakeId) ?? null;
   const selectedModule = moduleOptions.find((item) => item.id === form.moduleId) ?? null;
+  const contextLocked = mode === "edit";
+
+  const openStaffPicker = (kind: "lecturers" | "labAssistants") => {
+    setPickerKind(kind);
+    setPickerSearch("");
+  };
+  const closeStaffPicker = () => {
+    if (saving) {
+      return;
+    }
+    setPickerKind(null);
+    setPickerSearch("");
+  };
+
+  const pickerTitle = pickerKind === "labAssistants" ? "Lab Assistants" : "Lecturers";
+  const pickerItems =
+    pickerKind === "labAssistants" ? eligibleLabAssistants : eligibleLecturers;
+  const pickerAssignedIds =
+    pickerKind === "labAssistants"
+      ? form.assignedLabAssistantIds
+      : form.assignedLecturerIds;
+  const pickerLookup =
+    pickerKind === "labAssistants" ? labAssistantLookup : lecturerLookup;
+  const pickerLoading =
+    pickerKind === "labAssistants" ? loadingLabAssistants : loadingLecturers;
+  const pickerEmptyMessage =
+    pickerKind === "labAssistants"
+      ? "No eligible lab assistants found for this module"
+      : "No lecturers found.";
+  const togglePickerItem =
+    pickerKind === "labAssistants" ? onToggleLabAssistant : onToggleLecturer;
 
   if (!open) {
     return null;
@@ -316,7 +550,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving}
+                  disabled={saving || contextLocked}
                   onChange={(event) => onFacultyChange(event.target.value)}
                   value={form.facultyId}
                 >
@@ -335,7 +569,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.facultyId}
+                  disabled={saving || contextLocked || !form.facultyId}
                   onChange={(event) => onDegreeChange(event.target.value)}
                   value={form.degreeProgramId}
                 >
@@ -354,7 +588,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.degreeProgramId}
+                  disabled={saving || contextLocked || !form.degreeProgramId}
                   onChange={(event) => onIntakeChange(event.target.value)}
                   value={form.intakeId}
                 >
@@ -373,7 +607,7 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving}
+                  disabled={saving || contextLocked}
                   onChange={(event) => onTermChange(event.target.value)}
                   value={form.termCode}
                 >
@@ -391,7 +625,13 @@ export default function EditOfferingModal({
                 </label>
                 <Select
                   className="h-11"
-                  disabled={saving || !form.facultyId || !form.degreeProgramId || !form.termCode}
+                  disabled={
+                    saving ||
+                    contextLocked ||
+                    !form.facultyId ||
+                    !form.degreeProgramId ||
+                    !form.termCode
+                  }
                   onChange={(event) => onModuleChange(event.target.value)}
                   value={form.moduleId}
                 >
@@ -409,12 +649,6 @@ export default function EditOfferingModal({
             </div>
 
             <div className="mt-4 rounded-2xl border border-border bg-tint/60 p-3 text-sm text-heading">
-              <p>
-                Intake: <span className="font-semibold">{selectedIntake?.name || "—"}</span>
-              </p>
-              <p className="mt-1">
-                Semester: <span className="font-semibold">{form.termCode || "—"}</span>
-              </p>
               <p className="mt-1">
                 Faculty: <span className="font-semibold">{selectedFaculty?.code || form.facultyId || "—"}</span>
               </p>
@@ -424,7 +658,100 @@ export default function EditOfferingModal({
               <p className="mt-1">
                 Module: <span className="font-semibold">{selectedModule ? `${selectedModule.code} - ${selectedModule.name}` : "—"}</span>
               </p>
+              <p className="mt-2 text-xs text-text/65">
+                Intake and semester-wise assignments for this module are listed below.
+              </p>
+              {contextLocked ? (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Context fields are locked in edit mode. Update module applicability from Modules page.
+                </p>
+              ) : null}
             </div>
+
+            {form.moduleId ? (
+              <div className="mt-4 rounded-2xl border border-border bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-heading">
+                    Existing Assignments For Selected Module
+                  </p>
+                  <Badge variant="primary">{moduleAssignments.length}</Badge>
+                </div>
+                {loadingModuleAssignments ? (
+                  <p className="mt-2 text-sm text-text/65">Loading module assignment snapshot...</p>
+                ) : moduleAssignments.length === 0 ? (
+                  <p className="mt-2 text-sm text-text/65">
+                    No module offerings found for this module yet.
+                  </p>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[860px] text-left text-xs">
+                      <thead className="border-b border-border bg-tint">
+                        <tr className="font-semibold uppercase tracking-[0.08em] text-text/60">
+                          <th className="px-2 py-2">Faculty</th>
+                          <th className="px-2 py-2">Degree</th>
+                          <th className="px-2 py-2">Intake</th>
+                          <th className="px-2 py-2">Term</th>
+                          <th className="px-2 py-2">Lecturers</th>
+                          <th className="px-2 py-2">Lab Assistants</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {moduleAssignments.map((item) => {
+                          const lecturerCount = item.lecturers.length;
+                          const labCount = item.labAssistants.length;
+                          return (
+                            <tr className="border-b border-border/70" key={item.id}>
+                              <td className="px-2 py-2 text-text/75">{item.facultyId || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.degreeProgramId || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.intakeName || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">{item.termCode || "—"}</td>
+                              <td className="px-2 py-2 text-text/75">
+                                {lecturerCount === 0 ? (
+                                  "—"
+                                ) : (
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.lecturers.map((row) => (
+                                      <span
+                                        className="rounded-full border border-border bg-tint px-2 py-0.5 text-[11px] font-medium text-heading"
+                                        key={row.id}
+                                      >
+                                        {row.fullName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-text/55">
+                                  {lecturerCount} assigned
+                                </p>
+                              </td>
+                              <td className="px-2 py-2 text-text/75">
+                                {labCount === 0 ? (
+                                  "—"
+                                ) : (
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.labAssistants.map((row) => (
+                                      <span
+                                        className="rounded-full border border-border bg-tint px-2 py-0.5 text-[11px] font-medium text-heading"
+                                        key={row.id}
+                                      >
+                                        {row.fullName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-text/55">
+                                  {labCount} assigned
+                                </p>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </section>
 
           <section className="mt-5 rounded-2xl border border-border bg-white p-4">
@@ -470,11 +797,13 @@ export default function EditOfferingModal({
             <StaffSection
               assignedIds={form.assignedLecturerIds}
               eligibleItems={eligibleLecturers}
-              emptyMessage="No eligible lecturers found for this module"
+              emptyMessage="No lecturers found."
               loading={loadingLecturers}
               lookup={lecturerLookup}
               onSearchChange={setLecturerSearch}
               onToggle={onToggleLecturer}
+              onAddAll={onAddAllLecturers}
+              onOpenPicker={() => openStaffPicker("lecturers")}
               saving={saving}
               searchValue={lecturerSearch}
               title="Lecturers"
@@ -488,6 +817,8 @@ export default function EditOfferingModal({
               lookup={labAssistantLookup}
               onSearchChange={setLabAssistantSearch}
               onToggle={onToggleLabAssistant}
+              onAddAll={onAddAllLabAssistants}
+              onOpenPicker={() => openStaffPicker("labAssistants")}
               saving={saving}
               searchValue={labAssistantSearch}
               title="Lab Assistants"
@@ -515,6 +846,21 @@ export default function EditOfferingModal({
             </Button>
           </div>
         </div>
+
+        <StaffPickerModal
+          assignedIds={pickerAssignedIds}
+          emptyMessage={pickerEmptyMessage}
+          items={pickerItems}
+          loading={pickerLoading}
+          lookup={pickerLookup}
+          onClose={closeStaffPicker}
+          onSearchChange={setPickerSearch}
+          onToggle={togglePickerItem}
+          open={Boolean(pickerKind)}
+          saving={saving}
+          searchValue={pickerSearch}
+          title={pickerTitle}
+        />
       </div>
     </div>
   );

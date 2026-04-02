@@ -16,6 +16,7 @@ interface LecturerRecord {
   id: string;
   fullName: string;
   email: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string;
   status: LecturerStatus;
@@ -68,6 +69,14 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
 }
 
 function normalizeAcademicCode(value: unknown) {
@@ -139,6 +148,7 @@ function parseLecturer(payload: unknown): LecturerRecord | null {
     id,
     fullName,
     email,
+    optionalEmail: sanitizeOptionalEmail(row.optionalEmail),
     phone: collapseSpaces(row.phone),
     nicStaffId: String(row.nicStaffId ?? "").trim(),
     status: sanitizeStatus(row.status),
@@ -371,7 +381,14 @@ export default function LecturerProfilePage() {
     [degrees]
   );
   const moduleMap = useMemo(
-    () => new Map(modules.map((item) => [item.id, `${item.code} - ${item.name}`])),
+    () => {
+      const map = new Map<string, string>();
+      modules.forEach((item) => {
+        map.set(item.id, `${item.code} - ${item.name}`);
+        map.set(item.code, `${item.code} - ${item.name}`);
+      });
+      return map;
+    },
     [modules]
   );
 
@@ -424,6 +441,11 @@ export default function LecturerProfilePage() {
                 </div>
               </div>
             </div>
+            {lecturer.optionalEmail ? (
+              <p className="mt-2 text-sm text-text/75">
+                Optional Email: {lecturer.optionalEmail}
+              </p>
+            ) : null}
             <p className="mt-4 text-xs text-text/60">Updated {formatDate(lecturer.updatedAt)}</p>
           </Card>
 
@@ -431,7 +453,7 @@ export default function LecturerProfilePage() {
             <div className="border-b border-border pb-4">
               <p className="text-lg font-semibold text-heading">Teaching Eligibility</p>
               <p className="text-sm text-text/65">
-                Faculties, degrees, and modules this lecturer is eligible to teach.
+                Faculties, degrees, and modules this lecturer is eligible to teach. This is not the assignment source.
               </p>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -472,7 +494,7 @@ export default function LecturerProfilePage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Modules</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Eligible Modules</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {lecturer.moduleIds.length === 0 ? (
                     <p className="text-sm text-text/68">No modules selected.</p>

@@ -4,10 +4,8 @@ import "@/models/Student";
 import { connectMongoose } from "@/models/mongoose";
 import {
   DUPLICATE_ENROLLMENT_MESSAGE,
-  addEnrollmentToStudentInMemory,
   decorateEnrollmentRecord,
   isMongoDuplicateKeyError,
-  listStudentEnrollmentsInMemory,
   normalizeAcademicCode,
   sanitizeStudentStatus,
   sanitizeStudentStream,
@@ -15,6 +13,7 @@ import {
   validateStudentRelations,
   type EnrollmentPersistedRecord,
   type EnrollmentWriteInput,
+  type StudentStream,
 } from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
@@ -107,23 +106,46 @@ function toApiEnrollmentResponseItem(row: ReturnType<typeof decorateEnrollmentRe
   };
 }
 
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const exists = await EnrollmentModel.exists({
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    status: "ACTIVE",
+    subgroup,
+  }).catch(() => null);
+
+  return Boolean(exists);
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const studentRecordId = String(params.id ?? "").trim();
     if (!studentRecordId) {
       return NextResponse.json({ message: "Student id is required" }, { status: 400 });
-    }
-
-    if (!mongooseConnection) {
-      return NextResponse.json({
-        items: listStudentEnrollmentsInMemory(studentRecordId).map((item) =>
-          toApiEnrollmentResponseItem(item)
-        ),
-      });
     }
 
     const student = await StudentModel.findById(studentRecordId).exec();
@@ -162,6 +184,13 @@ export async function POST(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const studentRecordId = String(params.id ?? "").trim();
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
@@ -191,22 +220,19 @@ export async function POST(
       );
     }
 
-    if (!mongooseConnection) {
-      try {
-        const created = addEnrollmentToStudentInMemory(studentRecordId, enrollment);
-        return NextResponse.json({ enrollment: created }, { status: 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to create enrollment";
-        if (message === DUPLICATE_ENROLLMENT_MESSAGE) {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        if (message === "Student not found") {
-          return NextResponse.json({ message }, { status: 404 });
-        }
-
-        return NextResponse.json({ message }, { status: 400 });
-      }
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: enrollment.facultyId,
+        degreeProgramId: enrollment.degreeProgramId,
+        intakeId: enrollment.intakeId,
+        stream: enrollment.stream,
+        subgroup: enrollment.subgroup ?? null,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
+        { status: 400 }
+      );
     }
 
     const student = await StudentModel.findById(studentRecordId).exec();

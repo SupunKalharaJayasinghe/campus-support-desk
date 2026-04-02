@@ -3,9 +3,12 @@ import mongoose from "mongoose";
 
 const uri = process.env.MONGODB_URI?.trim();
 const dbName = process.env.MONGODB_DB?.trim() || undefined;
+const fullName = process.env.ADMIN_FULL_NAME?.trim() || "System Admin";
 const username = process.env.ADMIN_USERNAME?.trim() || "admin";
 const email = (process.env.ADMIN_EMAIL?.trim() || "admin@campus.local").toLowerCase();
 const password = process.env.ADMIN_PASSWORD?.trim() || "Admin@12345";
+const rawRole = String(process.env.ADMIN_ROLE ?? "ADMIN").trim().toUpperCase();
+const role = rawRole === "LOST_ITEM_ADMIN" ? "LOST_ITEM_ADMIN" : "ADMIN";
 
 if (!uri) {
   console.error("MONGODB_URI is not set. Add it to your environment before seeding.");
@@ -19,12 +22,13 @@ if (password.length < 8) {
 
 const UserSchema = new mongoose.Schema(
   {
+    fullName: { type: String, trim: true, default: "", maxlength: 160 },
     username: { type: String, required: true, trim: true, unique: true },
     email: { type: String, required: true, trim: true, lowercase: true, unique: true },
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
+      enum: ["ADMIN", "LOST_ITEM_ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },
@@ -65,7 +69,8 @@ async function seedAdmin() {
         $set: {
           username,
           email,
-          role: "ADMIN",
+          fullName,
+          role,
           passwordHash,
           status: "ACTIVE",
           mustChangePassword: false,
@@ -78,7 +83,8 @@ async function seedAdmin() {
     const createdUser = await UserModel.create({
       username,
       email,
-      role: "ADMIN",
+      fullName,
+      role,
       passwordHash,
       status: "ACTIVE",
       mustChangePassword: false,
@@ -87,8 +93,10 @@ async function seedAdmin() {
     console.log(`Created admin user: ${String(createdUser._id)}`);
   }
 
+  console.log(`Full Name: ${fullName}`);
   console.log(`Username: ${username}`);
   console.log(`Email: ${email}`);
+  console.log(`Role: ${role}`);
   console.log(`Password: ${password}`);
 }
 

@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
+import "@/models/DegreeProgram";
+import { DegreeProgramModel } from "@/models/DegreeProgram";
+import { syncAcademicReferenceCaches } from "@/models/academic-reference-cache";
+import { findFaculty } from "@/models/faculty-store";
+import { connectMongoose } from "@/models/mongoose";
 import {
-  createDegreeProgram,
-  isValidFacultyCode,
+  findDegreeProgram,
   listDegreePrograms,
   sanitizeCredits,
   sanitizeDegreeProgramCode,
   sanitizeDegreeProgramStatus,
   sanitizeDurationYears,
+  type DegreeProgramRecord,
   type DegreeProgramSort,
   type DegreeProgramStatus,
-  findDegreeProgram,
 } from "@/models/degree-program-store";
 
 function parsePageParam(value: string | null, fallback: number) {
@@ -61,6 +65,14 @@ function sanitizePositiveNumber(value: string | null) {
 }
 
 export async function GET(request: Request) {
+  const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") ?? "";
   const faculty = String(searchParams.get("faculty") ?? "")
@@ -102,6 +114,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const body = (await request.json()) as Partial<{
       code: string;
       name: string;
@@ -134,7 +154,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!facultyCode || !isValidFacultyCode(facultyCode)) {
+    if (!facultyCode || !findFaculty(facultyCode)) {
       return NextResponse.json(
         { message: "Select a valid faculty" },
         { status: 400 }
@@ -169,18 +189,42 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(
-      createDegreeProgram({
-        award,
+    try {
+      await DegreeProgramModel.create({
         code,
+        name,
+        facultyCode,
+        award,
         credits,
         durationYears,
-        facultyCode,
-        name,
         status,
-      }),
-      { status: 201 }
-    );
+        isDeleted: false,
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        Number((error as { code?: unknown }).code) === 11000
+      ) {
+        return NextResponse.json(
+          { message: "Program code already exists" },
+          { status: 409 }
+        );
+      }
+
+      throw error;
+    }
+
+    await syncAcademicReferenceCaches({ force: true }).catch(() => null);
+    const created = findDegreeProgram(code) as DegreeProgramRecord | null;
+    if (!created) {
+      return NextResponse.json(
+        { message: "Failed to create degree program." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(created, { status: 201 });
   } catch {
     return NextResponse.json(
       { message: "Failed to create degree program." },

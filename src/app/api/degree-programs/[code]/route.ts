@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
+import "@/models/DegreeProgram";
+import { DegreeProgramModel } from "@/models/DegreeProgram";
+import { syncAcademicReferenceCaches } from "@/models/academic-reference-cache";
+import { findFaculty } from "@/models/faculty-store";
+import { connectMongoose } from "@/models/mongoose";
 import {
-  deleteDegreeProgram,
-  isValidFacultyCode,
+  findDegreeProgram,
   sanitizeCredits,
   sanitizeDegreeProgramCode,
   sanitizeDegreeProgramStatus,
   sanitizeDurationYears,
   type DegreeProgramStatus,
-  updateDegreeProgram,
 } from "@/models/degree-program-store";
 
 export async function PUT(
@@ -15,6 +18,14 @@ export async function PUT(
   { params }: { params: { code: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const targetCode = sanitizeDegreeProgramCode(params.code);
     const body = (await request.json()) as Partial<{
       name: string;
@@ -46,7 +57,7 @@ export async function PUT(
       );
     }
 
-    if (!facultyCode || !isValidFacultyCode(facultyCode)) {
+    if (!facultyCode || !findFaculty(facultyCode)) {
       return NextResponse.json(
         { message: "Select a valid faculty" },
         { status: 400 }
@@ -74,23 +85,33 @@ export async function PUT(
       );
     }
 
-    const program = updateDegreeProgram(targetCode, {
-      award,
-      credits,
-      durationYears,
-      facultyCode,
-      name,
-      status,
-    });
+    const updated = await DegreeProgramModel.findOneAndUpdate(
+      { code: targetCode, isDeleted: { $ne: true } },
+      {
+        $set: {
+          name,
+          facultyCode,
+          award,
+          credits,
+          durationYears,
+          status,
+        },
+      },
+      { new: true }
+    )
+      .lean()
+      .exec()
+      .catch(() => null);
 
-    if (!program) {
+    if (!updated) {
       return NextResponse.json(
         { message: "Program not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(program);
+    await syncAcademicReferenceCaches({ force: true }).catch(() => null);
+    return NextResponse.json(findDegreeProgram(targetCode));
   } catch {
     return NextResponse.json(
       { message: "Failed to update degree program." },
@@ -104,8 +125,27 @@ export async function DELETE(
   { params }: { params: { code: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const targetCode = sanitizeDegreeProgramCode(params.code);
-    const deleted = deleteDegreeProgram(targetCode);
+    const deleted = await DegreeProgramModel.findOneAndUpdate(
+      { code: targetCode, isDeleted: { $ne: true } },
+      {
+        $set: {
+          isDeleted: true,
+        },
+      },
+      { new: true }
+    )
+      .lean()
+      .exec()
+      .catch(() => null);
 
     if (!deleted) {
       return NextResponse.json(
@@ -114,6 +154,7 @@ export async function DELETE(
       );
     }
 
+    await syncAcademicReferenceCaches({ force: true }).catch(() => null);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(

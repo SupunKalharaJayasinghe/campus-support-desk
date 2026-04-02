@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLecturerName,
   sanitizeLecturerNicStaffId,
+  sanitizeLecturerOptionalEmail,
   sanitizeLecturerPhone,
   sanitizeLecturerStatus,
   sanitizeModuleIdList,
@@ -23,9 +24,11 @@ import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/models/stude
 import { LecturerModel } from "@/models/Lecturer";
 import { UserModel } from "@/models/User";
 import { hashStaffPassword, resolveDefaultStaffPassword } from "@/models/staff-auth";
+import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lecturer-sync";
 
 interface LecturerWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -81,6 +84,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInpu
 
   return {
     fullName,
+    optionalEmail: sanitizeLecturerOptionalEmail(body.optionalEmail),
     phone: sanitizeLecturerPhone(body.phone),
     nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
     status: sanitizeLecturerStatus(body.status),
@@ -114,11 +118,14 @@ async function reserveUniqueLecturerEmailInDb(
       index === 1
         ? `${baseLocalPart}@${domain}`
         : `${baseLocalPart}${index}@${domain}`;
-    const query = excludeId
+    const lecturerQuery = excludeId
       ? { email: candidateEmail, _id: { $ne: excludeId } }
       : { email: candidateEmail };
-    const exists = await LecturerModel.exists(query).catch(() => null);
-    if (!exists) {
+    const lecturerExists = await LecturerModel.exists(lecturerQuery).catch(() => null);
+    const userExists = await UserModel.exists({
+      $or: [{ email: candidateEmail }, { username: candidateEmail }],
+    }).catch(() => null);
+    if (!lecturerExists && !userExists) {
       return candidateEmail;
     }
   }
@@ -135,19 +142,11 @@ export async function GET(request: Request) {
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
   const page = parsePageParam(searchParams.get("page"), 1);
 
-  if (!mongooseConnection) {
-    const allItems = listLecturersInMemory({ search, status, sort });
-    const total = allItems.length;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, pageCount);
-    const start = (safePage - 1) * pageSize;
-
-    return NextResponse.json({
-      items: allItems.slice(start, start + pageSize).map((item) => toApiLecturer(item)),
-      total,
-      page: safePage,
-      pageSize,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query: Record<string, unknown> = {};
@@ -161,6 +160,7 @@ export async function GET(request: Request) {
     query.$or = [
       { fullName: searchRegex },
       { email: searchRegex },
+      { optionalEmail: searchRegex },
       { phone: searchRegex },
       { nicStaffId: searchRegex },
     ];
@@ -235,23 +235,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!mongooseConnection) {
-      try {
-        const created = createLecturerInMemory({
-          ...input,
-          ...validated,
-        });
-
-        return NextResponse.json(toApiLecturer(created), { status: 201 });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to create lecturer";
-        if (message === "NIC/Staff ID already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const maxAttempts = 10;
@@ -261,6 +249,7 @@ export async function POST(request: Request) {
         const created = await LecturerModel.create({
           fullName: input.fullName,
           email: generatedEmail,
+          optionalEmail: input.optionalEmail,
           phone: input.phone,
           nicStaffId: input.nicStaffId,
           status: input.status,
@@ -305,6 +294,19 @@ export async function POST(request: Request) {
         if (!parsed) {
           throw new Error("Failed to map lecturer");
         }
+
+        await syncLecturerAssignmentsAcrossModuleOfferings(
+          {
+            lecturerId: parsed.id,
+            fullName: parsed.fullName,
+            email: parsed.email,
+            status: parsed.status,
+            facultyIds: parsed.facultyIds,
+            degreeProgramIds: parsed.degreeProgramIds,
+            moduleIds: parsed.moduleIds,
+          },
+          { mongooseConnection }
+        ).catch(() => null);
 
         return NextResponse.json(toApiLecturer(parsed), { status: 201 });
       } catch (error) {

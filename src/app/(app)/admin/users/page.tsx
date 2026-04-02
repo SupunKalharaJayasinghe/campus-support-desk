@@ -592,6 +592,7 @@ export default function AdminUsersPage() {
 
   const validateForm = () => {
     const nextErrors: Partial<Record<FormField, string>> = {};
+    // Base validation required for every user.
     if (!form.firstName.trim()) nextErrors.firstName = "Required";
     if (!form.lastName.trim()) nextErrors.lastName = "Required";
     if (!form.email.trim()) nextErrors.email = "Required";
@@ -599,6 +600,7 @@ export default function AdminUsersPage() {
     if (!form.role) nextErrors.role = "Required";
     if (!form.status) nextErrors.status = "Required";
 
+    // Student-specific validation.
     if (isStudentRole(form.role)) {
       if (!form.faculty) nextErrors.faculty = "Required";
       if (!form.degreeProgram) nextErrors.degreeProgram = "Required";
@@ -607,6 +609,7 @@ export default function AdminUsersPage() {
       if (!form.semester) nextErrors.semester = "Required";
     }
 
+    // Lecturer/Lab assistant validation.
     if (isTeachingRole(form.role)) {
       if (!form.faculty) nextErrors.faculty = "Required";
       if (!form.degreeProgram) nextErrors.degreeProgram = "Required";

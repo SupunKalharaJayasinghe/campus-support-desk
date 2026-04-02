@@ -1,15 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
-import { authHeaders, updateStoredUser } from "@/models/rbac";
-import { notificationsByRole, studentSummary } from "@/models/mockData";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
+import { listNotificationsForUser } from "@/models/notification-center";
+import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
+import type {
+  ConsultationBooking,
+  PostItem,
+  StudentProfile,
+} from "@/models/portal-types";
+import { authHeaders, readStoredUser, updateStoredUser } from "@/models/rbac";
+
+interface StudentSummary {
+  notifications: number;
+  bookings: number;
+  posts: number;
+  points: number;
+}
+
+interface StudentGamificationPayload {
+  profile?: StudentProfile;
+}
+
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
 
 export default function StudentDashboardPage() {
+  const user = useCallback(() => readStoredUser(), []);
   const [loading, setLoading] = useState(true);
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [summary, setSummary] = useState<StudentSummary>({
+    notifications: 0,
+    bookings: 0,
+    posts: 0,
+    points: 0,
+  });
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -18,10 +56,47 @@ export default function StudentDashboardPage() {
   const [securitySuccess, setSecuritySuccess] = useState("");
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
+  const loadAnnouncements = useCallback(async () => {
+    const currentUser = user();
+    const userId = String(currentUser?.id ?? "").trim();
+
+    const [rows, notifications, bookings, posts, gamification] = await Promise.all([
+      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
+      listNotificationsForUser(currentUser, "STUDENT").catch(() => []),
+      loadPortalData<ConsultationBooking[]>(PORTAL_DATA_KEYS.consultationBookings, []),
+      loadPortalData<PostItem[]>(PORTAL_DATA_KEYS.discussionPosts, []),
+      loadPortalData<StudentGamificationPayload>(
+        PORTAL_DATA_KEYS.studentGamification,
+        {}
+      ),
+    ]);
+
+    const bookingCount = userId
+      ? bookings.filter((item) => String(item.studentUserId ?? "").trim() === userId)
+          .length
+      : bookings.length;
+
+    const postCount = userId
+      ? posts.filter((item) => String(item.ownerId ?? "").trim() === userId).length
+      : posts.length;
+
+    setAnnouncements(rows);
+    setSummary({
+      notifications: notifications.length,
+      bookings: bookingCount,
+      posts: postCount,
+      points: Number(gamification.profile?.points ?? 0),
+    });
+  }, [user]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 500);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    void loadAnnouncements();
+  }, [loadAnnouncements]);
 
   useEffect(() => {
     if (!isSecurityModalOpen) {
@@ -49,6 +124,7 @@ export default function StudentDashboardPage() {
   };
 
   const validateSecurityForm = () => {
+    // Frontend validation: enforce mandatory fields before calling change-password API.
     if (!currentPassword) {
       return "Current password is required";
     }
@@ -142,31 +218,46 @@ export default function StudentDashboardPage() {
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <Card accent>
           <p className="text-sm text-text/72">Notifications</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.notifications}</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{summary.notifications}</p>
         </Card>
         <Card accent>
           <p className="text-sm text-text/72">Bookings</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.bookings}</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{summary.bookings}</p>
         </Card>
         <Card accent>
           <p className="text-sm text-text/72">Posts</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.posts}</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{summary.posts}</p>
         </Card>
         <Card accent>
           <p className="text-sm text-text/72">Points</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{studentSummary.points}</p>
+          <p className="mt-2 text-3xl font-semibold text-heading">{summary.points}</p>
         </Card>
       </section>
 
-      <Card title="Recent Alerts">
-        <ul className="space-y-3">
-          {notificationsByRole.STUDENT.slice(0, 3).map((item) => (
-            <li className="rounded-2xl bg-tint p-3.5" key={item.id}>
-              <p className="text-sm font-medium text-text">{item.title}</p>
-              <p className="mt-1 text-xs text-text/72">{item.time}</p>
-            </li>
-          ))}
-        </ul>
+      <Card title="Latest Announcements">
+        {announcements.length === 0 ? (
+          <p className="text-sm text-text/70">No announcements available yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {announcements.map((item) => (
+              <li className="rounded-2xl bg-tint p-3.5" key={item.id}>
+                <p className="text-sm font-medium text-text">{item.title}</p>
+                <p className="mt-1 text-xs text-text/72">{item.message}</p>
+                <p className="mt-2 text-[11px] text-text/65">
+                  {formatDateTime(item.createdAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-4">
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+            href="/announcements"
+          >
+            View All
+          </Link>
+        </div>
       </Card>
 
       <Card title="Security Settings">

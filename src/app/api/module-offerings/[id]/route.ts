@@ -5,6 +5,7 @@ import "@/models/Lecturer";
 import "@/models/ModuleOffering";
 import { connectMongoose } from "@/models/mongoose";
 import {
+  mergeSanitizedIdLists,
   normalizeDbOffering,
   resolveAssigneeMaps,
   resolveOfferingContext,
@@ -27,6 +28,7 @@ import {
 } from "@/models/module-offering-store";
 import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
+import { syncLecturerModuleLinksForOfferingMutation } from "@/models/module-offering-lecturer-module-sync";
 
 function isDuplicateMessage(error: unknown) {
   if (!(error instanceof Error)) {
@@ -120,10 +122,17 @@ export async function PUT(
         return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
       }
 
-      const existingLecturerIds = sanitizeIdList(
-        row.assignedLecturerIds ?? row.assignedLecturers
+      const existingLecturerIds = mergeSanitizedIdLists(
+        row.assignedLecturerIds,
+        row.assignedLecturers
       );
       const existingLabAssistantIds = sanitizeIdList(row.assignedLabAssistantIds);
+      const previousLecturerSyncState = {
+        offeringId,
+        moduleCode: String(row.moduleCode ?? row.moduleId ?? "").trim(),
+        moduleId: String(row.moduleId ?? "").trim(),
+        lecturerIds: existingLecturerIds,
+      };
 
       const context = resolveOfferingContext({
         facultyCode: body.facultyCode ?? row.facultyCode ?? row.facultyId,
@@ -147,7 +156,10 @@ export async function PUT(
           ? sanitizeOfferingStatus(row.status)
           : sanitizeOfferingStatus(body.status);
       const nextLecturerIds = hasLecturerPayload
-        ? sanitizeIdList(body.assignedLecturerIds ?? body.assignedLecturers)
+        ? mergeSanitizedIdLists(
+            body.assignedLecturerIds,
+            body.assignedLecturers
+          )
         : existingLecturerIds;
       const nextLabAssistantIds = hasLabPayload
         ? sanitizeIdList(body.assignedLabAssistantIds)
@@ -258,6 +270,17 @@ export async function PUT(
         );
       }
 
+      await syncLecturerModuleLinksForOfferingMutation({
+        previous: previousLecturerSyncState,
+        next: {
+          offeringId: normalized.id,
+          moduleCode: normalized.moduleCode,
+          moduleId: normalized.moduleId,
+          lecturerIds: normalized.assignedLecturerIds,
+        },
+        mongooseConnection,
+      }).catch(() => null);
+
       return NextResponse.json(toApiOfferingItem(normalized, assignees));
     }
 
@@ -265,6 +288,16 @@ export async function PUT(
     if (!existing) {
       return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
     }
+
+    const previousLecturerSyncState = {
+      offeringId: existing.id,
+      moduleCode: existing.moduleCode,
+      moduleId: existing.moduleId,
+      lecturerIds: mergeSanitizedIdLists(
+        existing.assignedLecturerIds,
+        existing.assignedLecturers
+      ),
+    };
 
     const context = resolveOfferingContext({
       facultyCode: body.facultyCode ?? existing.facultyCode ?? existing.facultyId,
@@ -288,8 +321,14 @@ export async function PUT(
         ? existing.status
         : sanitizeOfferingStatus(body.status);
     const nextLecturerIds = hasLecturerPayload
-      ? sanitizeIdList(body.assignedLecturerIds ?? body.assignedLecturers)
-      : sanitizeIdList(existing.assignedLecturerIds ?? existing.assignedLecturers);
+      ? mergeSanitizedIdLists(
+          body.assignedLecturerIds,
+          body.assignedLecturers
+        )
+      : mergeSanitizedIdLists(
+          existing.assignedLecturerIds,
+          existing.assignedLecturers
+        );
     const nextLabAssistantIds = hasLabPayload
       ? sanitizeIdList(body.assignedLabAssistantIds)
       : sanitizeIdList(existing.assignedLabAssistantIds);
@@ -347,6 +386,17 @@ export async function PUT(
       return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
     }
 
+    await syncLecturerModuleLinksForOfferingMutation({
+      previous: previousLecturerSyncState,
+      next: {
+        offeringId: updated.id,
+        moduleCode: updated.moduleCode,
+        moduleId: updated.moduleId,
+        lecturerIds: updated.assignedLecturerIds,
+      },
+      mongooseConnection: null,
+    }).catch(() => null);
+
     const assignees = await resolveAssigneeMaps(
       {
         lecturerIds: updated.assignedLecturerIds,
@@ -386,7 +436,9 @@ export async function DELETE(
 
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
     const dbOffering = (await ModuleOfferingModel.findById(offeringId)
-      .select("_id hasGrades hasAttendance hasContent")
+      .select(
+        "_id moduleCode moduleId assignedLecturerIds assignedLecturers hasGrades hasAttendance hasContent"
+      )
       .lean()
       .exec()
       .catch(() => null)) as Record<string, unknown> | null;
@@ -405,7 +457,25 @@ export async function DELETE(
         );
       }
 
+      const previousLecturerSyncState = {
+        offeringId,
+        moduleCode: String(dbOffering.moduleCode ?? dbOffering.moduleId ?? "").trim(),
+        moduleId: String(dbOffering.moduleId ?? "").trim(),
+        lecturerIds: mergeSanitizedIdLists(
+          dbOffering.assignedLecturerIds,
+          dbOffering.assignedLecturers
+        ),
+      };
+
       await ModuleOfferingModel.deleteOne({ _id: offeringId }).catch(() => null);
+      deleteModuleOffering(offeringId);
+
+      await syncLecturerModuleLinksForOfferingMutation({
+        previous: previousLecturerSyncState,
+        next: null,
+        mongooseConnection,
+      }).catch(() => null);
+
       return NextResponse.json({ ok: true });
     }
   }
@@ -422,10 +492,23 @@ export async function DELETE(
     );
   }
 
+  const previousLecturerSyncState = {
+    offeringId: offering.id,
+    moduleCode: offering.moduleCode,
+    moduleId: offering.moduleId,
+    lecturerIds: offering.assignedLecturerIds,
+  };
+
   const deleted = deleteModuleOffering(offeringId);
   if (!deleted) {
     return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
   }
+
+  await syncLecturerModuleLinksForOfferingMutation({
+    previous: previousLecturerSyncState,
+    next: null,
+    mongooseConnection: null,
+  }).catch(() => null);
 
   return NextResponse.json({ ok: true });
 }

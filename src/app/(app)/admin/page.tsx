@@ -1,4 +1,7 @@
-import type { ComponentType } from "react";
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState, type ComponentType } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -17,6 +20,15 @@ import PageHeader from "@/components/admin/PageHeader";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
+import {
+  listNotificationsForRole,
+  type NotificationFeedItem,
+} from "@/models/notification-center";
+import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
 
 type StatIcon = ComponentType<{ size?: number }>;
 
@@ -32,14 +44,6 @@ interface DistributionItem {
   label: string;
   value: number;
   meta: string;
-}
-
-interface AnnouncementItem {
-  id: string;
-  title: string;
-  target: string;
-  date: string;
-  preview: string;
 }
 
 interface ActivityItem {
@@ -115,33 +119,6 @@ const STUDENTS_PER_DEGREE: DistributionItem[] = [
   { label: "Information Technology", value: 198, meta: "IT" },
   { label: "Civil Engineering", value: 142, meta: "CE" },
   { label: "Business Analytics", value: 118, meta: "BA" },
-];
-
-const ANNOUNCEMENTS: AnnouncementItem[] = [
-  {
-    id: "ann-01",
-    title: "Y1S1 Orientation Timetable Published",
-    target: "FOC / SE / Y1S1 / All Subgroups",
-    date: "Mar 03, 2026",
-    preview:
-      "The first semester orientation timetable is now visible for all Year 1 weekday and weekend subgroups.",
-  },
-  {
-    id: "ann-02",
-    title: "LMS Maintenance Window",
-    target: "All Faculties / All Degrees",
-    date: "Mar 02, 2026",
-    preview:
-      "A scheduled infrastructure patch will be applied on Friday night. Services may be briefly unavailable during the maintenance window.",
-  },
-  {
-    id: "ann-03",
-    title: "Assessment Policy Update",
-    target: "FOE / CE / Y2S1",
-    date: "Mar 01, 2026",
-    preview:
-      "Updated moderation and grading deadlines are now active for current engineering coursework assessments.",
-  },
 ];
 
 const RECENT_ACTIVITY: ActivityItem[] = [
@@ -249,12 +226,50 @@ function DistributionList({ items }: { items: DistributionItem[] }) {
   );
 }
 
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
+
 export default function AdminDashboardPage() {
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
+  const latestNotification = notifications[0] ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
+      listNotificationsForRole("SUPER_ADMIN").catch(
+        () => [] as NotificationFeedItem[]
+      ),
+    ]).then(([rows, scopedNotifications]) => {
+      if (cancelled) {
+        return;
+      }
+      setAnnouncements(rows);
+      setNotifications(scopedNotifications.slice(0, 3));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-6 lg:space-y-8">
       <PageHeader
         description="Centralized oversight for academic structure, enrollments, teaching operations, and system-wide alerts."
         title="Dashboard"
+      />
+
+      <LatestNotificationSection
+        href="/notifications"
+        item={latestNotification}
+        subtitle="Most recent notification targeted to admin users."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -323,25 +338,35 @@ export default function AdminDashboardPage() {
           title="Announcement Preview"
         >
           <div className="space-y-4">
-            {ANNOUNCEMENTS.map((item) => (
-              <div className="rounded-3xl border border-border bg-card p-5" key={item.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-heading">{item.title}</p>
-                    <p className="mt-1 text-xs text-text/60">{item.target}</p>
-                  </div>
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Megaphone size={16} />
-                  </span>
-                </div>
-                <p className="mt-3 text-xs font-medium text-text/55">{item.date}</p>
-                <p className="mt-3 text-sm leading-6 text-text/72">{item.preview}</p>
-                <Button className="mt-4 gap-2" variant="secondary">
-                  View Full Announcement
-                  <ArrowRight size={14} />
-                </Button>
+            {announcements.length === 0 ? (
+              <div className="rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
+                No announcements available yet.
               </div>
-            ))}
+            ) : (
+              announcements.map((item) => (
+                <div className="rounded-3xl border border-border bg-card p-5" key={item.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="mt-1 text-xs text-text/60">{item.targetLabel}</p>
+                    </div>
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Megaphone size={16} />
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs font-medium text-text/55">
+                    {formatDateTime(item.createdAt)}
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-text/72">{item.message}</p>
+                </div>
+              ))
+            )}
+            <Link
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+              href="/admin/communication/announcements"
+            >
+              View All
+            </Link>
           </div>
         </Card>
       </section>
@@ -412,6 +437,33 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </Card>
+
+          <Card
+            description="Notifications and system announcements visible to admin users."
+            title="Recent Notifications"
+          >
+            <div className="space-y-3">
+              {notifications.map((item) => (
+                <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
+                        {item.type}
+                      </Badge>
+                      <p className="mt-2 text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="mt-1 text-sm text-text/68">{item.message}</p>
+                    </div>
+                    <p className="text-xs text-text/55">{item.time}</p>
+                  </div>
+                </div>
+              ))}
+              {notifications.length === 0 ? (
+                <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                  No notifications available.
+                </div>
+              ) : null}
             </div>
           </Card>
         </div>

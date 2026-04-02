@@ -1,10 +1,55 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Card from "@/components/ui/Card";
-import { foundItemsSeed, lostItemLocations, lostItemReports } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
+import type { FoundItemRecord, LostItemReport } from "@/models/portal-types";
 
 export default function LostItemsAnalyticsPage() {
-  const resolved = lostItemReports.filter((item) => item.status === "Claimed").length;
-  const unresolved = lostItemReports.length - resolved;
-  const returned = foundItemsSeed.filter((item) => item.status === "Returned").length;
+  const [reports, setReports] = useState<LostItemReport[]>([]);
+  const [foundItems, setFoundItems] = useState<FoundItemRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      loadPortalData<LostItemReport[]>(PORTAL_DATA_KEYS.lostItemReports, []),
+      loadPortalData<FoundItemRecord[]>(PORTAL_DATA_KEYS.foundItems, []),
+    ]).then(([reportRows, foundRows]) => {
+      if (cancelled) {
+        return;
+      }
+
+      setReports(reportRows);
+      setFoundItems(foundRows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const resolved = reports.filter((item) => item.status === "Claimed").length;
+  const unresolved = reports.length - resolved;
+  const returned = foundItems.filter((item) => item.status === "Returned").length;
+
+  const topLocations = useMemo(() => {
+    const buckets = new Map<string, number>();
+
+    reports.forEach((item) => {
+      const location = String(item.location ?? "").trim();
+      if (!location) {
+        return;
+      }
+
+      buckets.set(location, (buckets.get(location) ?? 0) + 1);
+    });
+
+    return Array.from(buckets.entries())
+      .map(([location, count]) => ({ location, count }))
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 5);
+  }, [reports]);
 
   return (
     <div className="space-y-8">
@@ -30,7 +75,7 @@ export default function LostItemsAnalyticsPage() {
 
       <Card title="Top locations">
         <ul className="space-y-2">
-          {lostItemLocations.map((row) => {
+          {topLocations.map((row) => {
             return (
               <li className="flex items-center justify-between rounded-2xl bg-tint px-3.5 py-2.5" key={row.location}>
                 <span className="text-sm text-text/72">{row.location}</span>
@@ -38,9 +83,13 @@ export default function LostItemsAnalyticsPage() {
               </li>
             );
           })}
+          {topLocations.length === 0 ? (
+            <li className="rounded-2xl bg-tint px-3.5 py-2.5 text-sm text-text/72">
+              No incident locations available yet.
+            </li>
+          ) : null}
         </ul>
       </Card>
     </div>
   );
 }
-

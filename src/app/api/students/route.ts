@@ -9,17 +9,16 @@ import { connectMongoose } from "@/models/mongoose";
 import {
   buildStudentEmail,
   buildStudentId,
-  createStudentAndUserInMemory,
   decorateStudentDetailRecord,
   decorateStudentListRecord,
   getStudentIdStartSeed,
   getMongoDuplicateField,
   isMongoDuplicateKeyError,
-  listStudentsInMemory,
   normalizeAcademicCode,
   resolveStudentPrefix,
   sanitizeName,
   sanitizeNicNumber,
+  sanitizeOptionalEmail,
   sanitizePhone,
   sanitizeStudentStatus,
   sanitizeStudentStream,
@@ -30,6 +29,7 @@ import {
   type StudentPersistedRecord,
   type StudentProfileWriteInput,
   type StudentSort,
+  type StudentStream,
   type StudentStatus,
 } from "@/models/student-registration";
 import { CounterModel } from "@/models/Counter";
@@ -105,6 +105,7 @@ function toStudentProfileInput(
   const lastName = sanitizeName(body.lastName);
   const nicNumber = sanitizeNicNumber(body.nicNumber);
   const phone = sanitizePhone(body.phone);
+  const optionalEmail = sanitizeOptionalEmail(body.optionalEmail);
   const status = sanitizeStudentStatus(body.status);
 
   if (!firstName || !lastName || !nicNumber) {
@@ -116,6 +117,7 @@ function toStudentProfileInput(
     lastName,
     nicNumber,
     phone,
+    optionalEmail,
     status,
   };
 }
@@ -169,6 +171,7 @@ function toStudentRecordFromUnknown(row: unknown): StudentPersistedRecord | null
     lastName,
     nicNumber,
     phone: sanitizePhone(doc.phone),
+    optionalEmail: sanitizeOptionalEmail(doc.optionalEmail),
     status: sanitizeStudentStatus(doc.status),
     createdAt: toIsoDate(doc.createdAt),
     updatedAt: toIsoDate(doc.updatedAt),
@@ -214,14 +217,27 @@ async function reserveNextStudentIdentityInDb(intakeId: string) {
 
   const counter = (await CounterModel.findOneAndUpdate(
     { key: prefixKey },
-    {
-      $setOnInsert: { key: prefixKey, seq: seed - 1 },
-      $inc: { seq: 1 },
-    },
+    [
+      {
+        $set: {
+          key: prefixKey,
+          seq: {
+            $add: [
+              {
+                $max: [
+                  { $ifNull: ["$seq", seed - 1] },
+                  seed - 1,
+                ],
+              },
+              1,
+            ],
+          },
+        },
+      },
+    ],
     {
       upsert: true,
       new: true,
-      setDefaultsOnInsert: true,
     }
   )
     .lean()
@@ -250,29 +266,45 @@ function groupEnrollmentsByStudent(
   return grouped;
 }
 
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const exists = await EnrollmentModel.exists({
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    status: "ACTIVE",
+    subgroup,
+  }).catch(() => null);
+
+  return Boolean(exists);
+}
+
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const search = String(searchParams.get("search") ?? "").trim();
   const status = sanitizeStatus(searchParams.get("status"));
   const sort = sanitizeSort(searchParams.get("sort"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
   const page = parsePageParam(searchParams.get("page"), 1);
-
-  if (!mongooseConnection) {
-    const allItems = listStudentsInMemory({ search, sort, status });
-    const total = allItems.length;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, pageCount);
-    const start = (safePage - 1) * pageSize;
-
-    return NextResponse.json({
-      items: allItems.slice(start, start + pageSize),
-      total,
-      page: safePage,
-      pageSize,
-    });
-  }
 
   const query: Record<string, unknown> = {};
   if (status) {
@@ -286,6 +318,7 @@ export async function GET(request: Request) {
       { firstName: searchRegex },
       { lastName: searchRegex },
       { email: searchRegex },
+      { optionalEmail: searchRegex },
       { nicNumber: searchRegex },
     ];
   }
@@ -354,6 +387,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;
@@ -380,23 +420,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!mongooseConnection) {
-      try {
-        const created = await createStudentAndUserInMemory({ profile, enrollment });
-        if (!created) {
-          throw new Error("Failed to map created student");
-        }
-
-        return NextResponse.json(created, { status: 201 });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to register student";
-        if (message === "NIC number already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: enrollment.facultyId,
+        degreeProgramId: enrollment.degreeProgramId,
+        intakeId: enrollment.intakeId,
+        stream: enrollment.stream,
+        subgroup: enrollment.subgroup ?? null,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
+        { status: 400 }
+      );
     }
 
     const maxAttempts = 6;
@@ -414,6 +450,7 @@ export async function POST(request: Request) {
           lastName: profile.lastName,
           nicNumber: profile.nicNumber,
           phone: profile.phone,
+          optionalEmail: profile.optionalEmail,
           status: profile.status,
         });
         createdStudentRecordId = String(createdStudent._id);

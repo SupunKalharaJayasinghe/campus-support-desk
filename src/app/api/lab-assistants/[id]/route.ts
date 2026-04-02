@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLabAssistantName,
   sanitizeLabAssistantNicStaffId,
+  sanitizeLabAssistantOptionalEmail,
   sanitizeLabAssistantPhone,
   sanitizeLabAssistantStatus,
   sanitizeModuleIdList,
@@ -27,6 +28,7 @@ import { UserModel } from "@/models/User";
 
 interface LabAssistantWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LabAssistantStatus;
@@ -43,6 +45,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LabAssistantWrite
 
   return {
     fullName,
+    optionalEmail: sanitizeLabAssistantOptionalEmail(body.optionalEmail),
     phone: sanitizeLabAssistantPhone(body.phone),
     nicStaffId: sanitizeLabAssistantNicStaffId(body.nicStaffId),
     status: sanitizeLabAssistantStatus(body.status),
@@ -73,13 +76,11 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-  if (!mongooseConnection) {
-    const row = findLabAssistantInMemoryById(labAssistantId);
-    if (!row) {
-      return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(toApiLabAssistant(row));
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const row = await LabAssistantModel.findById(labAssistantId).lean().exec().catch(() => null);
@@ -137,27 +138,11 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      try {
-        const updated = updateLabAssistantInMemory({
-          id: labAssistantId,
-          ...input,
-          ...validated,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-        }
-
-        return NextResponse.json(toApiLabAssistant(updated));
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update lab assistant";
-        if (message === "NIC/Staff ID already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const row = await LabAssistantModel.findById(labAssistantId).exec();
@@ -166,6 +151,7 @@ export async function PUT(
     }
 
     row.fullName = input.fullName;
+    row.optionalEmail = input.optionalEmail;
     row.phone = input.phone;
     row.nicStaffId = input.nicStaffId;
     row.status = input.status;
@@ -230,21 +216,11 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const assignedOfferings = listModuleOfferingsByLabAssistantId(labAssistantId);
-      if (assignedOfferings.length > 0) {
-        return NextResponse.json(
-          { message: "Lab assistant is assigned to module offerings" },
-          { status: 409 }
-        );
-      }
-
-      const deleted = deleteLabAssistantInMemory(labAssistantId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const assignedOfferingExists = Boolean(
@@ -267,16 +243,21 @@ export async function DELETE(
     const labAssistantObjectId = mongoose.Types.ObjectId.isValid(labAssistantId)
       ? new mongoose.Types.ObjectId(labAssistantId)
       : null;
-    await UserModel.updateMany(
+    const normalizedEmail = String(deletedRow.email ?? "").trim().toLowerCase();
+    await UserModel.deleteMany(
       labAssistantObjectId
-        ? { $or: [{ labAssistantRef: labAssistantObjectId }, { email: deletedRow.email }] }
-        : { email: deletedRow.email },
-      {
-        $set: {
-          status: "INACTIVE",
-          mustChangePassword: false,
-        },
-      }
+        ? {
+            role: "LAB_ASSISTANT",
+            $or: [
+              { labAssistantRef: labAssistantObjectId },
+              { email: normalizedEmail },
+              { username: normalizedEmail },
+            ],
+          }
+        : {
+            role: "LAB_ASSISTANT",
+            $or: [{ email: normalizedEmail }, { username: normalizedEmail }],
+          }
     ).catch(() => null);
 
     return NextResponse.json({ ok: true });

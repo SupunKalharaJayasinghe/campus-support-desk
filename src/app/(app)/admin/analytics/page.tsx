@@ -1,7 +1,34 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Card from "@/components/ui/Card";
-import { adminMetrics, platformKpis } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
+import type { AdminMetric, PlatformKpi } from "@/models/portal-types";
 
 export default function AdminAnalyticsPage() {
+  const [adminMetrics, setAdminMetrics] = useState<AdminMetric[]>([]);
+  const [platformKpis, setPlatformKpis] = useState<PlatformKpi[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      loadPortalData<AdminMetric[]>(PORTAL_DATA_KEYS.adminMetrics, []),
+      loadPortalData<PlatformKpi[]>(PORTAL_DATA_KEYS.platformKpis, []),
+    ]).then(([metrics, kpis]) => {
+      if (cancelled) {
+        return;
+      }
+
+      setAdminMetrics(metrics);
+      setPlatformKpis(kpis);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-8">
       <div>
@@ -15,6 +42,11 @@ export default function AdminAnalyticsPage() {
             <p className="mt-2 text-3xl font-semibold text-heading">{kpi.value}</p>
           </Card>
         ))}
+        {platformKpis.length === 0 ? (
+          <Card>
+            <p className="text-sm text-text/72">No KPI data available.</p>
+          </Card>
+        ) : null}
       </section>
       <Card title="Trend snapshot">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -26,9 +58,11 @@ export default function AdminAnalyticsPage() {
               </p>
             </div>
           ))}
+          {adminMetrics.length === 0 ? (
+            <p className="text-sm text-text/72">No metric trends available.</p>
+          ) : null}
         </div>
       </Card>
     </div>
   );
 }
-

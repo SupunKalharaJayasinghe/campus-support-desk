@@ -51,15 +51,11 @@ export async function GET(request: Request) {
 
   const mongooseConnection = await connectMongoose().catch(() => null);
 
-  if (!mongooseConnection) {
-    const items = listLecturersInMemory({ status: "ACTIVE" })
-      .filter((row) => isEligible(row, { facultyId, degreeId, moduleId }))
-      .map((row) => toApiItem(row));
-
-    return NextResponse.json({
-      items,
-      total: items.length,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query = staffEligibilityMongoFilter({

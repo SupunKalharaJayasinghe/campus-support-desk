@@ -7,7 +7,7 @@ const LOST_ITEMS_LINKS = [
   { label: "Found Items", href: "/lost-items/found" },
   { label: "Claims", href: "/lost-items/claims" },
   { label: "Inventory", href: "/lost-items/inventory" },
-  { label: "Notifications", href: "/lost-items/notifications" },
+  { label: "Notifications", href: "/notifications" },
 ];
 
 export default function LostItemsLayout({
@@ -26,3 +26,4 @@ export default function LostItemsLayout({
     </RoleGuard>
   );
 }
+

@@ -8,12 +8,10 @@ import {
   type TermCode,
 } from "@/models/intake-store";
 import {
-  listLabAssistantsInMemory,
   toLabAssistantPersistedRecordFromUnknown,
   type LabAssistantPersistedRecord,
 } from "@/models/lab-assistant-store";
 import {
-  listLecturersInMemory,
   toLecturerPersistedRecordFromUnknown,
   type LecturerPersistedRecord,
 } from "@/models/lecturer-store";
@@ -110,6 +108,14 @@ export function sanitizeIdList(value: unknown) {
   }
 
   return Array.from(new Set(value.map((item) => sanitizeAssignmentId(item)).filter(Boolean)));
+}
+
+function mergeArrayValues(values: unknown[]) {
+  return values.flatMap((value) => (Array.isArray(value) ? value : []));
+}
+
+export function mergeSanitizedIdLists(...values: unknown[]) {
+  return sanitizeIdList(mergeArrayValues(values));
 }
 
 export function sanitizeSyllabusVersion(value: unknown): SyllabusVersion {
@@ -276,11 +282,13 @@ export function normalizeDbOffering(value: unknown): ModuleOfferingRecord | null
     return null;
   }
 
-  const assignedLecturerIds = sanitizeIdList(
-    row.assignedLecturerIds ?? row.assignedLecturers
+  const assignedLecturerIds = mergeSanitizedIdLists(
+    row.assignedLecturerIds,
+    row.assignedLecturers
   );
-  const assignedLabAssistantIds = sanitizeIdList(
-    row.assignedLabAssistantIds ?? row.assignedLabAssistants
+  const assignedLabAssistantIds = mergeSanitizedIdLists(
+    row.assignedLabAssistantIds,
+    row.assignedLabAssistants
   );
   const createdAt = toIsoDate(row.createdAt);
   const updatedAt = toIsoDate(row.updatedAt);
@@ -422,9 +430,6 @@ async function loadLecturersByIds(
   mongooseConnection: typeof mongoose | null
 ) {
   const map = new Map<string, LecturerPersistedRecord>();
-  listLecturersInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
 
   if (!mongooseConnection) {
     return map;
@@ -457,9 +462,6 @@ async function loadLabAssistantsByIds(
   mongooseConnection: typeof mongoose | null
 ) {
   const map = new Map<string, LabAssistantPersistedRecord>();
-  listLabAssistantsInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
 
   if (!mongooseConnection) {
     return map;
@@ -501,9 +503,6 @@ export async function validateLecturerAssignments(input: {
     }
     if (row.status !== "ACTIVE") {
       throw new Error(`Lecturer is inactive: ${row.fullName}`);
-    }
-    if (!isEligibleByScope(row, input.scope)) {
-      throw new Error(`Lecturer is not eligible for this offering: ${row.fullName}`);
     }
   }
 }

@@ -132,7 +132,6 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     items: [
       { label: "Announcements", href: "/admin/communication/announcements" },
       { label: "Targeted Notifications", href: "/admin/communication/targeted-notifications" },
-      { label: "Messages", href: "/admin/communication/messages" },
     ],
   },
   {

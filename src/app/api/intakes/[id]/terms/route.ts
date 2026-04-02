@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { persistIntakeRecords } from "@/models/intake-record-persistence";
 import { connectMongoose } from "@/models/mongoose";
 import {
   getIntakeTerms,
@@ -8,6 +9,7 @@ import {
   sanitizeTermCode,
   sanitizeTermSchedules,
   sanitizeToggle,
+  snapshotIntakes,
   updateIntakeTerms,
   type IntakeTermScheduleInput,
 } from "@/models/intake-store";
@@ -17,7 +19,13 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const targetId = sanitizeIntakeId(params.id);
 
     if (!targetId) {
@@ -49,7 +57,13 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const targetId = sanitizeIntakeId(params.id);
     const body = (await request.json()) as Partial<{
       currentTerm: string;
@@ -111,6 +125,7 @@ export async function PUT(
         { status: 404 }
       );
     }
+    await persistIntakeRecords(snapshotIntakes({ includeDeleted: true }));
 
     const terms = getIntakeTerms(targetId);
     return NextResponse.json(terms);

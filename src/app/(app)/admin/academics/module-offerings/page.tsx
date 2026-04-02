@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import ConfirmDeleteOfferingModal from "./components/ConfirmDeleteOfferingModal";
 import EditOfferingModal, {
   type EditOfferingContext,
+  type ModuleAssignmentSnapshot,
   type OfferingDegreeOption,
   type OfferingFacultyOption,
   type OfferingFormState,
@@ -185,6 +186,7 @@ export default function ModuleOfferingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoadingModules, setIsLoadingModules] = useState(false);
+  const [isLoadingModuleAssignments, setIsLoadingModuleAssignments] = useState(false);
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false);
   const [isLoadingLabAssistants, setIsLoadingLabAssistants] = useState(false);
 
@@ -208,14 +210,21 @@ export default function ModuleOfferingsPage() {
   const [modalDegrees, setModalDegrees] = useState<DegreeOption[]>([]);
   const [modalIntakes, setModalIntakes] = useState<IntakeOption[]>([]);
   const [modalModules, setModalModules] = useState<OfferingModuleOption[]>([]);
+  const [moduleAssignments, setModuleAssignments] = useState<ModuleAssignmentSnapshot[]>([]);
   const [eligibleLecturers, setEligibleLecturers] = useState<OfferingStaffItem[]>([]);
   const [eligibleLabAssistants, setEligibleLabAssistants] = useState<OfferingStaffItem[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<OfferingRecord | null>(null);
+  const [quickAssignTarget, setQuickAssignTarget] = useState<OfferingRecord | null>(null);
+  const [quickAssignEligibleLecturers, setQuickAssignEligibleLecturers] = useState<OfferingStaffItem[]>([]);
+  const [quickAssignSelectedLecturerIds, setQuickAssignSelectedLecturerIds] = useState<string[]>([]);
+  const [quickAssignSearch, setQuickAssignSearch] = useState("");
+  const [isLoadingQuickAssignLecturers, setIsLoadingQuickAssignLecturers] = useState(false);
+  const [isSavingQuickAssign, setIsSavingQuickAssign] = useState(false);
 
   const deferredSearch = useDeferredValue(searchQuery);
   const isModalOpen = Boolean(modalMode);
-  const isOverlayOpen = Boolean(isModalOpen || deleteTarget);
+  const isOverlayOpen = Boolean(isModalOpen || deleteTarget || quickAssignTarget);
 
   const loadDegrees = useCallback(async (facultyId: string) => {
     if (!code(facultyId)) return [] as DegreeOption[];
@@ -285,6 +294,75 @@ export default function ModuleOfferingsPage() {
     }
   }, []);
 
+  const loadModuleAssignments = useCallback(async (moduleCodeOrId: string) => {
+    const moduleCode = sid(moduleCodeOrId).toUpperCase();
+    if (!moduleCode) {
+      setModuleAssignments([]);
+      return;
+    }
+
+    setIsLoadingModuleAssignments(true);
+    try {
+      const collected: OfferingRecord[] = [];
+      const maxPageSize: PageSize = 100;
+      let currentPage = 1;
+      let expectedTotal = Number.POSITIVE_INFINITY;
+
+      while (collected.length < expectedTotal) {
+        const params = new URLSearchParams({
+          moduleCode,
+          page: String(currentPage),
+          pageSize: String(maxPageSize),
+          sort: "term",
+        });
+        const parsed = parseOfferings(
+          await readJson<unknown>(
+            await fetch(`/api/module-offerings?${params.toString()}`, {
+              cache: "no-store",
+            })
+          )
+        );
+
+        expectedTotal = Math.max(0, parsed.total);
+        if (parsed.items.length === 0) {
+          break;
+        }
+
+        collected.push(...parsed.items);
+
+        if (collected.length >= expectedTotal) {
+          break;
+        }
+
+        currentPage += 1;
+      }
+
+      const byId = new Map<string, OfferingRecord>();
+      collected.forEach((item) => {
+        byId.set(item.id, item);
+      });
+
+      setModuleAssignments(
+        Array.from(byId.values()).map((item) => ({
+          id: item.id,
+          moduleCode: item.moduleCode,
+          moduleName: item.moduleName,
+          facultyId: item.facultyId,
+          degreeProgramId: item.degreeProgramId,
+          intakeName: item.intakeName || item.intakeId,
+          termCode: item.termCode,
+          lecturers: item.lecturers,
+          labAssistants: item.labAssistants,
+          status: item.status,
+        }))
+      );
+    } catch {
+      setModuleAssignments([]);
+    } finally {
+      setIsLoadingModuleAssignments(false);
+    }
+  }, []);
+
   const loadOfferings = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -335,8 +413,9 @@ export default function ModuleOfferingsPage() {
   useEffect(() => {
     if (modalMode === "add") { setActiveWindow("Create"); return; }
     if (modalMode === "edit") { setActiveWindow("Edit"); return; }
+    if (quickAssignTarget) { setActiveWindow("Assign"); return; }
     setActiveWindow("List");
-  }, [modalMode, setActiveWindow]);
+  }, [modalMode, quickAssignTarget, setActiveWindow]);
 
   useEffect(() => () => setActiveWindow(null), [setActiveWindow]);
 
@@ -345,35 +424,126 @@ export default function ModuleOfferingsPage() {
 
   const closeModal = () => {
     if (isSaving) return;
-    setModalMode(null); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalMode(null); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); setIsLoadingModuleAssignments(false);
   };
 
-  const openAddModal = () => { setModalMode("add"); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]); };
+  const openAddModal = () => { setModalMode("add"); setEditTarget(null); setForm(emptyForm()); setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); setIsLoadingModuleAssignments(false); };
 
   const openEditModal = (offering: OfferingRecord) => {
     setModalMode("edit");
     setEditTarget(offering);
     setForm({ facultyId: offering.facultyId, degreeProgramId: offering.degreeProgramId, intakeId: offering.intakeId, termCode: offering.termCode, moduleId: offering.moduleId, syllabusVersion: offering.syllabusVersion, status: offering.status, assignedLecturerIds: offering.lecturers.map((r) => r.id), assignedLabAssistantIds: offering.labAssistants.map((r) => r.id) });
-    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     void loadDegrees(offering.facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
     void loadIntakes(offering.facultyId, offering.degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
     setIsLoadingModules(true);
     void loadModules(offering.facultyId, offering.degreeProgramId, offering.termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
+    void loadModuleAssignments(offering.moduleId);
     void loadEligible("lecturers", offering.facultyId, offering.degreeProgramId, offering.moduleId);
     void loadEligible("lab-assistants", offering.facultyId, offering.degreeProgramId, offering.moduleId);
+  };
+
+  const closeQuickAssignModal = () => {
+    setQuickAssignTarget(null);
+    setQuickAssignEligibleLecturers([]);
+    setQuickAssignSelectedLecturerIds([]);
+    setQuickAssignSearch("");
+    setIsLoadingQuickAssignLecturers(false);
+  };
+
+  const openQuickAssignModal = (offering: OfferingRecord) => {
+    setQuickAssignTarget(offering);
+    setQuickAssignSelectedLecturerIds(offering.lecturers.map((lecturer) => lecturer.id));
+    setQuickAssignSearch("");
+    setQuickAssignEligibleLecturers(offering.lecturers);
+    setIsLoadingQuickAssignLecturers(true);
+
+    void (async () => {
+      try {
+        const payload = await readJson<unknown>(
+          await fetch(
+            `/api/module-offerings/${encodeURIComponent(offering.id)}/eligible-lecturers`,
+            { cache: "no-store" }
+          )
+        );
+        const eligible = parseEligible(payload);
+        const merged = new Map<string, OfferingStaffItem>();
+        [...offering.lecturers, ...eligible].forEach((lecturer) => {
+          merged.set(lecturer.id, lecturer);
+        });
+        setQuickAssignEligibleLecturers(Array.from(merged.values()));
+      } catch (error) {
+        toast({
+          title: "Failed",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to load eligible lecturers",
+          variant: "error",
+        });
+        setQuickAssignEligibleLecturers(offering.lecturers);
+      } finally {
+        setIsLoadingQuickAssignLecturers(false);
+      }
+    })();
+  };
+
+  const toggleQuickAssignLecturer = (lecturerId: string) => {
+    setQuickAssignSelectedLecturerIds((current) =>
+      current.includes(lecturerId)
+        ? current.filter((id) => id !== lecturerId)
+        : [...current, lecturerId]
+    );
+  };
+
+  const saveQuickAssign = async () => {
+    if (!quickAssignTarget) return;
+    setIsSavingQuickAssign(true);
+    try {
+      await readJson<unknown>(
+        await fetch(
+          `/api/module-offerings/${encodeURIComponent(quickAssignTarget.id)}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assignedLecturerIds: quickAssignSelectedLecturerIds,
+            }),
+          }
+        )
+      );
+      toast({
+        title: "Saved",
+        message: "Lecturer assignments updated",
+        variant: "success",
+      });
+      closeQuickAssignModal();
+      await loadOfferings();
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update lecturer assignments",
+        variant: "error",
+      });
+    } finally {
+      setIsSavingQuickAssign(false);
+    }
   };
 
   const handleFacultyChange = (value: string) => {
     const facultyId = code(value);
     setForm((p) => ({ ...p, facultyId, degreeProgramId: "", intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalDegrees([]); setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (facultyId) void loadDegrees(facultyId).then(setModalDegrees).catch(() => setModalDegrees([]));
   };
 
   const handleDegreeChange = (value: string) => {
     const degreeProgramId = code(value);
     setForm((p) => ({ ...p, degreeProgramId, intakeId: "", moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalIntakes([]); setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalIntakes([]); setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (!form.facultyId || !degreeProgramId) return;
     void loadIntakes(form.facultyId, degreeProgramId).then(setModalIntakes).catch(() => setModalIntakes([]));
     setIsLoadingModules(true);
@@ -383,7 +553,7 @@ export default function ModuleOfferingsPage() {
   const handleTermChange = (value: string) => {
     const termCode = String(value ?? "").trim().toUpperCase();
     setForm((p) => ({ ...p, termCode, moduleId: "", assignedLecturerIds: [], assignedLabAssistantIds: [] }));
-    setModalModules([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
+    setModalModules([]); setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]);
     if (!form.facultyId || !form.degreeProgramId || !termCode) return;
     setIsLoadingModules(true);
     void loadModules(form.facultyId, form.degreeProgramId, termCode).then(setModalModules).catch(() => setModalModules([])).finally(() => setIsLoadingModules(false));
@@ -393,13 +563,31 @@ export default function ModuleOfferingsPage() {
     const moduleId = sid(value);
     const selected = modalModules.find((m) => m.id === moduleId) ?? null;
     setForm((p) => ({ ...p, moduleId, assignedLecturerIds: [], assignedLabAssistantIds: [], syllabusVersion: modalMode === "add" && selected ? selected.defaultSyllabusVersion : p.syllabusVersion }));
-    if (!form.facultyId || !form.degreeProgramId || !moduleId) { setEligibleLecturers([]); setEligibleLabAssistants([]); return; }
+    if (!form.facultyId || !form.degreeProgramId || !moduleId) { setModuleAssignments([]); setEligibleLecturers([]); setEligibleLabAssistants([]); return; }
+    void loadModuleAssignments(moduleId);
     void loadEligible("lecturers", form.facultyId, form.degreeProgramId, moduleId);
     void loadEligible("lab-assistants", form.facultyId, form.degreeProgramId, moduleId);
   };
 
   const toggleLecturer = (id: string) => setForm((p) => ({ ...p, assignedLecturerIds: p.assignedLecturerIds.includes(id) ? p.assignedLecturerIds.filter((x) => x !== id) : [...p.assignedLecturerIds, id] }));
   const toggleLab = (id: string) => setForm((p) => ({ ...p, assignedLabAssistantIds: p.assignedLabAssistantIds.includes(id) ? p.assignedLabAssistantIds.filter((x) => x !== id) : [...p.assignedLabAssistantIds, id] }));
+  const addAllEligibleLecturers = () =>
+    setForm((p) => ({
+      ...p,
+      assignedLecturerIds: Array.from(
+        new Set([...p.assignedLecturerIds, ...eligibleLecturers.map((item) => item.id)])
+      ),
+    }));
+  const addAllEligibleLabAssistants = () =>
+    setForm((p) => ({
+      ...p,
+      assignedLabAssistantIds: Array.from(
+        new Set([
+          ...p.assignedLabAssistantIds,
+          ...eligibleLabAssistants.map((item) => item.id),
+        ])
+      ),
+    }));
 
   const saveOffering = async () => {
     if (!modalMode) return;
@@ -446,6 +634,23 @@ export default function ModuleOfferingsPage() {
   const modalIntakeOptions = useMemo(() => modalIntakes.filter((i) => (!form.facultyId || i.facultyCode === form.facultyId) && (!form.degreeProgramId || i.degreeCode === form.degreeProgramId)), [modalIntakes, form.facultyId, form.degreeProgramId]);
   const contextLecturers = useMemo(() => [...eligibleLecturers, ...(editTarget?.lecturers ?? [])], [eligibleLecturers, editTarget]);
   const contextLab = useMemo(() => [...eligibleLabAssistants, ...(editTarget?.labAssistants ?? [])], [eligibleLabAssistants, editTarget]);
+  const quickAssignLecturerLookup = useMemo(
+    () =>
+      new Map(
+        [...(quickAssignTarget?.lecturers ?? []), ...quickAssignEligibleLecturers].map(
+          (lecturer) => [lecturer.id, lecturer]
+        )
+      ),
+    [quickAssignEligibleLecturers, quickAssignTarget]
+  );
+  const quickAssignFilteredLecturers = useMemo(() => {
+    const query = quickAssignSearch.trim().toLowerCase();
+    const rows = Array.from(quickAssignLecturerLookup.values());
+    if (!query) return rows;
+    return rows.filter((lecturer) =>
+      `${lecturer.fullName} ${lecturer.email}`.toLowerCase().includes(query)
+    );
+  }, [quickAssignLecturerLookup, quickAssignSearch]);
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -485,7 +690,7 @@ export default function ModuleOfferingsPage() {
                   <td className="px-4 py-4 text-text/78"><p className="font-semibold text-heading">{item.labAssistants.length}</p><div className="mt-1 flex flex-wrap gap-1.5">{a2.map((x) => <span key={x.id} className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70">{x.fullName}</span>)}{item.labAssistants.length > 2 ? <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">+{item.labAssistants.length - 2}</span> : null}</div></td>
                   <td className="px-4 py-4"><Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>{item.status}</Badge></td>
                   <td className="px-4 py-4 text-text/70">{fmtDate(item.updatedAt)}</td>
-                  <td className="px-4 py-4"><div className="flex justify-end gap-2"><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Edit ${item.moduleCode} offering`} onClick={() => openEditModal(item)}><Pencil size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Delete ${item.moduleCode} offering`} onClick={() => setDeleteTarget(item)}><Trash2 size={16} /></button></div></td>
+                  <td className="px-4 py-4"><div className="flex justify-end gap-2"><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Assign lecturers for ${item.moduleCode} offering`} onClick={() => openQuickAssignModal(item)}><Plus size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Edit ${item.moduleCode} offering`} onClick={() => openEditModal(item)}><Pencil size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Delete ${item.moduleCode} offering`} onClick={() => setDeleteTarget(item)}><Trash2 size={16} /></button></div></td>
                 </tr>;
               }) : null}
             </tbody>
@@ -500,6 +705,7 @@ export default function ModuleOfferingsPage() {
         mode={modalMode ?? "add"}
         saving={isSaving}
         loadingModules={isLoadingModules}
+        loadingModuleAssignments={isLoadingModuleAssignments}
         loadingLecturers={isLoadingLecturers}
         loadingLabAssistants={isLoadingLabAssistants}
         offering={editTarget ? { ...editTarget, lecturers: editTarget.lecturers.map((r) => ({ ...r, fullName: staffChipLabel(contextLecturers, r.id) })), labAssistants: editTarget.labAssistants.map((r) => ({ ...r, fullName: staffChipLabel(contextLab, r.id) })) } : null}
@@ -509,6 +715,7 @@ export default function ModuleOfferingsPage() {
         intakeOptions={modalIntakeOptions}
         moduleOptions={modalModules}
         termOptions={TERM_OPTIONS}
+        moduleAssignments={moduleAssignments}
         eligibleLecturers={eligibleLecturers}
         eligibleLabAssistants={eligibleLabAssistants}
         onFacultyChange={handleFacultyChange}
@@ -520,9 +727,78 @@ export default function ModuleOfferingsPage() {
         onStatusChange={(v) => setForm((p) => ({ ...p, status: v }))}
         onToggleLecturer={toggleLecturer}
         onToggleLabAssistant={toggleLab}
+        onAddAllLecturers={addAllEligibleLecturers}
+        onAddAllLabAssistants={addAllEligibleLabAssistants}
         onClose={closeModal}
         onSave={() => { void saveOffering(); }}
       />
+
+      {quickAssignTarget ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[3px]" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingQuickAssign) closeQuickAssignModal(); }} role="presentation">
+          <div aria-modal="true" className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)]" role="dialog">
+            <div className="overflow-y-auto px-6 py-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">ASSIGN</p>
+                  <p className="mt-1 text-2xl font-semibold text-heading">Assign Lecturers</p>
+                  <p className="mt-1 text-sm text-text/70">{quickAssignTarget.moduleCode} / {quickAssignTarget.intakeName || quickAssignTarget.intakeId} / {quickAssignTarget.termCode}</p>
+                </div>
+                <button className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60" disabled={isSavingQuickAssign} onClick={closeQuickAssignModal} type="button"><X size={16} /></button>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-border bg-white p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-heading">Selected Lecturers</p>
+                  <Badge variant="primary">{quickAssignSelectedLecturerIds.length}</Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {quickAssignSelectedLecturerIds.length === 0 ? (
+                    <p className="text-sm text-text/65">No lecturers assigned.</p>
+                  ) : (
+                    quickAssignSelectedLecturerIds.map((lecturerId) => (
+                      <button className="inline-flex items-center gap-2 rounded-full border border-border bg-tint px-3 py-1 text-xs font-semibold text-heading hover:bg-slate-200" key={lecturerId} onClick={() => toggleQuickAssignLecturer(lecturerId)} type="button">
+                        {quickAssignLecturerLookup.get(lecturerId)?.fullName ?? lecturerId}
+                        <X size={12} />
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div className="relative mt-3">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/55" size={14} />
+                  <Input className="h-10 pl-8" onChange={(event) => setQuickAssignSearch(event.target.value)} placeholder="Search lecturers" value={quickAssignSearch} />
+                </div>
+
+                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {isLoadingQuickAssignLecturers ? (
+                    <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">Loading lecturers...</p>
+                  ) : quickAssignFilteredLecturers.length === 0 ? (
+                    <p className="rounded-xl border border-border bg-tint px-3 py-2 text-sm text-text/68">No lecturers found.</p>
+                  ) : (
+                    quickAssignFilteredLecturers.map((lecturer) => (
+                      <label className="inline-flex w-full items-start gap-2 rounded-xl border border-border bg-tint px-2.5 py-2 text-sm text-heading" key={lecturer.id}>
+                        <input checked={quickAssignSelectedLecturerIds.includes(lecturer.id)} className="mt-0.5 h-4 w-4 rounded border-border" disabled={isSavingQuickAssign} onChange={() => toggleQuickAssignLecturer(lecturer.id)} type="checkbox" />
+                        <span>
+                          <span className="font-semibold">{lecturer.fullName}</span>
+                          <span className="block text-xs text-text/60">{lecturer.email}</span>
+                          <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.06em] text-text/58">{lecturer.status || "ACTIVE"}</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <Button className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50" disabled={isSavingQuickAssign} onClick={closeQuickAssignModal} variant="secondary">Cancel</Button>
+                <Button className="h-11 min-w-[132px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]" disabled={isSavingQuickAssign} onClick={() => { void saveQuickAssign(); }}>{isSavingQuickAssign ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}Save</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ConfirmDeleteOfferingModal
         open={Boolean(deleteTarget)}
@@ -534,7 +810,7 @@ export default function ModuleOfferingsPage() {
         onConfirm={() => { void confirmDelete(); }}
       />
 
-      {isSaving || isDeleting ? <div className="pointer-events-none fixed bottom-4 left-4 z-[98] inline-flex items-center gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-xs font-semibold text-text/70 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"><Loader2 className="animate-spin" size={14} />Processing...</div> : null}
+      {isSaving || isDeleting || isSavingQuickAssign ? <div className="pointer-events-none fixed bottom-4 left-4 z-[98] inline-flex items-center gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-xs font-semibold text-text/70 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"><Loader2 className="animate-spin" size={14} />Processing...</div> : null}
     </div>
   );
 }

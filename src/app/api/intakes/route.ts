@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import "@/models/Intake";
+import { persistIntakeRecords } from "@/models/intake-record-persistence";
 import { connectMongoose } from "@/models/mongoose";
 import {
   createIntake,
@@ -8,6 +9,7 @@ import {
   isValidDegreeForFaculty,
   isValidFacultyCode,
   listIntakes,
+  snapshotIntakes,
   sanitizeIntakeMonth,
   sanitizeIntakeStatus,
   sanitizeIntakeYear,
@@ -17,6 +19,7 @@ import {
   type IntakeStatus,
   type IntakeRecord,
   type IntakeTermScheduleRecord,
+  type TermCode,
 } from "@/models/intake-store";
 import type { IntakeTermScheduleInput } from "@/models/intake-store";
 
@@ -53,6 +56,23 @@ function sanitizeSort(value: string | null): IntakeSort {
 
 function sanitizeStatus(value: string | null): "" | IntakeStatus {
   if (value === "ACTIVE" || value === "INACTIVE" || value === "DRAFT") {
+    return value;
+  }
+
+  return "";
+}
+
+function sanitizeCurrentTerm(value: string | null): "" | TermCode {
+  if (
+    value === "Y1S1" ||
+    value === "Y1S2" ||
+    value === "Y2S1" ||
+    value === "Y2S2" ||
+    value === "Y3S1" ||
+    value === "Y3S2" ||
+    value === "Y4S1" ||
+    value === "Y4S2"
+  ) {
     return value;
   }
 
@@ -112,7 +132,14 @@ function toApiIntake(intake: IntakeRecord) {
 }
 
 export async function GET(request: Request) {
-  await connectMongoose().catch(() => null);
+  const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") ?? "";
   const status = sanitizeStatus(searchParams.get("status"));
@@ -127,9 +154,11 @@ export async function GET(request: Request) {
       searchParams.get("degreeProgramId") ??
       searchParams.get("degreeCode")
   );
+  const currentTerm = sanitizeCurrentTerm(searchParams.get("currentTerm"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
 
   const allItems = listIntakes({
+    currentTerm,
     degree,
     faculty,
     search,
@@ -153,7 +182,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const body = (await request.json()) as Partial<{
       name: string;
       stream: string;
@@ -266,6 +302,7 @@ export async function POST(request: Request) {
       status,
       termSchedules,
     });
+    await persistIntakeRecords(snapshotIntakes({ includeDeleted: true }));
 
     return NextResponse.json(toApiIntake(intake), { status: 201 });
   } catch {

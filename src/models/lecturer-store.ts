@@ -9,6 +9,7 @@ export interface LecturerPersistedRecord {
   id: string;
   fullName: string;
   email: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -22,6 +23,7 @@ export interface LecturerPersistedRecord {
 
 interface LecturerCreateInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -39,6 +41,7 @@ const INITIAL_LECTURERS: LecturerPersistedRecord[] = [
     id: "lec-kperera",
     fullName: "Kavindu Perera",
     email: "kavindu.perera@sllit.lk",
+    optionalEmail: "",
     phone: "0771234567",
     nicStaffId: "LP1001",
     status: "ACTIVE",
@@ -53,6 +56,7 @@ const INITIAL_LECTURERS: LecturerPersistedRecord[] = [
     id: "lec-rsilva",
     fullName: "Ruvini Silva",
     email: "ruvini.silva@sllit.lk",
+    optionalEmail: "",
     phone: "0712223344",
     nicStaffId: "LP1002",
     status: "ACTIVE",
@@ -101,6 +105,14 @@ export function sanitizeLecturerName(value: unknown) {
 
 export function sanitizeLecturerPhone(value: unknown) {
   return collapseSpaces(value).slice(0, 32);
+}
+
+export function sanitizeLecturerOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
 }
 
 export function sanitizeLecturerNicStaffId(value: unknown) {
@@ -309,6 +321,7 @@ export function listLecturersInMemory(options?: {
     return [
       item.fullName,
       item.email,
+      item.optionalEmail,
       item.phone,
       item.nicStaffId ?? "",
       item.facultyIds.join(" "),
@@ -373,6 +386,7 @@ function toPersistedRecord(input: LecturerCreateInput): LecturerPersistedRecord 
     id: `lec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     fullName: input.fullName,
     email: reserveUniqueLecturerEmailInMemory(input.fullName),
+    optionalEmail: sanitizeLecturerOptionalEmail(input.optionalEmail),
     phone: input.phone,
     nicStaffId: input.nicStaffId,
     status: input.status,
@@ -424,6 +438,7 @@ export function updateLecturerInMemory(input: LecturerUpdateInput) {
   const updated: LecturerPersistedRecord = {
     ...current,
     fullName: input.fullName,
+    optionalEmail: sanitizeLecturerOptionalEmail(input.optionalEmail),
     phone: input.phone,
     nicStaffId: input.nicStaffId,
     status: input.status,
@@ -470,6 +485,7 @@ export function toLecturerPersistedRecordFromUnknown(
     id,
     fullName,
     email,
+    optionalEmail: sanitizeLecturerOptionalEmail(row.optionalEmail),
     phone: sanitizeLecturerPhone(row.phone),
     nicStaffId: sanitizeLecturerNicStaffId(row.nicStaffId),
     status: sanitizeLecturerStatus(row.status),

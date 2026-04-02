@@ -21,6 +21,7 @@ interface LecturerRecord {
   id: string;
   fullName: string;
   email: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string;
   status: LecturerStatus;
@@ -50,6 +51,14 @@ function cn(...classes: Array<string | false | undefined>) {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
 }
 
 function normalizeCode(value: unknown) {
@@ -126,6 +135,7 @@ function parseLecturers(payload: unknown) {
         id,
         fullName,
         email,
+        optionalEmail: sanitizeOptionalEmail(row.optionalEmail),
         phone: collapseSpaces(row.phone),
         nicStaffId: String(row.nicStaffId ?? "").trim(),
         status: sanitizeStatus(row.status),
@@ -236,6 +246,7 @@ export default function LecturersPage() {
   const [form, setForm] = useState({
     fullName: "",
     email: "",
+    optionalEmail: "",
     phone: "",
     nicStaffId: "",
     status: "ACTIVE" as LecturerStatus,
@@ -366,22 +377,24 @@ export default function LecturersPage() {
   const degreeOpts = degrees.map((item) => ({ id: item.code, label: `${item.code} - ${item.name}` }));
   const moduleOpts = modules.map((item) => ({ id: item.id, label: `${item.code} - ${item.name}` }));
 
-  const openAdd = () => { setModal({ mode: "add" }); setForm({ fullName: "", email: "", phone: "", nicStaffId: "", status: "ACTIVE", facultyIds: [], degreeProgramIds: [], moduleIds: [] }); setFormError(""); };
-  const openEdit = (row: LecturerRecord) => { setModal({ mode: "edit", id: row.id }); setForm({ fullName: row.fullName, email: row.email, phone: row.phone, nicStaffId: row.nicStaffId, status: row.status, facultyIds: [...row.facultyIds], degreeProgramIds: [...row.degreeProgramIds], moduleIds: [...row.moduleIds] }); setFormError(""); };
+  const openAdd = () => { setModal({ mode: "add" }); setForm({ fullName: "", email: "", optionalEmail: "", phone: "", nicStaffId: "", status: "ACTIVE", facultyIds: [], degreeProgramIds: [], moduleIds: [] }); setFormError(""); };
+  const openEdit = (row: LecturerRecord) => { setModal({ mode: "edit", id: row.id }); setForm({ fullName: row.fullName, email: row.email, optionalEmail: row.optionalEmail, phone: row.phone, nicStaffId: row.nicStaffId, status: row.status, facultyIds: [...row.facultyIds], degreeProgramIds: [...row.degreeProgramIds], moduleIds: [...row.moduleIds] }); setFormError(""); };
   const closeModal = () => { if (!saving) setModal(null); };
 
   const save = async () => {
     const fullName = collapseSpaces(form.fullName);
+    // Frontend validation: lecturer must have a display name.
     if (!fullName) { setFormError("Full name is required"); return; }
     setSaving(true);
     try {
+      // Scope lists are optional, but notify when saving an unrestricted lecturer.
       if (form.facultyIds.length === 0 && form.degreeProgramIds.length === 0 && form.moduleIds.length === 0) {
         toast({ title: "No teaching scope selected", message: "Lecturer will be saved without eligibility restrictions.", variant: "info" });
       }
       await readJson(await fetch(modal?.mode === "add" ? "/api/lecturers" : `/api/lecturers/${encodeURIComponent(String(modal?.id ?? ""))}`, {
         method: modal?.mode === "add" ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, phone: collapseSpaces(form.phone), nicStaffId: collapseSpaces(form.nicStaffId), status: form.status, facultyIds: form.facultyIds, degreeProgramIds: form.degreeProgramIds, moduleIds: form.moduleIds }),
+        body: JSON.stringify({ fullName, optionalEmail: sanitizeOptionalEmail(form.optionalEmail), phone: collapseSpaces(form.phone), nicStaffId: collapseSpaces(form.nicStaffId), status: form.status, facultyIds: form.facultyIds, degreeProgramIds: form.degreeProgramIds, moduleIds: form.moduleIds }),
       }));
       toast({ title: "Saved", message: modal?.mode === "add" ? "Lecturer created" : "Lecturer updated", variant: "success" });
       setModal(null);
@@ -434,6 +447,7 @@ export default function LecturersPage() {
               <div className="mt-6"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Basic Info</p><div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <div><label className="mb-1.5 block text-sm font-medium text-heading">Full Name</label><Input className="h-12" disabled={saving} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value, email: modal.mode === "add" ? emailPreview(e.target.value) : p.email }))} value={form.fullName} /></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-heading">Email (Auto)</label><Input className="h-12" disabled value={modal.mode === "add" ? form.email || emailPreview(form.fullName) : form.email} /></div>
+                <div><label className="mb-1.5 block text-sm font-medium text-heading">Optional Email</label><Input className="h-12" disabled={saving} onChange={(e) => setForm((p) => ({ ...p, optionalEmail: sanitizeOptionalEmail(e.target.value) }))} placeholder="Optional" type="email" value={form.optionalEmail} /></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-heading">Phone</label><Input className="h-12" disabled={saving} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} value={form.phone} /></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-heading">NIC / Staff ID</label><Input className="h-12" disabled={saving} onChange={(e) => setForm((p) => ({ ...p, nicStaffId: e.target.value }))} value={form.nicStaffId} /></div>
                 <div><label className="mb-1.5 block text-sm font-medium text-heading">Status</label><Select className="h-12" disabled={saving} onChange={(e) => setForm((p) => ({ ...p, status: sanitizeStatus(e.target.value) }))} value={form.status}><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></Select></div>

@@ -1,16 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import { lecturerPosts } from "@/models/mockData";
-import type { PostItem } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { PostItem } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
 export default function LecturerPostsPage() {
-  const [posts, setPosts] = useState<PostItem[]>(lecturerPosts);
+  const user = useMemo(() => readStoredUser(), []);
+  const [posts, setPosts] = useState<PostItem[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<PostItem[]>(PORTAL_DATA_KEYS.discussionPosts, []).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+
+      setPosts(rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistPosts = (next: PostItem[]) => {
+    void savePortalData(PORTAL_DATA_KEYS.discussionPosts, next)
+      .then((saved) => {
+        setPosts(saved);
+      })
+      .catch(() => null);
+  };
 
   return (
     <div className="space-y-4">
@@ -41,25 +67,26 @@ export default function LecturerPostsPage() {
                   if (!answer) {
                     return;
                   }
-                  setPosts((prev) =>
-                    prev.map((entry) =>
-                      entry.id === post.id
-                        ? {
-                            ...entry,
-                            replies: [
-                              ...entry.replies,
-                              {
-                                id: `reply-${Date.now()}`,
-                                author: "Dr. Liam Harper",
-                                authorId: "u-lecturer",
-                                message: answer,
-                                time: "Just now",
-                              },
-                            ],
-                          }
-                        : entry
-                    )
+
+                  const next = posts.map((entry) =>
+                    entry.id === post.id
+                      ? {
+                          ...entry,
+                          replies: [
+                            ...entry.replies,
+                            {
+                              id: `reply-${Date.now()}`,
+                              author: String(user?.name ?? "Lecturer"),
+                              authorId: String(user?.id ?? "lecturer"),
+                              message: answer,
+                              time: "Just now",
+                            },
+                          ],
+                        }
+                      : entry
                   );
+
+                  persistPosts(next);
                   setAnswers((prev) => ({ ...prev, [post.id]: "" }));
                 }}
                 variant="secondary"
@@ -69,8 +96,12 @@ export default function LecturerPostsPage() {
             </div>
           </Card>
         ))}
+        {posts.length === 0 ? (
+          <Card>
+            <p className="text-sm text-text/72">No posts available yet.</p>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
 }
-

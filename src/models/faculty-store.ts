@@ -48,6 +48,12 @@ function facultyStore() {
   return globalForFacultyStore.__facultyStore;
 }
 
+export function replaceFacultyStore(records: FacultyRecord[]) {
+  globalForFacultyStore.__facultyStore = records.map((record) => ({
+    ...record,
+  }));
+}
+
 function normalizeCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
 }

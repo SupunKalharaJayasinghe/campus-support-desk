@@ -27,6 +27,7 @@ export default function LoginPage() {
     }
 
     const trimmedId = campusIdOrEmail.trim();
+    // Frontend validation: block submit until both identifier and password are filled.
     if (!trimmedId || !password) {
       setError("Campus ID/email and password are required");
       return;
@@ -41,6 +42,12 @@ export default function LoginPage() {
         name: displayName,
         role,
         mustChangePassword: false,
+        facultyCodes: role === "STUDENT" || role === "LECTURER" ? ["FOC"] : [],
+        degreeProgramIds: role === "STUDENT" || role === "LECTURER" ? ["SE"] : [],
+        semesterCode: role === "STUDENT" ? "Y1S1" : undefined,
+        stream: role === "STUDENT" ? "WEEKDAY" : undefined,
+        subgroup: role === "STUDENT" ? "1.1" : undefined,
+        intakeId: role === "STUDENT" ? "intk-2026-june-foc-se" : undefined,
       });
 
       router.push(HOME_BY_ROLE[role]);
@@ -68,6 +75,12 @@ export default function LoginPage() {
               username?: string;
               email?: string;
               mustChangePassword?: boolean;
+              facultyCodes?: string[];
+              degreeProgramIds?: string[];
+              semesterCode?: string;
+              stream?: "WEEKDAY" | "WEEKEND";
+              subgroup?: string;
+              intakeId?: string;
             };
           }
         | null;
@@ -77,6 +90,7 @@ export default function LoginPage() {
       }
 
       const user = payload?.user;
+      // Frontend validation: protect session persistence from malformed API payloads.
       if (!user?.id || !user?.role) {
         throw new Error("Invalid login response");
       }
@@ -88,6 +102,12 @@ export default function LoginPage() {
         username: user.username,
         email: user.email,
         mustChangePassword: Boolean(user.mustChangePassword),
+        facultyCodes: Array.isArray(user.facultyCodes) ? user.facultyCodes : [],
+        degreeProgramIds: Array.isArray(user.degreeProgramIds) ? user.degreeProgramIds : [],
+        semesterCode: user.semesterCode || undefined,
+        stream: user.stream,
+        subgroup: user.subgroup || undefined,
+        intakeId: user.intakeId || undefined,
       });
 
       if (user.mustChangePassword) {

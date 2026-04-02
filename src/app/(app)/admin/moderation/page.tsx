@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { moderationReportsSeed } from "@/models/mockData";
-import type { ModerationReport } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { ModerationReport } from "@/models/portal-types";
 
 function statusVariant(status: ModerationReport["status"]) {
   if (status === "Resolved") {
@@ -18,7 +18,33 @@ function statusVariant(status: ModerationReport["status"]) {
 }
 
 export default function AdminModerationPage() {
-  const [reports, setReports] = useState<ModerationReport[]>(moderationReportsSeed);
+  const [reports, setReports] = useState<ModerationReport[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<ModerationReport[]>(PORTAL_DATA_KEYS.moderationReports, []).then(
+      (rows) => {
+        if (cancelled) {
+          return;
+        }
+
+        setReports(rows);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistReports = (next: ModerationReport[]) => {
+    void savePortalData(PORTAL_DATA_KEYS.moderationReports, next)
+      .then((saved) => {
+        setReports(saved);
+      })
+      .catch(() => null);
+  };
 
   return (
     <div className="space-y-4">
@@ -40,8 +66,8 @@ export default function AdminModerationPage() {
                 {report.status === "Open" ? (
                   <Button
                     onClick={() =>
-                      setReports((prev) =>
-                        prev.map((item) =>
+                      persistReports(
+                        reports.map((item) =>
                           item.id === report.id ? { ...item, status: "Under Review" } : item
                         )
                       )
@@ -54,8 +80,8 @@ export default function AdminModerationPage() {
                 {report.status !== "Resolved" ? (
                   <Button
                     onClick={() =>
-                      setReports((prev) =>
-                        prev.map((item) =>
+                      persistReports(
+                        reports.map((item) =>
                           item.id === report.id ? { ...item, status: "Resolved" } : item
                         )
                       )
@@ -69,8 +95,12 @@ export default function AdminModerationPage() {
             </div>
           </Card>
         ))}
+        {reports.length === 0 ? (
+          <Card>
+            <p className="text-sm text-text/72">No moderation reports available.</p>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
 }
-

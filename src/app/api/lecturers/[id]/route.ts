@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLecturerName,
   sanitizeLecturerNicStaffId,
+  sanitizeLecturerOptionalEmail,
   sanitizeLecturerPhone,
   sanitizeLecturerStatus,
   sanitizeModuleIdList,
@@ -24,9 +25,11 @@ import { getMongoDuplicateField } from "@/models/student-registration";
 import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
+import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lecturer-sync";
 
 interface LecturerWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -43,6 +46,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInpu
 
   return {
     fullName,
+    optionalEmail: sanitizeLecturerOptionalEmail(body.optionalEmail),
     phone: sanitizeLecturerPhone(body.phone),
     nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
     status: sanitizeLecturerStatus(body.status),
@@ -73,13 +77,11 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-  if (!mongooseConnection) {
-    const row = findLecturerInMemoryById(lecturerId);
-    if (!row) {
-      return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(toApiLecturer(row));
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const row = await LecturerModel.findById(lecturerId).lean().exec().catch(() => null);
@@ -137,27 +139,11 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      try {
-        const updated = updateLecturerInMemory({
-          id: lecturerId,
-          ...input,
-          ...validated,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
-        }
-
-        return NextResponse.json(toApiLecturer(updated));
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update lecturer";
-        if (message === "NIC/Staff ID already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const row = await LecturerModel.findById(lecturerId).exec();
@@ -166,6 +152,7 @@ export async function PUT(
     }
 
     row.fullName = input.fullName;
+    row.optionalEmail = input.optionalEmail;
     row.phone = input.phone;
     row.nicStaffId = input.nicStaffId;
     row.status = input.status;
@@ -204,6 +191,19 @@ export async function PUT(
       return NextResponse.json({ message: "Failed to map lecturer" }, { status: 500 });
     }
 
+    await syncLecturerAssignmentsAcrossModuleOfferings(
+      {
+        lecturerId: parsed.id,
+        fullName: parsed.fullName,
+        email: parsed.email,
+        status: parsed.status,
+        facultyIds: parsed.facultyIds,
+        degreeProgramIds: parsed.degreeProgramIds,
+        moduleIds: parsed.moduleIds,
+      },
+      { mongooseConnection }
+    ).catch(() => null);
+
     return NextResponse.json(toApiLecturer(parsed));
   } catch (error) {
     return NextResponse.json(
@@ -227,21 +227,11 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const assignedOfferings = listModuleOfferingsByLecturerId(lecturerId);
-      if (assignedOfferings.length > 0) {
-        return NextResponse.json(
-          { message: "Lecturer is assigned to module offerings" },
-          { status: 409 }
-        );
-      }
-
-      const deleted = deleteLecturerInMemory(lecturerId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Lecturer not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const assignedOfferingExists = Boolean(
@@ -264,16 +254,21 @@ export async function DELETE(
     const lecturerObjectId = mongoose.Types.ObjectId.isValid(lecturerId)
       ? new mongoose.Types.ObjectId(lecturerId)
       : null;
-    await UserModel.updateMany(
+    const normalizedEmail = String(deletedRow.email ?? "").trim().toLowerCase();
+    await UserModel.deleteMany(
       lecturerObjectId
-        ? { $or: [{ lecturerRef: lecturerObjectId }, { email: deletedRow.email }] }
-        : { email: deletedRow.email },
-      {
-        $set: {
-          status: "INACTIVE",
-          mustChangePassword: false,
-        },
-      }
+        ? {
+            role: "LECTURER",
+            $or: [
+              { lecturerRef: lecturerObjectId },
+              { email: normalizedEmail },
+              { username: normalizedEmail },
+            ],
+          }
+        : {
+            role: "LECTURER",
+            $or: [{ email: normalizedEmail }, { username: normalizedEmail }],
+          }
     ).catch(() => null);
 
     return NextResponse.json({ ok: true });

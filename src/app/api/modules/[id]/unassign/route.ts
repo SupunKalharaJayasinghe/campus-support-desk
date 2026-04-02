@@ -1,14 +1,10 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
+import "@/models/Module";
 import "@/models/ModuleOffering";
 import { connectMongoose } from "@/models/mongoose";
+import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
-import {
-  deleteModuleOffering,
-  hasModuleOfferingProgress,
-  listModuleOfferingsByModuleId,
-} from "@/models/module-offering-store";
-import { findModuleById } from "@/models/module-store";
 
 interface UnassignRequestBody {
   offeringIds?: string[];
@@ -18,6 +14,14 @@ interface UnassignRequestBody {
 interface BlockedOfferingItem {
   offeringId: string;
   message: string;
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
 }
 
 function extractOfferingIds(value: unknown) {
@@ -50,18 +54,60 @@ function isLocked(row: {
   return Boolean(row.hasGrades || row.hasAttendance || row.hasContent);
 }
 
+function toModuleLookup(value: unknown) {
+  const row = asObject(value);
+  if (!row) {
+    return null;
+  }
+
+  const id = String(row._id ?? row.id ?? "").trim();
+  const code = normalizeModuleCode(row.code);
+  if (!id || !code) {
+    return null;
+  }
+
+  return { id, code };
+}
+
+async function findModuleDocument(moduleParam: string) {
+  if (!moduleParam) {
+    return null;
+  }
+
+  if (mongoose.Types.ObjectId.isValid(moduleParam)) {
+    const byId = await ModuleModel.findById(moduleParam).lean().exec().catch(() => null);
+    if (byId) {
+      return byId;
+    }
+  }
+
+  const code = normalizeModuleCode(moduleParam);
+  if (!code) {
+    return null;
+  }
+
+  return ModuleModel.findOne({ code }).lean().exec().catch(() => null);
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const moduleId = String(params.id ?? "").trim();
-  if (!moduleId) {
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
+
+  const moduleParam = String(params.id ?? "").trim();
+  if (!moduleParam) {
     return NextResponse.json({ message: "Module id is required" }, { status: 400 });
   }
 
-  const moduleRecord = findModuleById(moduleId);
-  if (!moduleRecord) {
+  const moduleLookup = toModuleLookup(await findModuleDocument(moduleParam));
+  if (!moduleLookup) {
     return NextResponse.json({ message: "Module not found" }, { status: 404 });
   }
 
@@ -80,102 +126,63 @@ export async function POST(
   const removedOfferingIds: string[] = [];
   const requestedCount = unassignAll ? undefined : offeringIds.length;
 
-  const mongooseCandidates = unassignAll
-    ? null
-    : offeringIds
-        .filter((id) => mongoose.Types.ObjectId.isValid(id))
-        .map((id) => new mongoose.Types.ObjectId(id));
+  const mongooseCandidates = offeringIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
 
-  const dbRows = mongooseConnection
-    ? ((await ModuleOfferingModel.find(
-        unassignAll
-          ? { moduleId }
-          : {
-              moduleId,
-              _id: { $in: mongooseCandidates ?? [] },
-            }
-      )
-        .select("_id hasGrades hasAttendance hasContent")
-        .lean()
-        .exec()
-        .catch(() => [])) as unknown[])
-    : [];
+  const dbRows = (await ModuleOfferingModel.find(
+    unassignAll
+      ? { $or: [{ moduleId: moduleLookup.id }, { moduleCode: moduleLookup.code }] }
+      : {
+          $or: [{ moduleId: moduleLookup.id }, { moduleCode: moduleLookup.code }],
+          _id: { $in: mongooseCandidates },
+        }
+  )
+    .select("_id hasGrades hasAttendance hasContent")
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
 
-  if (dbRows.length > 0) {
-    const deletableObjectIds: mongoose.Types.ObjectId[] = [];
+  const deletableObjectIds: mongoose.Types.ObjectId[] = [];
 
-    dbRows.forEach((row) => {
-      const normalizedRow = asObject(row);
-      if (!normalizedRow) {
-        return;
-      }
-
-      const offeringId = String(normalizedRow._id ?? "").trim();
-      if (!offeringId) {
-        return;
-      }
-
-      if (isLocked(normalizedRow)) {
-        blocked.push({
-          offeringId,
-          message: "Offering has grades, attendance, or content data",
-        });
-        return;
-      }
-
-      if (mongoose.Types.ObjectId.isValid(offeringId)) {
-        deletableObjectIds.push(new mongoose.Types.ObjectId(offeringId));
-        removedOfferingIds.push(offeringId);
-      }
-    });
-
-    if (deletableObjectIds.length > 0) {
-      await ModuleOfferingModel.deleteMany({
-        _id: { $in: deletableObjectIds },
-      }).catch(() => null);
+  dbRows.forEach((row) => {
+    const normalizedRow = asObject(row);
+    if (!normalizedRow) {
+      return;
     }
 
-    return NextResponse.json(
-      {
-        moduleId,
-        removedCount: removedOfferingIds.length,
-        removedOfferingIds,
-        blocked,
-        requestedCount: requestedCount ?? dbRows.length,
-      },
-      {
-        status: blocked.length > 0 ? 409 : 200,
-      }
-    );
-  }
+    const offeringId = String(normalizedRow._id ?? "").trim();
+    if (!offeringId) {
+      return;
+    }
 
-  const storeOfferings = listModuleOfferingsByModuleId(moduleId);
-  const selectedSet = new Set(offeringIds);
-  const targets = unassignAll
-    ? storeOfferings
-    : storeOfferings.filter((offering) => selectedSet.has(offering.id));
-
-  targets.forEach((offering) => {
-    if (hasModuleOfferingProgress(offering)) {
+    if (isLocked(normalizedRow)) {
       blocked.push({
-        offeringId: offering.id,
+        offeringId,
         message: "Offering has grades, attendance, or content data",
       });
       return;
     }
 
-    if (deleteModuleOffering(offering.id)) {
-      removedOfferingIds.push(offering.id);
+    if (mongoose.Types.ObjectId.isValid(offeringId)) {
+      deletableObjectIds.push(new mongoose.Types.ObjectId(offeringId));
+      removedOfferingIds.push(offeringId);
     }
   });
 
+  if (deletableObjectIds.length > 0) {
+    await ModuleOfferingModel.deleteMany({
+      _id: { $in: deletableObjectIds },
+    }).catch(() => null);
+  }
+
   return NextResponse.json(
     {
-      moduleId,
+      moduleId: moduleLookup.id,
       removedCount: removedOfferingIds.length,
       removedOfferingIds,
       blocked,
-      requestedCount: requestedCount ?? targets.length,
+      requestedCount: requestedCount ?? dbRows.length,
     },
     {
       status: blocked.length > 0 ? 409 : 200,

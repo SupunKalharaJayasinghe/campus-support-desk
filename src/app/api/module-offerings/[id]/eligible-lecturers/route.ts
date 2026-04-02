@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Lecturer";
 import "@/models/ModuleOffering";
-import { findIntakeById } from "@/models/intake-store";
 import {
   listLecturersInMemory,
   toLecturerPersistedRecordFromUnknown,
@@ -10,26 +9,12 @@ import {
 } from "@/models/lecturer-store";
 import { connectMongoose } from "@/models/mongoose";
 import { findModuleOfferingById } from "@/models/module-offering-store";
-import {
-  isStaffEligibleForOffering,
-  normalizeAcademicCode,
-  sanitizeId,
-  staffEligibilityMongoFilter,
-  type OfferingEligibilityScope,
-} from "@/models/staff-eligibility";
-import { findModuleByCode, findModuleById } from "@/models/module-store";
 import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function toApiItem(row: Pick<LecturerPersistedRecord, "id" | "fullName" | "email" | "status">) {
+function toApiItem(
+  row: Pick<LecturerPersistedRecord, "id" | "fullName" | "email" | "status">
+) {
   return {
     _id: row.id,
     id: row.id,
@@ -39,116 +24,66 @@ function toApiItem(row: Pick<LecturerPersistedRecord, "id" | "fullName" | "email
   };
 }
 
-function getScopeFromDbRow(value: unknown): OfferingEligibilityScope | null {
-  const row = asObject(value);
-  if (!row) {
-    return null;
-  }
-
-  const intakeId = sanitizeId(row.intakeId);
-  const moduleId = sanitizeId(row.moduleId);
-  const moduleCode = normalizeModuleCode(row.moduleCode);
-  const moduleRecord = findModuleByCode(moduleCode) ?? findModuleById(moduleId);
-  const resolvedModuleId = moduleRecord?.id ?? moduleId;
-  const resolvedModuleCode = moduleRecord?.code ?? moduleCode;
-  if (!intakeId || (!resolvedModuleId && !resolvedModuleCode)) {
-    return null;
-  }
-  const intake = findIntakeById(intakeId);
-
-  const facultyCode = normalizeAcademicCode(
-    row.facultyCode ?? row.facultyId ?? intake?.facultyCode
-  );
-  const degreeCode = normalizeAcademicCode(
-    row.degreeCode ?? row.degreeProgramId ?? intake?.degreeCode
-  );
-
-  if (!facultyCode || !degreeCode) {
-    return null;
-  }
-
-  return {
-    facultyCode,
-    degreeCode,
-    moduleCode: resolvedModuleCode,
-    moduleId: resolvedModuleId,
-  };
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function normalizeModuleCode(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 16);
+function matchesSearch(
+  row: Pick<LecturerPersistedRecord, "fullName" | "email">,
+  search: string
+) {
+  if (!search) {
+    return true;
+  }
+
+  return `${row.fullName} ${row.email}`.toLowerCase().includes(search);
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   const offeringId = String(params.id ?? "").trim();
   if (!offeringId) {
-    return NextResponse.json({ message: "Module offering id is required" }, { status: 400 });
+    return NextResponse.json(
+      { message: "Module offering id is required" },
+      { status: 400 }
+    );
   }
 
+  const { searchParams } = new URL(request.url);
+  const search = normalizeSearch(searchParams.get("search"));
   const mongooseConnection = await connectMongoose().catch(() => null);
-  let scope: OfferingEligibilityScope | null = null;
 
+  let offeringExists = false;
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
-    const offeringRow = await ModuleOfferingModel.findById(offeringId)
-      .select({
-        facultyCode: 1,
-        facultyId: 1,
-        degreeCode: 1,
-        degreeProgramId: 1,
-        intakeId: 1,
-        moduleCode: 1,
-        moduleId: 1,
-      })
-      .lean()
-      .exec()
-      .catch(() => null);
-    scope = getScopeFromDbRow(offeringRow);
+    offeringExists = Boolean(
+      await ModuleOfferingModel.exists({ _id: offeringId }).catch(() => null)
+    );
   }
-
-  if (!scope) {
-    const offering = findModuleOfferingById(offeringId);
-    if (offering) {
-      scope = {
-        facultyCode: offering.facultyCode ?? offering.facultyId,
-        degreeCode: offering.degreeCode ?? offering.degreeProgramId,
-        moduleCode: offering.moduleCode,
-        moduleId: offering.moduleId,
-      };
-    }
+  if (!offeringExists) {
+    offeringExists = Boolean(findModuleOfferingById(offeringId));
   }
-
-  if (!scope) {
+  if (!offeringExists) {
     return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
   }
 
-  if (!mongooseConnection) {
-    const items = listLecturersInMemory({ status: "ACTIVE", sort: "az" })
-      .filter((row) =>
-        isStaffEligibleForOffering(
-          {
-            facultyIds: row.facultyIds,
-            degreeProgramIds: row.degreeProgramIds,
-            moduleIds: row.moduleIds,
-          },
-          scope as OfferingEligibilityScope
-        )
-      )
-      .map((row) => toApiItem(row));
-
-    return NextResponse.json({
-      items,
-      total: items.length,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
-  const query = staffEligibilityMongoFilter(scope);
+  const query: Record<string, unknown> = { status: "ACTIVE" };
+  if (search) {
+    const regex = new RegExp(escapeRegex(search), "i");
+    query.$or = [{ fullName: regex }, { email: regex }];
+  }
 
   const rows = (await LecturerModel.find(query)
     .sort({ fullName: 1 })
@@ -159,6 +94,7 @@ export async function GET(
   const items = rows
     .map((row) => toLecturerPersistedRecordFromUnknown(row))
     .filter((row): row is LecturerPersistedRecord => Boolean(row))
+    .filter((row) => matchesSearch(row, search))
     .map((row) => toApiItem(row));
 
   return NextResponse.json({

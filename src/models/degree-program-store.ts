@@ -127,6 +127,12 @@ function degreeProgramStore() {
   return globalForDegreePrograms.__degreeProgramStore;
 }
 
+export function replaceDegreeProgramStore(records: DegreeProgramRecord[]) {
+  globalForDegreePrograms.__degreeProgramStore = records.map((record) => ({
+    ...record,
+  }));
+}
+
 function normalizeCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
 }

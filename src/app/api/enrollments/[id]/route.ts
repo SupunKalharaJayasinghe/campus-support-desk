@@ -5,15 +5,13 @@ import "@/models/Student";
 import { connectMongoose } from "@/models/mongoose";
 import {
   decorateEnrollmentRecord,
-  deleteEnrollmentInMemory,
-  findEnrollmentInMemoryById,
   isMongoDuplicateKeyError,
   sanitizeStudentStatus,
   sanitizeStudentStream,
   sanitizeSubgroup,
-  updateEnrollmentInMemory,
   validateStudentRelations,
   type EnrollmentPersistedRecord,
+  type StudentStream,
 } from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
@@ -84,6 +82,30 @@ function toApiEnrollmentResponseItem(
   };
 }
 
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const query: Record<string, unknown> = {
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    subgroup,
+  };
+
+  const exists = await EnrollmentModel.exists(query).catch(() => null);
+  return Boolean(exists);
+}
+
 async function hasLockedEnrollmentData(enrollmentId: mongoose.Types.ObjectId | string) {
   const database = mongoose.connection.db;
   if (!database) {
@@ -143,6 +165,14 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     const enrollmentId = String(params.id ?? "").trim();
     if (!enrollmentId) {
       return NextResponse.json({ message: "Enrollment id is required" }, { status: 400 });
@@ -156,56 +186,6 @@ export async function PUT(
     const incomingStream = sanitizeStudentStream(body.stream);
     const hasSubgroup = Object.prototype.hasOwnProperty.call(body, "subgroup");
     const incomingSubgroup = sanitizeSubgroup(body.subgroup);
-
-    const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const existing = findEnrollmentInMemoryById(enrollmentId);
-      if (!existing) {
-        return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-      }
-
-      const nextIntakeId = incomingIntakeId || existing.intakeId;
-      const nextStream = incomingStream ?? existing.stream;
-      const nextStatus = sanitizeStudentStatus(body.status ?? existing.status);
-      const nextSubgroup = hasSubgroup ? incomingSubgroup : existing.subgroup || null;
-
-      try {
-        validateStudentRelations({
-          facultyId: existing.facultyId,
-          degreeProgramId: existing.degreeProgramId,
-          intakeId: nextIntakeId,
-        });
-      } catch (error) {
-        return NextResponse.json(
-          { message: error instanceof Error ? error.message : "Invalid enrollment data" },
-          { status: 400 }
-        );
-      }
-
-      try {
-        const updated = updateEnrollmentInMemory(enrollmentId, {
-          intakeId: nextIntakeId,
-          stream: nextStream,
-          subgroup: nextSubgroup,
-          status: nextStatus,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-        }
-
-        return NextResponse.json({
-          enrollment: toApiEnrollmentResponseItem(updated),
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update enrollment";
-        if (message === "Student already enrolled in this intake") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        return NextResponse.json({ message }, { status: 400 });
-      }
-    }
 
     const current = await EnrollmentModel.findById(enrollmentId).exec();
     if (!current) {
@@ -228,6 +208,23 @@ export async function PUT(
     } catch (error) {
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid enrollment data" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: String(current.facultyId ?? "").trim().toUpperCase(),
+        degreeProgramId: String(current.degreeProgramId ?? "")
+          .trim()
+          .toUpperCase(),
+        intakeId: nextIntakeId,
+        stream: nextStream,
+        subgroup: nextSubgroup,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
         { status: 400 }
       );
     }
@@ -299,13 +296,11 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const deleted = deleteEnrollmentInMemory(enrollmentId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const current = await EnrollmentModel.findById(enrollmentId).exec();
