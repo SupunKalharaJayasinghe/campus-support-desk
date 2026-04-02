@@ -192,6 +192,9 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   if (normalized === "ADMIN" || normalized === "SUPER_ADMIN") {
     return "SUPER_ADMIN";
   }
+  if (normalized === "LOST_ITEM_ADMIN" || normalized === "LOST_ITEM_STAFF") {
+    return "LOST_ITEM_STAFF";
+  }
   if (normalized === "LECTURER") {
     return "LECTURER";
   }

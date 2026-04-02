@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     }
 
     const role = toAppRoleFromUserRole(user.role);
-    let displayName = String(user.username ?? "User").trim();
+    let displayName = String(user.fullName ?? "").trim() || String(user.username ?? "User").trim();
     let facultyCodes: string[] = [];
     let degreeProgramIds: string[] = [];
     let semesterCode = "";

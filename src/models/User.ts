@@ -2,6 +2,12 @@ import mongoose, { Schema } from "mongoose";
 
 const UserSchema = new Schema(
   {
+    fullName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 160,
+    },
     username: {
       type: String,
       required: true,
@@ -18,7 +24,7 @@ const UserSchema = new Schema(
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
+      enum: ["ADMIN", "LOST_ITEM_ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },
