@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
+import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { UserModel } from "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
 
@@ -59,6 +60,19 @@ export async function GET() {
   const postCountByUser = new Map(postGroups.map((g) => [String(g._id), g.count]));
   const replyCountByUser = new Map(replyGroups.map((g) => [String(g._id), g.count]));
 
+  let communityProfileUserIds = new Set<string>();
+  if (userIds.length > 0) {
+    const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
+      .select("userRef")
+      .lean()
+      .exec();
+    for (const doc of profiles) {
+      const lean = doc as unknown as { userRef?: unknown };
+      const ref = lean?.userRef;
+      if (ref != null) communityProfileUserIds.add(String(ref));
+    }
+  }
+
   const items = users.map((userRow) => {
     const uid = String(userRow._id);
     const username = String(userRow.username ?? "").trim();
@@ -67,12 +81,14 @@ export async function GET() {
     const accountInactive = userRow.status === "INACTIVE";
     return {
       id: username || uid,
+      userId: uid,
       name: username || uid,
       email: String(userRow.email ?? "").trim().toLowerCase(),
       role: "Student" as const,
       joinedAt: formatJoinedAt(userRow.createdAt),
       contributions: posts + replies,
       status: accountInactive ? ("Suspended" as const) : ("Active" as const),
+      hasCommunityProfile: communityProfileUserIds.has(uid),
     };
   });
 
