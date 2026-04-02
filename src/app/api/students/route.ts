@@ -212,14 +212,27 @@ async function reserveNextStudentIdentityInDb(intakeId: string) {
 
   const counter = (await CounterModel.findOneAndUpdate(
     { key: prefixKey },
-    {
-      $setOnInsert: { key: prefixKey, seq: seed - 1 },
-      $inc: { seq: 1 },
-    },
+    [
+      {
+        $set: {
+          key: prefixKey,
+          seq: {
+            $add: [
+              {
+                $max: [
+                  { $ifNull: ["$seq", seed - 1] },
+                  seed - 1,
+                ],
+              },
+              1,
+            ],
+          },
+        },
+      },
+    ],
     {
       upsert: true,
       new: true,
-      setDefaultsOnInsert: true,
     }
   )
     .lean()

@@ -86,6 +86,11 @@ interface IntakeOption {
   status: string;
 }
 
+interface SubgroupOption {
+  code: string;
+  count: number;
+}
+
 interface StudentsResponse {
   items: StudentRecord[];
   total: number;
@@ -366,6 +371,36 @@ function parseIntakes(payload: unknown): IntakeOption[] {
     .filter((item): item is IntakeOption => Boolean(item));
 }
 
+function parseSubgroups(payload: unknown): SubgroupOption[] {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
+  const grouped = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const item = asObject(row);
+    if (!item) {
+      return;
+    }
+
+    const code = collapseSpaces(item.code);
+    if (!code) {
+      return;
+    }
+
+    const count = Math.max(0, Number(item.count) || 0);
+    grouped.set(code, (grouped.get(code) ?? 0) + count);
+  });
+
+  return Array.from(grouped.entries())
+    .sort((left, right) =>
+      left[0].localeCompare(right[0], undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    )
+    .map(([code, count]) => ({ code, count }));
+}
+
 export default function StudentsAdminPage() {
   const { toast } = useToast();
   const { setActiveWindow } = useAdminContext();
@@ -380,6 +415,7 @@ export default function StudentsAdminPage() {
   const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
   const [isLoadingIntakeTerm, setIsLoadingIntakeTerm] = useState(false);
+  const [isLoadingSubgroups, setIsLoadingSubgroups] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | StudentStatus>("");
@@ -390,10 +426,12 @@ export default function StudentsAdminPage() {
   const [faculties, setFaculties] = useState<FacultyOption[]>([]);
   const [degreeOptions, setDegreeOptions] = useState<DegreeOption[]>([]);
   const [intakeOptions, setIntakeOptions] = useState<IntakeOption[]>([]);
+  const [subgroupOptions, setSubgroupOptions] = useState<SubgroupOption[]>([]);
 
   const [modal, setModal] = useState<StudentModalState | null>(null);
   const [form, setForm] = useState<StudentFormState>(emptyForm());
   const [selectedIntakeTerm, setSelectedIntakeTerm] = useState("");
+  const [isCustomSubgroup, setIsCustomSubgroup] = useState(false);
   const [formError, setFormError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] =
@@ -402,6 +440,7 @@ export default function StudentsAdminPage() {
   const deferredSearch = useDeferredValue(searchQuery);
   const previewRequestIdRef = useRef(0);
   const intakeTermRequestIdRef = useRef(0);
+  const subgroupRequestIdRef = useRef(0);
   const isOverlayOpen = Boolean(modal || deleteTarget || resetPasswordTarget);
 
   const loadStudents = useCallback(
@@ -558,6 +597,63 @@ export default function StudentsAdminPage() {
     }
   }, [intakeOptions]);
 
+  const loadSubgroups = useCallback(
+    async (input: {
+      intakeId: string;
+      facultyId?: string;
+      degreeProgramId?: string;
+      stream?: StudentStream;
+    }) => {
+      const intakeId = String(input.intakeId ?? "").trim();
+      if (!intakeId) {
+        setSubgroupOptions([]);
+        return;
+      }
+
+      const requestId = subgroupRequestIdRef.current + 1;
+      subgroupRequestIdRef.current = requestId;
+      setIsLoadingSubgroups(true);
+
+      try {
+        const params = new URLSearchParams();
+        const facultyId = normalizeAcademicCode(input.facultyId);
+        const degreeProgramId = normalizeAcademicCode(input.degreeProgramId);
+        if (facultyId) {
+          params.set("facultyId", facultyId);
+        }
+        if (degreeProgramId) {
+          params.set("degreeProgramId", degreeProgramId);
+        }
+        if (input.stream === "WEEKDAY" || input.stream === "WEEKEND") {
+          params.set("stream", input.stream);
+        }
+        params.set("status", "ACTIVE");
+
+        const response = await fetch(
+          `/api/intakes/${encodeURIComponent(intakeId)}/subgroups?${params.toString()}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson<unknown>(response);
+        if (subgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSubgroupOptions(parseSubgroups(payload));
+      } catch {
+        if (subgroupRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSubgroupOptions([]);
+      } finally {
+        if (subgroupRequestIdRef.current === requestId) {
+          setIsLoadingSubgroups(false);
+        }
+      }
+    },
+    []
+  );
+
   const loadPreview = useCallback(async (intakeId: string) => {
     const nextIntakeId = String(intakeId ?? "").trim();
     if (!nextIntakeId) {
@@ -660,13 +756,16 @@ export default function StudentsAdminPage() {
   const openAddModal = () => {
     setModal({ mode: "add" });
     setForm(emptyForm());
+    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
+    setSubgroupOptions([]);
     setSelectedIntakeTerm("");
     setFormError("");
     setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
+    setIsLoadingSubgroups(false);
   };
 
   const openEditModal = (student: StudentRecord) => {
@@ -686,13 +785,16 @@ export default function StudentsAdminPage() {
       studentId: student.studentId,
       email: student.email,
     });
+    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
+    setSubgroupOptions([]);
     setSelectedIntakeTerm("");
     setFormError("");
     setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
+    setIsLoadingSubgroups(false);
   };
 
   const closeModal = () => {
@@ -702,13 +804,16 @@ export default function StudentsAdminPage() {
 
     setModal(null);
     setForm(emptyForm());
+    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
+    setSubgroupOptions([]);
     setSelectedIntakeTerm("");
     setFormError("");
     setResetPasswordTarget(null);
     setIsLoadingPreview(false);
     setIsLoadingIntakeTerm(false);
+    setIsLoadingSubgroups(false);
   };
 
   const validateForm = () => {
@@ -902,6 +1007,20 @@ export default function StudentsAdminPage() {
       ),
     [degreeOptions, form.facultyId]
   );
+
+  const subgroupSelectValue = useMemo(() => {
+    if (isCustomSubgroup) {
+      return "__custom__";
+    }
+
+    const subgroup = collapseSpaces(form.subgroup);
+    if (!subgroup) {
+      return "";
+    }
+
+    const hasMatchingOption = subgroupOptions.some((item) => item.code === subgroup);
+    return hasMatchingOption ? subgroup : "__custom__";
+  }, [form.subgroup, isCustomSubgroup, subgroupOptions]);
 
   return (
     <div className="space-y-5">
@@ -1213,17 +1332,21 @@ export default function StudentsAdminPage() {
                         disabled={isSaving}
                         onChange={(event) => {
                           const facultyId = normalizeAcademicCode(event.target.value);
+                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             facultyId,
                             degreeProgramId: "",
                             intakeId: "",
+                            subgroup: "",
                             studentId: "",
                             email: "",
                           }));
                           setIntakeOptions([]);
+                          setSubgroupOptions([]);
                           setSelectedIntakeTerm("");
                           setIsLoadingIntakeTerm(false);
+                          setIsLoadingSubgroups(false);
                           void loadDegrees(facultyId);
                         }}
                         value={form.facultyId}
@@ -1244,15 +1367,19 @@ export default function StudentsAdminPage() {
                         disabled={isSaving || !form.facultyId || isLoadingDegrees}
                         onChange={(event) => {
                           const degreeProgramId = normalizeAcademicCode(event.target.value);
+                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             degreeProgramId,
                             intakeId: "",
+                            subgroup: "",
                             studentId: "",
                             email: "",
                           }));
+                          setSubgroupOptions([]);
                           setSelectedIntakeTerm("");
                           setIsLoadingIntakeTerm(false);
+                          setIsLoadingSubgroups(false);
                           void loadIntakes(form.facultyId, degreeProgramId);
                         }}
                         value={form.degreeProgramId}
@@ -1275,14 +1402,22 @@ export default function StudentsAdminPage() {
                         disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
                         onChange={(event) => {
                           const intakeId = String(event.target.value ?? "").trim();
+                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             intakeId,
+                            subgroup: "",
                             studentId: "",
                             email: "",
                           }));
                           void loadIntakeTerm(intakeId);
                           void loadPreview(intakeId);
+                          void loadSubgroups({
+                            intakeId,
+                            facultyId: form.facultyId,
+                            degreeProgramId: form.degreeProgramId,
+                            stream: form.stream,
+                          });
                         }}
                         value={form.intakeId}
                       >
@@ -1322,12 +1457,21 @@ export default function StudentsAdminPage() {
                       <Select
                         className="h-12"
                         disabled={isSaving}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const stream = sanitizeStudentStream(event.target.value);
+                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
-                            stream: sanitizeStudentStream(event.target.value),
-                          }))
-                        }
+                            stream,
+                            subgroup: "",
+                          }));
+                          void loadSubgroups({
+                            intakeId: form.intakeId,
+                            facultyId: form.facultyId,
+                            degreeProgramId: form.degreeProgramId,
+                            stream,
+                          });
+                        }}
                         value={form.stream}
                       >
                         <option value="WEEKDAY">WEEKDAY</option>
@@ -1337,15 +1481,66 @@ export default function StudentsAdminPage() {
 
                     <div>
                       <label className="mb-1.5 block text-sm font-medium text-heading">Subgroup</label>
-                      <Input
+                      <Select
                         className="h-12"
-                        disabled={isSaving}
-                        onChange={(event) =>
-                          setForm((previous) => ({ ...previous, subgroup: event.target.value }))
-                        }
-                        placeholder="Optional"
-                        value={form.subgroup}
-                      />
+                        disabled={isSaving || !form.intakeId}
+                        onChange={(event) => {
+                          const value = String(event.target.value ?? "").trim();
+                          if (value === "__custom__") {
+                            setIsCustomSubgroup(true);
+                            setForm((previous) => ({
+                              ...previous,
+                              subgroup:
+                                subgroupSelectValue === "__custom__"
+                                  ? previous.subgroup
+                                  : "",
+                            }));
+                            return;
+                          }
+
+                          setIsCustomSubgroup(false);
+                          setForm((previous) => ({
+                            ...previous,
+                            subgroup: value,
+                          }));
+                        }}
+                        value={subgroupSelectValue}
+                      >
+                        <option value="">
+                          {isLoadingSubgroups ? "Loading..." : "No Subgroup"}
+                        </option>
+                        {subgroupOptions.map((option) => (
+                          <option key={option.code} value={option.code}>
+                            {option.code} ({option.count})
+                          </option>
+                        ))}
+                        <option value="__custom__">Custom subgroup...</option>
+                      </Select>
+                      {isCustomSubgroup || subgroupOptions.length === 0 ? (
+                        <Input
+                          className="mt-2 h-12"
+                          disabled={isSaving || !form.intakeId}
+                          onChange={(event) =>
+                            setForm((previous) => ({
+                              ...previous,
+                              subgroup: event.target.value,
+                            }))
+                          }
+                          placeholder={
+                            subgroupOptions.length === 0
+                              ? "No subgroup found. Enter new subgroup"
+                              : "Enter custom subgroup"
+                          }
+                          value={form.subgroup}
+                        />
+                      ) : null}
+                      <p className="mt-1 text-xs text-text/60">
+                        {form.intakeId
+                          ? subgroupOptions.length > 0
+                            ? "Select an existing subgroup from this intake and stream."
+                            : "No existing subgroups for this intake + stream."
+                          : "Select intake first to load subgroup options."}
+                      </p>
                     </div>
 
                     <div>
