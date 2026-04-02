@@ -61,6 +61,12 @@ const CommunityPostSchema = new Schema(
     enum: ["resolved", "not_resolved"],
     default: "not_resolved",
   },
+
+  /** Optional idempotency key provided by client (prevents duplicate posts on retry). */
+  clientRequestId: {
+    type: String,
+    default: null,
+  },
   
   // URGENT FEATURE
 isUrgent: {
@@ -122,6 +128,8 @@ urgentCardLast4: {
 );
 
 const communityPostModelName = "CommunityPost";
+
+CommunityPostSchema.index({ author: 1, clientRequestId: 1 }, { unique: true, sparse: true });
 
 // Next.js can reuse a cached Mongoose model without new schema fields. Bust cache in dev
 // so `pictureUrl` and other updates are applied. Restart the dev server if issues persist.

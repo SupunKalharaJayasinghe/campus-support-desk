@@ -587,6 +587,7 @@ export default function CommunityProfilePage() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        clientRequestId: draft.id,
                         title: draft.title,
                         description: draft.description,
                         category: draft.category,

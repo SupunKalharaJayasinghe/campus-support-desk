@@ -888,6 +888,7 @@ export default function CommunityPostComposer({
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
 
         const storedUserEarly = readStoredUser();
+        const clientRequestId = draftId ?? (globalThis.crypto?.randomUUID?.() ?? `post-${Date.now()}`);
 
         let urgentCardLast4Resolved: string | null = null;
         let urgentCardPaymentRecordIdOut: string | null =
@@ -1001,6 +1002,7 @@ export default function CommunityPostComposer({
                     authorUsername: storedUser?.username ?? "",
                     authorEmail: storedUser?.email ?? "",
                     authorDisplayName,
+                    clientRequestId,
                     isUrgent,
                     urgentLevel: isUrgent ? urgentLevel : null,
                     urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,

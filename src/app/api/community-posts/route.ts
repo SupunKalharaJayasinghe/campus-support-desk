@@ -39,6 +39,7 @@ type CreatePostPayload = {
   urgentCardLast4?: unknown;
   urgentPrepayId?: unknown;
   urgentCardPaymentRecordId?: unknown;
+  clientRequestId?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -57,9 +58,30 @@ function getLevel(points: number) {
   return "BEGINNER";
 }
 
+function isRetryableMongoNetworkError(error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  const message =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String((error as { name?: unknown }).name ?? "")
+      : "";
+  return (
+    code === "ECONNRESET" ||
+    message.includes("ECONNRESET") ||
+    name === "MongoNetworkError"
+  );
+}
+
 export async function POST(req: Request) {
-  try {
-    await connectDB();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await connectDB();
     let body: CreatePostPayload;
     try {
       body = (await req.json()) as CreatePostPayload;
@@ -75,6 +97,7 @@ export async function POST(req: Request) {
       toTrimmedString(body.authorDisplayName) ||
       toTrimmedString(body.authorName) ||
       "Community User";
+    const clientRequestId = toTrimmedString(body.clientRequestId);
 
     if (!title || !description || !ALLOWED_CATEGORIES.has(category)) {
       return Response.json(
@@ -115,6 +138,26 @@ export async function POST(req: Request) {
       email: body.authorEmail,
       name: body.authorName,
     });
+    if (clientRequestId) {
+      const existingPost = await CommunityPost.findOne({
+        author: authorId,
+        clientRequestId,
+      })
+        .lean()
+        .exec()
+        .catch(() => null);
+      if (existingPost) {
+        return Response.json(
+          {
+            ...(existingPost as Record<string, unknown>),
+            likesCount: 0,
+            likedByCurrentUser: false,
+            reportedByCurrentUser: false,
+          },
+          { status: 200 }
+        );
+      }
+    }
     if (!authorId) {
       return Response.json(
         { error: "Only logged-in users can create posts" },
@@ -230,19 +273,56 @@ export async function POST(req: Request) {
           urgentCardPaymentRecordRaw &&
           mongoose.Types.ObjectId.isValid(urgentCardPaymentRecordRaw)
         ) {
-          const payRow = await CommunityUrgentCardPaymentModel.findOne({
+          const payRowPending = await CommunityUrgentCardPaymentModel.findOne({
             _id: urgentCardPaymentRecordRaw,
             userRef: authorId,
             status: "pending",
-          }).lean();
-          const pay = payRow as {
-            urgentLevel?: string;
-            amountRs?: number;
-            cardLast4?: string | null;
-          } | null;
+          })
+            .lean()
+            .exec()
+            .catch(() => null);
+
+          const payRowAny = payRowPending
+            ? payRowPending
+            : await CommunityUrgentCardPaymentModel.findOne({
+                _id: urgentCardPaymentRecordRaw,
+                userRef: authorId,
+              })
+                .lean()
+                .exec()
+                .catch(() => null);
+
+          const pay = payRowAny as
+            | {
+                urgentLevel?: string;
+                amountRs?: number;
+                cardLast4?: string | null;
+                status?: string;
+                postRef?: unknown;
+              }
+            | null;
+
+          if (pay?.status === "consumed" && pay.postRef) {
+            const existingPost = await CommunityPost.findById(pay.postRef)
+              .lean()
+              .exec()
+              .catch(() => null);
+            if (existingPost) {
+              return Response.json(
+                {
+                  ...(existingPost as Record<string, unknown>),
+                  likesCount: 0,
+                  likedByCurrentUser: false,
+                  reportedByCurrentUser: false,
+                },
+                { status: 200 }
+              );
+            }
+          }
+
           if (!pay) {
             return Response.json(
-              { error: "Card payment record not found or already used. Save your card step again." },
+              { error: "Card payment record not found. Save your card step again." },
               { status: 400 }
             );
           }
@@ -263,7 +343,10 @@ export async function POST(req: Request) {
             return Response.json({ error: "Invalid card payment record." }, { status: 400 });
           }
           resolvedLast4 = pl4;
-          urgentCardPaymentIdToConsume = urgentCardPaymentRecordRaw;
+          // Only consume when payment is still pending; if already consumed, allow posting using last4 (idempotent).
+          if (payRowPending) {
+            urgentCardPaymentIdToConsume = urgentCardPaymentRecordRaw;
+          }
         }
         if (!resolvedLast4 || !/^\d{4}$/.test(resolvedLast4)) {
           return Response.json(
@@ -312,6 +395,7 @@ export async function POST(req: Request) {
       status,
       author: authorId,
       authorDisplayName,
+      clientRequestId: clientRequestId || null,
       ...urgentPatch,
     });
 
@@ -335,9 +419,13 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("community-posts POST failed", error);
-    return Response.json({ error: "Failed to create post" }, { status: 500 });
+    } catch (error) {
+      if (attempt < 1 && isRetryableMongoNetworkError(error)) {
+        continue;
+      }
+      console.error("community-posts POST failed", error);
+      return Response.json({ error: "Failed to create post" }, { status: 500 });
+    }
   }
 }
 
