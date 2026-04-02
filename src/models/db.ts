@@ -29,7 +29,11 @@ export async function connectDB() {
     cached.promise = mongoose
       .connect(uri, {
         dbName,
-        serverSelectionTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 10_000,
+        /** Drop stale sockets; helps reduce ECONNRESET after idle (local + Atlas). */
+        maxIdleTimeMS: 60_000,
+        heartbeatFrequencyMS: 10_000,
+        retryWrites: true,
       })
       .then((instance) => {
         console.log(`MongoDB Connected to database: ${dbName}`);

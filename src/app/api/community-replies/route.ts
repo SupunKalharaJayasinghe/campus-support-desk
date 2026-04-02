@@ -1,4 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
+import {
+  COMMUNITY_PROFILE_REQUIRED_MESSAGE,
+  userHasCommunityProfile,
+} from "@/lib/community-profile-guard";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import {
   normalizeOptionalReplyAttachmentUrl,
@@ -7,6 +11,7 @@ import {
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
+import { CommunityProfileModel } from "@/models/CommunityProfile";
 import mongoose from "mongoose";
 
 const MAX_REPLIES_PER_USER_PER_POST = 3;
@@ -49,6 +54,10 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!(await userHasCommunityProfile(authorId))) {
+      return Response.json({ error: COMMUNITY_PROFILE_REQUIRED_MESSAGE }, { status: 403 });
+    }
+
     const postExists = await CommunityPost.exists({ _id: postId });
     if (!postExists) {
       return Response.json({ error: "Post not found" }, { status: 404 });
@@ -89,6 +98,11 @@ export async function POST(req: Request) {
       attachmentUrl: attachmentNorm.value ?? null,
       attachmentName: attachmentNorm.value ? (attachmentLabel ?? null) : null,
     });
+
+    await CommunityProfileModel.updateOne(
+      { userRef: authorId },
+      { $inc: { repliesCount: 1 } }
+    );
 
     return Response.json(
       {

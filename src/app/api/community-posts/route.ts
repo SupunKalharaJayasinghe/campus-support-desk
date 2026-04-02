@@ -12,6 +12,10 @@ import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
 } from "@/lib/validate-community-post-body";
+import {
+  COMMUNITY_PROFILE_REQUIRED_MESSAGE,
+  userHasCommunityProfile,
+} from "@/lib/community-profile-guard";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { CommunityUrgentPrepayModel } from "@/models/communityUrgentPrepay";
 import CommunityPost from "@/models/communityPost";
@@ -163,6 +167,10 @@ export async function POST(req: Request) {
         { error: "Only logged-in users can create posts" },
         { status: 401 }
       );
+    }
+
+    if (!(await userHasCommunityProfile(authorId))) {
+      return Response.json({ error: COMMUNITY_PROFILE_REQUIRED_MESSAGE }, { status: 403 });
     }
 
     const pictureNorm = normalizeOptionalPictureUrl(body.pictureUrl);
@@ -409,6 +417,11 @@ export async function POST(req: Request) {
         { $set: { status: "consumed", postRef: createdPost._id } }
       );
     }
+
+    await CommunityProfileModel.updateOne(
+      { userRef: authorId },
+      { $inc: { postsCount: 1 } }
+    );
 
     return Response.json(
       {

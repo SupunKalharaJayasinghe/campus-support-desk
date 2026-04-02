@@ -23,7 +23,7 @@ import {
     saveCommunityProfileSettings,
     type CommunityProfileSettings,
 } from "@/lib/community-profile";
-import { readStoredUser, updateStoredUser } from "@/lib/rbac";
+import { authHeaders, readStoredUser, updateStoredUser } from "@/lib/rbac";
 
 export default function CommunitySettingsPage() {
     const [form, setForm] = useState<CommunityProfileSettings>(() => readCommunityProfileSettings());
@@ -57,7 +57,7 @@ export default function CommunitySettingsPage() {
 
             const res = await fetch("/api/community-profile", {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...authHeaders() },
                 body: JSON.stringify({
                     userId,
                     displayName: sanitized.displayName,

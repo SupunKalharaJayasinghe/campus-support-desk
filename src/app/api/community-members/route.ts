@@ -4,7 +4,7 @@ import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { UserModel } from "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectDB } from "@/lib/mongodb";
 
 function formatJoinedAt(value: unknown) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -20,8 +20,9 @@ function formatJoinedAt(value: unknown) {
 }
 
 export async function GET() {
-  const conn = await connectMongoose().catch(() => null);
-  if (!conn) {
+  try {
+    await connectDB();
+  } catch {
     return NextResponse.json({ items: [] satisfies unknown[] });
   }
 
@@ -60,16 +61,27 @@ export async function GET() {
   const postCountByUser = new Map(postGroups.map((g) => [String(g._id), g.count]));
   const replyCountByUser = new Map(replyGroups.map((g) => [String(g._id), g.count]));
 
-  let communityProfileUserIds = new Set<string>();
+  const communityProfileUserIds = new Set<string>();
+  const communityProfilePointsByUserId = new Map<string, number>();
+  const adminBonus20UsedByUserId = new Map<string, boolean>();
   if (userIds.length > 0) {
     const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
-      .select("userRef")
+      .select("userRef points adminBonus20Used")
       .lean()
       .exec();
     for (const doc of profiles) {
-      const lean = doc as unknown as { userRef?: unknown };
+      const lean = doc as unknown as {
+        userRef?: unknown;
+        points?: unknown;
+        adminBonus20Used?: unknown;
+      };
       const ref = lean?.userRef;
-      if (ref != null) communityProfileUserIds.add(String(ref));
+      if (ref == null) continue;
+      const uid = String(ref);
+      communityProfileUserIds.add(uid);
+      const pts = Number(lean.points);
+      communityProfilePointsByUserId.set(uid, Number.isFinite(pts) ? pts : 0);
+      adminBonus20UsedByUserId.set(uid, lean.adminBonus20Used === true);
     }
   }
 
@@ -89,6 +101,8 @@ export async function GET() {
       contributions: posts + replies,
       status: accountInactive ? ("Suspended" as const) : ("Active" as const),
       hasCommunityProfile: communityProfileUserIds.has(uid),
+      communityProfilePoints: communityProfilePointsByUserId.get(uid) ?? 0,
+      adminBonus20Used: adminBonus20UsedByUserId.get(uid) ?? false,
     };
   });
 
