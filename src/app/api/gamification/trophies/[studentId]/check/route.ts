@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Student";
 import "@/models/Trophy";
+import {
+  buildDemoTrophyCheckResult,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { checkAllMilestones } from "@/lib/milestone-checker";
 import { connectMongoose } from "@/lib/mongoose";
 import { StudentModel } from "@/models/Student";
@@ -12,19 +16,27 @@ export async function POST(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const studentId = String(params.studentId ?? "").trim();
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
       );
+    }
+
+    if (!mongooseConnection) {
+      const demoResult = buildDemoTrophyCheckResult(studentId);
+      if (!demoResult || !hasDemoStudent(studentId)) {
+        return NextResponse.json(
+          { success: false, error: "Student not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: demoResult,
+      });
     }
 
     const studentExists = Boolean(

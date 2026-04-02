@@ -35,11 +35,15 @@ export default function LoginPage() {
     if (isDemoMode) {
       const displayName =
         trimmedId || (role === "SUPER_ADMIN" ? "Demo Admin" : "Demo User");
+      const demoStudentRegistration =
+        role === "STUDENT" ? trimmedId.toUpperCase() || undefined : undefined;
 
       persistDemoSession({
         id: trimmedId || `demo-${role.toLowerCase()}-${Date.now()}`,
         name: displayName,
         role,
+        username: demoStudentRegistration,
+        studentRegistrationNumber: demoStudentRegistration,
         mustChangePassword: false,
       });
 
@@ -61,12 +65,14 @@ export default function LoginPage() {
       const payload = (await response.json().catch(() => null)) as
         | {
             message?: string;
-            user?: {
+          user?: {
               id: string;
               role: AppRole;
               name: string;
               username?: string;
               email?: string;
+              studentRef?: string;
+              studentRegistrationNumber?: string;
               mustChangePassword?: boolean;
             };
           }
@@ -87,6 +93,8 @@ export default function LoginPage() {
         role: user.role,
         username: user.username,
         email: user.email,
+        studentRef: user.studentRef,
+        studentRegistrationNumber: user.studentRegistrationNumber,
         mustChangePassword: Boolean(user.mustChangePassword),
       });
 

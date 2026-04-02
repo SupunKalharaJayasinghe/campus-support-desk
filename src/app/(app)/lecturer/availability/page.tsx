@@ -204,7 +204,7 @@ export default function LecturerAvailabilityPage() {
     return days;
   }, [currentDate, selectedDay]);
 
-  const aiInsight = useMemo(() => {
+  const aiInsight = (() => {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const timeBuckets = [
       { key: "morning", label: "9-11 AM", start: 9, end: 11 },
@@ -225,25 +225,23 @@ export default function LecturerAvailabilityPage() {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     });
 
-    let bestKey: string | null = null;
-    let bestCount = 0;
-    counts.forEach((value, key) => {
-      if (value > bestCount) {
-        bestCount = value;
-        bestKey = key;
+    let bestMatch: { key: string; count: number } | null = null;
+    for (const [key, count] of counts.entries()) {
+      if (!bestMatch || count > bestMatch.count) {
+        bestMatch = { key, count };
       }
-    });
+    }
 
     const pendingCount = lecturerBookingRequests.filter((item) => item.status === "Pending").length;
 
-    if (!bestKey) {
+    if (!bestMatch) {
       return {
         highlight: "next Tuesday 10 AM",
         detail: `Not enough booking history yet. Pending requests: ${pendingCount}.`,
       };
     }
 
-    const [dayLabel, bucketKey] = bestKey.split("|");
+    const [dayLabel, bucketKey] = bestMatch.key.split("|");
     const bucket = timeBuckets.find((item) => item.key === bucketKey);
     const label = bucket?.label ?? "peak hours";
 
@@ -251,7 +249,7 @@ export default function LecturerAvailabilityPage() {
       highlight: `${dayLabel} ${label}`,
       detail: `Most requests land in this window. Pending requests: ${pendingCount}.`,
     };
-  }, []);
+  })();
 
   const handleAddSlot = () => {
     if (!date || !start || !end) {

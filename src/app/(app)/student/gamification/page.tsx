@@ -22,11 +22,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import {
-  isDemoModeEnabled,
-  readStoredUser,
-  type DemoUser,
-} from "@/lib/rbac";
+import { resolveCurrentStudentRecord } from "@/lib/student-session";
 
 type PointsCategory =
   | "academic"
@@ -36,14 +32,6 @@ type PointsCategory =
   | "bonus"
   | "penalty"
   | "custom";
-
-interface StudentLookupRecord {
-  id: string;
-  studentId: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-}
 
 interface PointsCategoryBreakdown {
   category: PointsCategory;
@@ -109,10 +97,6 @@ function cn(...classes: Array<string | false | null | undefined>) {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function normalizeText(value: unknown) {
-  return collapseSpaces(value).toLowerCase();
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -182,157 +166,6 @@ function formatRelativeTime(date: Date | string) {
 
 async function readJson<T>(response: Response) {
   return (await response.json().catch(() => null)) as T | null;
-}
-
-function parseStudentItems(payload: unknown): StudentLookupRecord[] {
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const items = (payload as { items?: unknown }).items;
-  if (!Array.isArray(items)) {
-    return [];
-  }
-
-  return items
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        return null;
-      }
-
-      const row = item as Record<string, unknown>;
-      const id = collapseSpaces(row.id ?? row._id);
-      const studentId = collapseSpaces(row.studentId);
-      const email = collapseSpaces(row.email).toLowerCase();
-      const firstName = collapseSpaces(row.firstName);
-      const lastName = collapseSpaces(row.lastName);
-      if (!id || !studentId) {
-        return null;
-      }
-
-      return {
-        id,
-        studentId,
-        email,
-        firstName,
-        lastName,
-      };
-    })
-    .filter((item): item is StudentLookupRecord => Boolean(item));
-}
-
-function buildStudentName(student: StudentLookupRecord) {
-  return `${collapseSpaces(student.firstName)} ${collapseSpaces(student.lastName)}`.trim();
-}
-
-function findBestStudentMatch(items: StudentLookupRecord[], user: DemoUser) {
-  if (items.length === 0) {
-    return null;
-  }
-
-  const sessionEmail = normalizeText(user.email);
-  const sessionUsername = normalizeText(user.username);
-  const sessionId = normalizeText(user.id);
-  const sessionName = normalizeText(user.name);
-
-  if (sessionEmail) {
-    const emailMatch = items.find((item) => normalizeText(item.email) === sessionEmail);
-    if (emailMatch) {
-      return emailMatch;
-    }
-  }
-
-  if (sessionUsername) {
-    const usernameMatch = items.find(
-      (item) => normalizeText(item.studentId) === sessionUsername
-    );
-    if (usernameMatch) {
-      return usernameMatch;
-    }
-  }
-
-  if (sessionId) {
-    const idMatch = items.find(
-      (item) =>
-        normalizeText(item.id) === sessionId ||
-        normalizeText(item.studentId) === sessionId
-    );
-    if (idMatch) {
-      return idMatch;
-    }
-  }
-
-  if (sessionName) {
-    const nameMatch = items.find(
-      (item) => normalizeText(buildStudentName(item)) === sessionName
-    );
-    if (nameMatch) {
-      return nameMatch;
-    }
-  }
-
-  return items.length === 1 ? items[0] : null;
-}
-
-async function resolveStudentRecord(user: DemoUser) {
-  const candidates = [user.email, user.username, user.id, user.name]
-    .map((value) => collapseSpaces(value))
-    .filter(Boolean);
-  const seen = new Set<string>();
-  let hadSuccessfulLookup = false;
-  let lastLookupError = "";
-
-  for (const candidate of candidates) {
-    const normalized = normalizeText(candidate);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-
-    const response = await fetch(
-      `/api/students?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
-      { cache: "no-store" }
-    );
-    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
-      response
-    );
-    if (!response.ok) {
-      lastLookupError =
-        collapseSpaces(payload?.error ?? payload?.message) ||
-        "Failed to look up your student profile.";
-      continue;
-    }
-    hadSuccessfulLookup = true;
-
-    const items = parseStudentItems(payload);
-    const match = findBestStudentMatch(items, user);
-    if (match) {
-      return match;
-    }
-  }
-
-  if (isDemoModeEnabled()) {
-    const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
-      cache: "no-store",
-    });
-    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
-      response
-    );
-    if (response.ok) {
-      hadSuccessfulLookup = true;
-      return parseStudentItems(payload)[0] ?? null;
-    }
-
-    lastLookupError =
-      collapseSpaces(payload?.error ?? payload?.message) ||
-      "Failed to look up your student profile.";
-  }
-
-  if (!hadSuccessfulLookup && lastLookupError) {
-    throw new Error(lastLookupError);
-  }
-
-  return null;
 }
 
 function useAnimatedNumber(target: number, duration = 850) {
@@ -805,22 +638,7 @@ export default function StudentGamificationPage() {
     setProfileMissing(false);
 
     try {
-      const sessionUser = readStoredUser();
-      const effectiveUser =
-        sessionUser ??
-        (isDemoModeEnabled()
-          ? ({
-              id: "",
-              name: "Demo Student",
-              role: "STUDENT",
-            } satisfies DemoUser)
-          : null);
-
-      if (!effectiveUser) {
-        throw new Error("No student session found. Please sign in again.");
-      }
-
-      const studentRecord = await resolveStudentRecord(effectiveUser);
+      const studentRecord = await resolveCurrentStudentRecord();
       if (!studentRecord) {
         setSummary(null);
         setConfig(null);

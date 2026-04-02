@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/Student";
+import {
+  buildDemoLeaderboardData,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { connectMongoose } from "@/lib/mongoose";
 import { StudentModel } from "@/models/Student";
 import {
@@ -19,13 +23,6 @@ function roundToOne(value: number) {
 export async function GET(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const studentId = collapseSpaces(searchParams.get("studentId"));
     if (!studentId) {
@@ -35,19 +32,21 @@ export async function GET(request: Request) {
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
       );
     }
 
-    const student = await StudentModel.findById(studentId)
-      .select("studentId firstName lastName")
-      .lean()
-      .exec()
-      .catch(() => null);
-    if (!student) {
+    const student = mongooseConnection
+      ? await StudentModel.findById(studentId)
+          .select("studentId firstName lastName")
+          .lean()
+          .exec()
+          .catch(() => null)
+      : null;
+    if ((mongooseConnection && !student) || (!mongooseConnection && !hasDemoStudent(studentId))) {
       return NextResponse.json(
         { success: false, error: "Student not found" },
         { status: 404 }
@@ -55,7 +54,7 @@ export async function GET(request: Request) {
     }
 
     const scopeOptions = parseScopeOptions(searchParams);
-    const validationError = validateScopeOptions(scopeOptions);
+    const validationError = validateScopeOptions(scopeOptions, !mongooseConnection);
     if (validationError) {
       return NextResponse.json(
         { success: false, error: validationError },
@@ -63,13 +62,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const leaderboard = await buildLeaderboardData({
-      scope: scopeOptions.scope as LeaderboardScope,
-      facultyId: scopeOptions.facultyId,
-      degreeProgramId: scopeOptions.degreeProgramId,
-      intakeId: scopeOptions.intakeId,
-      moduleOfferingId: scopeOptions.moduleOfferingId,
-    });
+    const leaderboard = mongooseConnection
+      ? await buildLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        })
+      : buildDemoLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        });
 
     const currentIndex = leaderboard.entries.findIndex(
       (entry) => entry.student.id === studentId
@@ -114,8 +121,10 @@ export async function GET(request: Request) {
       data: {
         student: {
           id: studentId,
-          name: buildStudentName(student),
-          registrationNumber: collapseSpaces((student as { studentId?: unknown }).studentId),
+          name: student ? buildStudentName(student) : currentEntry.student.name,
+          registrationNumber: student
+            ? collapseSpaces((student as { studentId?: unknown }).studentId)
+            : currentEntry.student.registrationNumber,
         },
         rank: currentEntry.rank,
         totalXP: currentEntry.totalXP,

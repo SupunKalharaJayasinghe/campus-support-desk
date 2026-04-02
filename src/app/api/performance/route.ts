@@ -166,8 +166,11 @@ export async function GET(request: Request) {
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
+        {
+          success: false,
+          error: "Class performance analytics are unavailable in demo mode",
+        },
+        { status: 501 }
       );
     }
 
