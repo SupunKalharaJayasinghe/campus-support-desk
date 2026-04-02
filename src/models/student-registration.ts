@@ -64,6 +64,13 @@ export interface StudentDetailApiRecord extends StudentApiRecord {
   enrollments: StudentApiEnrollment[];
 }
 
+export interface IntakeEnrollmentCandidateInMemory {
+  enrollmentId: string;
+  studentRecordId: string;
+  studentId: string;
+  currentSubgroup: string | null;
+}
+
 interface UserPersistedRecord {
   id: string;
   username: string;
@@ -647,6 +654,104 @@ export function listStudentEnrollmentsInMemory(studentRecordId: string) {
     .map((item) => decorateEnrollmentRecord(item));
 
   return sortEnrollmentsByLatest(rows);
+}
+
+export function listIntakeEnrollmentCandidatesInMemory(intakeId: string) {
+  const targetIntakeId = String(intakeId ?? "").trim();
+  if (!targetIntakeId) {
+    return [] as IntakeEnrollmentCandidateInMemory[];
+  }
+
+  const studentsById = new Map(
+    studentMemoryStore()
+      .filter((item) => item.status === "ACTIVE")
+      .map((item) => [item.id, item] as const)
+  );
+
+  const rows = enrollmentMemoryStore()
+    .filter(
+      (item) => item.intakeId === targetIntakeId && item.status === "ACTIVE"
+    )
+    .map((item) => {
+      const student = studentsById.get(item.studentId);
+      if (!student || !student.studentId) {
+        return null;
+      }
+
+      return {
+        enrollmentId: item.id,
+        studentRecordId: item.studentId,
+        studentId: student.studentId,
+        currentSubgroup: item.subgroup ?? null,
+      } satisfies IntakeEnrollmentCandidateInMemory;
+    })
+    .filter((item): item is IntakeEnrollmentCandidateInMemory => Boolean(item));
+
+  return rows.sort((left, right) => left.studentId.localeCompare(right.studentId));
+}
+
+export function bulkAssignEnrollmentSubgroupsInMemory(
+  assignments: Array<{ enrollmentId: string; subgroup: string | null }>
+) {
+  const store = enrollmentMemoryStore();
+  const lookup = new Map<string, number>();
+
+  store.forEach((item, index) => {
+    lookup.set(item.id, index);
+  });
+
+  const now = new Date().toISOString();
+  const touchedStudents = new Set<string>();
+  let changedCount = 0;
+  let unchangedCount = 0;
+
+  assignments.forEach((assignment) => {
+    const targetEnrollmentId = String(assignment.enrollmentId ?? "").trim();
+    const targetSubgroup = sanitizeSubgroup(assignment.subgroup);
+    if (!targetEnrollmentId) {
+      return;
+    }
+
+    const index = lookup.get(targetEnrollmentId);
+    if (index === undefined) {
+      return;
+    }
+
+    const current = store[index];
+    const currentSubgroup = sanitizeSubgroup(current.subgroup);
+    if (currentSubgroup === targetSubgroup) {
+      unchangedCount += 1;
+      return;
+    }
+
+    store[index] = {
+      ...current,
+      subgroup: targetSubgroup,
+      updatedAt: now,
+    };
+    changedCount += 1;
+    touchedStudents.add(current.studentId);
+  });
+
+  if (touchedStudents.size > 0) {
+    const students = studentMemoryStore();
+    const touchedSet = new Set(touchedStudents);
+    students.forEach((student, index) => {
+      if (!touchedSet.has(student.id)) {
+        return;
+      }
+
+      students[index] = {
+        ...student,
+        updatedAt: now,
+      };
+    });
+  }
+
+  return {
+    changedCount,
+    unchangedCount,
+  };
 }
 
 export function findEnrollmentInMemoryById(enrollmentId: string) {
