@@ -11,7 +11,15 @@ import { replaceIntakeStore, type IntakeRecord } from "@/models/intake-store";
 
 const globalForAcademicCache = globalThis as typeof globalThis & {
   __academicReferenceLastSyncedAt?: number;
+  __academicReferenceSyncPromise?: Promise<boolean> | null;
 };
+
+const DEFAULT_ACADEMIC_CACHE_MIN_INTERVAL_MS = 60_000;
+const FACULTY_FIELDS = "code name status isDeleted createdAt updatedAt";
+const DEGREE_FIELDS =
+  "code name facultyCode award credits durationYears status isDeleted createdAt updatedAt";
+const INTAKE_FIELDS =
+  "id name facultyCode degreeCode intakeYear intakeMonth stream status currentTerm autoJumpEnabled lockPastTerms defaultWeeksPerTerm defaultNotifyBeforeDays autoGenerateFutureTerms termSchedules notifications isDeleted createdAt updatedAt";
 
 function toIsoDate(value: unknown) {
   const raw = String(value ?? "").trim();
@@ -215,35 +223,63 @@ export async function syncAcademicReferenceCaches(options?: {
   }
 
   const now = Date.now();
-  const minIntervalMs = Math.max(0, options?.minIntervalMs ?? 3000);
+  const minIntervalMs = Math.max(
+    1000,
+    options?.minIntervalMs ?? DEFAULT_ACADEMIC_CACHE_MIN_INTERVAL_MS
+  );
   const lastSyncedAt = globalForAcademicCache.__academicReferenceLastSyncedAt ?? 0;
   if (!options?.force && now - lastSyncedAt < minIntervalMs) {
     return true;
   }
 
-  const [facultyRows, degreeRows, intakeRows] = await Promise.all([
-    FacultyModel.find({}).lean().exec().catch(() => [] as unknown[]),
-    DegreeProgramModel.find({}).lean().exec().catch(() => [] as unknown[]),
-    IntakeRecordModel.find({}).lean().exec().catch(() => [] as unknown[]),
-  ]);
+  const ongoingSync = globalForAcademicCache.__academicReferenceSyncPromise;
+  if (ongoingSync) {
+    if (!options?.force) {
+      return ongoingSync;
+    }
 
-  const faculties = facultyRows
-    .map((row) =>
-      toFacultyRecord((row ?? {}) as Record<string, unknown>)
-    )
-    .filter((item): item is FacultyRecord => Boolean(item));
-  const degrees = degreeRows
-    .map((row) =>
-      toDegreeProgramRecord((row ?? {}) as Record<string, unknown>)
-    )
-    .filter((item): item is DegreeProgramRecord => Boolean(item));
-  const intakes = intakeRows
-    .map((row) => toIntakeRecord((row ?? {}) as Record<string, unknown>))
-    .filter((item): item is IntakeRecord => Boolean(item));
+    await ongoingSync.catch(() => null);
+  }
 
-  replaceFacultyStore(faculties);
-  replaceDegreeProgramStore(degrees);
-  replaceIntakeStore(intakes);
-  globalForAcademicCache.__academicReferenceLastSyncedAt = now;
-  return true;
+  const syncPromise = (async () => {
+    const [facultyRows, degreeRows, intakeRows] = await Promise.all([
+      FacultyModel.find({}, FACULTY_FIELDS)
+        .lean()
+        .exec()
+        .catch(() => [] as unknown[]),
+      DegreeProgramModel.find({}, DEGREE_FIELDS)
+        .lean()
+        .exec()
+        .catch(() => [] as unknown[]),
+      IntakeRecordModel.find({}, INTAKE_FIELDS)
+        .lean()
+        .exec()
+        .catch(() => [] as unknown[]),
+    ]);
+
+    const faculties = facultyRows
+      .map((row) => toFacultyRecord((row ?? {}) as Record<string, unknown>))
+      .filter((item): item is FacultyRecord => Boolean(item));
+    const degrees = degreeRows
+      .map((row) => toDegreeProgramRecord((row ?? {}) as Record<string, unknown>))
+      .filter((item): item is DegreeProgramRecord => Boolean(item));
+    const intakes = intakeRows
+      .map((row) => toIntakeRecord((row ?? {}) as Record<string, unknown>))
+      .filter((item): item is IntakeRecord => Boolean(item));
+
+    replaceFacultyStore(faculties);
+    replaceDegreeProgramStore(degrees);
+    replaceIntakeStore(intakes);
+    globalForAcademicCache.__academicReferenceLastSyncedAt = Date.now();
+    return true;
+  })();
+
+  globalForAcademicCache.__academicReferenceSyncPromise = syncPromise;
+  try {
+    return await syncPromise;
+  } finally {
+    if (globalForAcademicCache.__academicReferenceSyncPromise === syncPromise) {
+      globalForAcademicCache.__academicReferenceSyncPromise = null;
+    }
+  }
 }

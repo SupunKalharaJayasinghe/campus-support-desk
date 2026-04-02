@@ -646,6 +646,7 @@ const INITIAL_INTAKES: IntakeRecord[] = [
 
 const globalForIntakeStore = globalThis as typeof globalThis & {
   __intakeStore?: IntakeRecord[];
+  __intakeDailyCheckedDate?: string;
 };
 
 function intakeStore() {
@@ -792,7 +793,16 @@ function runDailyIntakeChecks(today: string): IntakeDailyJobSummary {
     }
   }
 
+  globalForIntakeStore.__intakeDailyCheckedDate = today;
   return summary;
+}
+
+function ensureDailyIntakeChecks(today: string) {
+  if (globalForIntakeStore.__intakeDailyCheckedDate === today) {
+    return;
+  }
+
+  runDailyIntakeChecks(today);
 }
 
 export function runIntakeDailyAutomation() {
@@ -943,7 +953,7 @@ export function listIntakes(options?: {
   degree?: string;
   currentTerm?: TermCode | "";
 }) {
-  runDailyIntakeChecks(todayDateOnly());
+  ensureDailyIntakeChecks(todayDateOnly());
 
   const search = options?.search?.trim().toLowerCase() ?? "";
   const status = options?.status ?? "";
@@ -1029,7 +1039,7 @@ export function findIntakeById(
     includeDeleted?: boolean;
   }
 ) {
-  runDailyIntakeChecks(todayDateOnly());
+  ensureDailyIntakeChecks(todayDateOnly());
   const targetId = sanitizeIntakeId(id);
 
   return (
