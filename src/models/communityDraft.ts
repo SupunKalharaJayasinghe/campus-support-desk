@@ -58,6 +58,11 @@ const CommunityDraftSchema = new Schema(
       type: Number,
       default: null,
     },
+    /** INR amount for urgent when paid by card (demo); null when not card or not urgent. */
+    urgentFeeRs: {
+      type: Number,
+      default: null,
+    },
     urgentPaymentMethod: {
       type: String,
       enum: ["points", "card"],
@@ -77,6 +82,12 @@ const CommunityDraftSchema = new Schema(
       type: String,
       default: null,
       maxlength: 4,
+    },
+    /** Latest pending card payment audit row linked to this draft (see CommunityUrgentCardPayment). */
+    urgentCardPaymentRecordId: {
+      type: Schema.Types.ObjectId,
+      ref: "CommunityUrgentCardPayment",
+      default: null,
     },
   },
   { timestamps: true }

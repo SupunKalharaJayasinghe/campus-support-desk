@@ -1,7 +1,13 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
-import { calcUrgentExpiresAt, getUrgentConfig, type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
+import {
+  calcUrgentExpiresAt,
+  getUrgentConfig,
+  urgentFeeFieldsForDb,
+  type UrgentLevel,
+  type UrgentPaymentMethod,
+} from "@/lib/community-urgent";
 import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
@@ -11,6 +17,7 @@ import { CommunityUrgentPrepayModel } from "@/models/communityUrgentPrepay";
 import CommunityPost from "@/models/communityPost";
 import CommunityPostLike from "@/models/communityPostLike";
 import CommunityPostReport from "@/models/communityPostReport";
+import { CommunityUrgentCardPaymentModel } from "@/models/communityUrgentCardPayment";
 import mongoose from "mongoose";
 
 type CreatePostPayload = {
@@ -31,6 +38,7 @@ type CreatePostPayload = {
   urgentPaymentMethod?: unknown;
   urgentCardLast4?: unknown;
   urgentPrepayId?: unknown;
+  urgentCardPaymentRecordId?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -127,11 +135,14 @@ export async function POST(req: Request) {
     const urgentPaymentMethod: UrgentPaymentMethod =
       urgentPaymentMethodRaw === "card" ? "card" : "points";
     const urgentCardLast4 = toTrimmedString(body.urgentCardLast4);
+    const urgentCardPaymentRecordRaw = toTrimmedString(body.urgentCardPaymentRecordId);
 
     let urgentPatch: Record<string, unknown> = {};
+    let urgentCardPaymentIdToConsume: string | null = null;
     if (isUrgent) {
       const cfg = getUrgentConfig(urgentLevel);
       const feePoints = cfg.feePoints;
+      const storedFees = urgentFeeFieldsForDb(isUrgent, urgentLevel, urgentPaymentMethod);
 
       if (urgentPaymentMethod === "points") {
         const prepayIdRaw = toTrimmedString(body.urgentPrepayId);
@@ -205,16 +216,61 @@ export async function POST(req: Request) {
           isUrgent: true,
           urgentLevel,
           urgentExpiresAt: calcUrgentExpiresAt(urgentLevel),
-          urgentFeePoints: feePoints,
+          urgentFeePoints: storedFees.urgentFeePoints,
+          urgentFeeRs: storedFees.urgentFeeRs,
           urgentPaymentMethod: "points",
           urgentPaymentStatus: "paid",
           urgentPointsUsed: feePoints,
           urgentCardPaymentRef: null,
+          urgentCardLast4: null,
         };
       } else {
-        if (!urgentCardLast4 || !/^\d{4}$/.test(urgentCardLast4)) {
+        let resolvedLast4 = urgentCardLast4;
+        if (
+          urgentCardPaymentRecordRaw &&
+          mongoose.Types.ObjectId.isValid(urgentCardPaymentRecordRaw)
+        ) {
+          const payRow = await CommunityUrgentCardPaymentModel.findOne({
+            _id: urgentCardPaymentRecordRaw,
+            userRef: authorId,
+            status: "pending",
+          }).lean();
+          const pay = payRow as {
+            urgentLevel?: string;
+            amountRs?: number;
+            cardLast4?: string | null;
+          } | null;
+          if (!pay) {
+            return Response.json(
+              { error: "Card payment record not found or already used. Save your card step again." },
+              { status: 400 }
+            );
+          }
+          if (pay.urgentLevel !== urgentLevel) {
+            return Response.json(
+              { error: "Urgent duration does not match your saved card payment." },
+              { status: 400 }
+            );
+          }
+          if (pay.amountRs !== cfg.feeCardRs) {
+            return Response.json(
+              { error: "Payment amount does not match the selected urgent option." },
+              { status: 400 }
+            );
+          }
+          const pl4 = String(pay.cardLast4 ?? "");
+          if (!/^\d{4}$/.test(pl4)) {
+            return Response.json({ error: "Invalid card payment record." }, { status: 400 });
+          }
+          resolvedLast4 = pl4;
+          urgentCardPaymentIdToConsume = urgentCardPaymentRecordRaw;
+        }
+        if (!resolvedLast4 || !/^\d{4}$/.test(resolvedLast4)) {
           return Response.json(
-            { error: "Card payment details are required for urgent." },
+            {
+              error:
+                "Card payment is required for urgent. Complete the card step (Save draft / Done) or enter a valid card.",
+            },
             { status: 400 }
           );
         }
@@ -222,11 +278,13 @@ export async function POST(req: Request) {
           isUrgent: true,
           urgentLevel,
           urgentExpiresAt: calcUrgentExpiresAt(urgentLevel),
-          urgentFeePoints: feePoints,
+          urgentFeePoints: storedFees.urgentFeePoints,
+          urgentFeeRs: storedFees.urgentFeeRs,
           urgentPaymentMethod: "card",
           urgentPaymentStatus: "paid",
           urgentPointsUsed: 0,
-          urgentCardPaymentRef: `CARD-${Date.now()}-${urgentCardLast4}`,
+          urgentCardPaymentRef: `CARD-${Date.now()}-${resolvedLast4}`,
+          urgentCardLast4: resolvedLast4,
         };
       }
     } else {
@@ -235,10 +293,12 @@ export async function POST(req: Request) {
         urgentLevel: null,
         urgentExpiresAt: null,
         urgentFeePoints: null,
+        urgentFeeRs: null,
         urgentPaymentMethod: null,
         urgentPaymentStatus: "unpaid",
         urgentPointsUsed: 0,
         urgentCardPaymentRef: null,
+        urgentCardLast4: null,
       };
     }
 
@@ -254,6 +314,17 @@ export async function POST(req: Request) {
       authorDisplayName,
       ...urgentPatch,
     });
+
+    if (urgentCardPaymentIdToConsume) {
+      await CommunityUrgentCardPaymentModel.updateOne(
+        {
+          _id: urgentCardPaymentIdToConsume,
+          userRef: authorId,
+          status: "pending",
+        },
+        { $set: { status: "consumed", postRef: createdPost._id } }
+      );
+    }
 
     return Response.json(
       {

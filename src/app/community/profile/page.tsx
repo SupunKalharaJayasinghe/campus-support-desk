@@ -599,6 +599,7 @@ export default function CommunityProfilePage() {
                         urgentPaymentMethod: draft.urgentPaymentMethod,
                         urgentPrepayId: draft.urgentPrepayId ?? null,
                         urgentCardLast4: draft.urgentCardLast4 ?? null,
+                        urgentCardPaymentRecordId: draft.urgentCardPaymentRecordId ?? null,
                         author: storedUser?.id,
                         authorName: authorDisplayName,
                         authorUsername: storedUser?.username ?? "",

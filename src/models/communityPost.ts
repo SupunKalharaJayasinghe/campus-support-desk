@@ -84,6 +84,11 @@ urgentFeePoints: {
   default: null,
 },
 
+urgentFeeRs: {
+  type: Number,
+  default: null,
+},
+
 urgentPaymentMethod: {
   type: String,
   enum: ["points", "card"],
@@ -104,6 +109,13 @@ urgentPointsUsed: {
 urgentCardPaymentRef: {
   type: String,
   default: null,
+},
+
+/** Last 4 digits when urgent was paid by card (demo); mirrors draft storage. */
+urgentCardLast4: {
+  type: String,
+  default: null,
+  maxlength: 4,
 },
 },
 { timestamps: true }

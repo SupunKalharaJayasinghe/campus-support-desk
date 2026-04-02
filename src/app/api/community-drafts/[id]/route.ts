@@ -1,6 +1,10 @@
 import { connectDB } from "@/lib/mongodb";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
-import { getUrgentConfig, type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
+import {
+  urgentFeeFieldsForDb,
+  type UrgentLevel,
+  type UrgentPaymentMethod,
+} from "@/lib/community-urgent";
 import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
@@ -46,9 +50,11 @@ function normalizeDraft(doc: {
   isUrgent?: boolean;
   urgentLevel?: string | null;
   urgentFeePoints?: number | null;
+  urgentFeeRs?: number | null;
   urgentPaymentMethod?: string | null;
   urgentPrepayId?: unknown;
   urgentCardLast4?: string | null;
+  urgentCardPaymentRecordId?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -67,6 +73,7 @@ function normalizeDraft(doc: {
         ? (doc.urgentLevel as UrgentLevel)
         : null,
     urgentFeePoints: typeof doc.urgentFeePoints === "number" ? doc.urgentFeePoints : null,
+    urgentFeeRs: typeof doc.urgentFeeRs === "number" ? doc.urgentFeeRs : null,
     urgentPaymentMethod:
       doc.urgentPaymentMethod === "points" || doc.urgentPaymentMethod === "card"
         ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
@@ -76,6 +83,9 @@ function normalizeDraft(doc: {
       typeof doc.urgentCardLast4 === "string" && /^\d{4}$/.test(doc.urgentCardLast4)
         ? doc.urgentCardLast4
         : null,
+    urgentCardPaymentRecordId: doc.urgentCardPaymentRecordId
+      ? String(doc.urgentCardPaymentRecordId)
+      : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -136,6 +146,15 @@ export async function PATCH(
       return Response.json({ error: pictureNorm.error }, { status: 400 });
     }
 
+    const existingDraft = await CommunityDraft.findOne({
+      _id: params.id,
+      author: userId,
+    }).lean();
+
+    if (!existingDraft) {
+      return Response.json({ error: "Draft not found" }, { status: 404 });
+    }
+
     const isUrgent = Boolean(body.isUrgent);
     const urgentLevelRaw = toTrimmedString(body.urgentLevel) as UrgentLevel;
     const urgentLevel: UrgentLevel =
@@ -143,7 +162,11 @@ export async function PATCH(
     const urgentPaymentMethodRaw = toTrimmedString(body.urgentPaymentMethod) as UrgentPaymentMethod;
     const urgentPaymentMethod: UrgentPaymentMethod =
       urgentPaymentMethodRaw === "card" ? "card" : "points";
-    const urgentCfg = getUrgentConfig(urgentLevel);
+    const urgentFees = urgentFeeFieldsForDb(
+      isUrgent,
+      isUrgent ? urgentLevel : null,
+      isUrgent ? urgentPaymentMethod : null
+    );
 
     const urgentPrepayIdRaw = toTrimmedString(body.urgentPrepayId);
     const urgentPrepayId =
@@ -163,6 +186,72 @@ export async function PATCH(
       urgentCardLast4 = urgentCardLast4Raw;
     }
 
+    const urgentPaymentLocked =
+      Boolean(existingDraft.isUrgent) &&
+      (!!existingDraft.urgentCardPaymentRecordId || !!existingDraft.urgentPrepayId);
+
+    if (urgentPaymentLocked) {
+      const exLevel = existingDraft.urgentLevel;
+      const exMethod = existingDraft.urgentPaymentMethod;
+      if (
+        !isUrgent ||
+        !Boolean(existingDraft.isUrgent) ||
+        urgentLevel !== exLevel ||
+        urgentPaymentMethod !== exMethod
+      ) {
+        return Response.json(
+          {
+            error:
+              "This draft's urgent fee is already paid. Urgent duration, payment method, and card settings cannot be changed.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const urgentPlanFrozen =
+      Boolean(existingDraft.isUrgent) && !urgentPaymentLocked;
+
+    if (urgentPlanFrozen) {
+      const exLevel = existingDraft.urgentLevel;
+      const exMethod = existingDraft.urgentPaymentMethod;
+      if (!isUrgent || urgentLevel !== exLevel || urgentPaymentMethod !== exMethod) {
+        return Response.json(
+          {
+            error:
+              "This draft is already urgent. You cannot change urgent duration, turn off urgent, or switch payment method when updating the draft.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    const urgentSetLocked = {
+      isUrgent: existingDraft.isUrgent,
+      urgentLevel: existingDraft.urgentLevel,
+      urgentFeePoints: existingDraft.urgentFeePoints,
+      urgentFeeRs: existingDraft.urgentFeeRs,
+      urgentPaymentMethod: existingDraft.urgentPaymentMethod,
+      urgentPrepayId: existingDraft.urgentPrepayId,
+      urgentCardLast4: existingDraft.urgentCardLast4,
+      urgentCardPaymentRecordId: existingDraft.urgentCardPaymentRecordId,
+    };
+
+    const urgentSetUnlocked: Record<string, unknown> = {
+      isUrgent,
+      urgentLevel: isUrgent ? urgentLevel : null,
+      urgentFeePoints: urgentFees.urgentFeePoints,
+      urgentFeeRs: urgentFees.urgentFeeRs,
+      urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
+      urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
+      urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
+    };
+    if (!isUrgent || urgentPaymentMethod !== "card") {
+      urgentSetUnlocked.urgentCardPaymentRecordId = null;
+    }
+
+    const urgentSet = urgentPaymentLocked ? urgentSetLocked : urgentSetUnlocked;
+
     const updated = await CommunityDraft.findOneAndUpdate(
       { _id: params.id, author: userId },
       {
@@ -174,12 +263,7 @@ export async function PATCH(
           attachments,
           status,
           pictureUrl: pictureNorm.value ?? null,
-          isUrgent,
-          urgentLevel: isUrgent ? urgentLevel : null,
-          urgentFeePoints: isUrgent ? urgentCfg.feePoints : null,
-          urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
-          urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
-          urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
+          ...urgentSet,
         },
       },
       { new: true }

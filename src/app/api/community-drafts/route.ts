@@ -1,7 +1,11 @@
 import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
-import { getUrgentConfig, type UrgentLevel, type UrgentPaymentMethod } from "@/lib/community-urgent";
+import {
+  urgentFeeFieldsForDb,
+  type UrgentLevel,
+  type UrgentPaymentMethod,
+} from "@/lib/community-urgent";
 import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
@@ -51,9 +55,11 @@ function normalizeDraft(doc: {
   isUrgent?: boolean;
   urgentLevel?: string | null;
   urgentFeePoints?: number | null;
+  urgentFeeRs?: number | null;
   urgentPaymentMethod?: string | null;
   urgentPrepayId?: unknown;
   urgentCardLast4?: string | null;
+  urgentCardPaymentRecordId?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -72,6 +78,7 @@ function normalizeDraft(doc: {
         ? (doc.urgentLevel as UrgentLevel)
         : null,
     urgentFeePoints: typeof doc.urgentFeePoints === "number" ? doc.urgentFeePoints : null,
+    urgentFeeRs: typeof doc.urgentFeeRs === "number" ? doc.urgentFeeRs : null,
     urgentPaymentMethod:
       doc.urgentPaymentMethod === "points" || doc.urgentPaymentMethod === "card"
         ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
@@ -81,6 +88,9 @@ function normalizeDraft(doc: {
       typeof doc.urgentCardLast4 === "string" && /^\d{4}$/.test(doc.urgentCardLast4)
         ? doc.urgentCardLast4
         : null,
+    urgentCardPaymentRecordId: doc.urgentCardPaymentRecordId
+      ? String(doc.urgentCardPaymentRecordId)
+      : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -169,7 +179,11 @@ export async function POST(req: Request) {
     const urgentPaymentMethodRaw = toTrimmedString(body.urgentPaymentMethod) as UrgentPaymentMethod;
     const urgentPaymentMethod: UrgentPaymentMethod =
       urgentPaymentMethodRaw === "card" ? "card" : "points";
-    const urgentCfg = getUrgentConfig(urgentLevel);
+    const urgentFees = urgentFeeFieldsForDb(
+      isUrgent,
+      isUrgent ? urgentLevel : null,
+      isUrgent ? urgentPaymentMethod : null
+    );
 
     const urgentPrepayIdRaw = toTrimmedString(body.urgentPrepayId);
     const urgentPrepayId =
@@ -200,7 +214,8 @@ export async function POST(req: Request) {
       author: authorId,
       isUrgent,
       urgentLevel: isUrgent ? urgentLevel : null,
-      urgentFeePoints: isUrgent ? urgentCfg.feePoints : null,
+      urgentFeePoints: urgentFees.urgentFeePoints,
+      urgentFeeRs: urgentFees.urgentFeeRs,
       urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
       urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
       urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
