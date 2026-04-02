@@ -21,7 +21,56 @@ import {
   Target,
   Workflow,
 } from "lucide-react";
-import { lecturerBookingRequests } from "@/lib/mockData";
+import { lecturerBookingRequests } from "@/models/mockData";
+
+function buildAvailabilityInsight(requests: typeof lecturerBookingRequests) {
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const timeBuckets = [
+    { key: "morning", label: "9-11 AM", start: 9, end: 11 },
+    { key: "midday", label: "11 AM-2 PM", start: 11, end: 14 },
+    { key: "afternoon", label: "2-5 PM", start: 14, end: 17 },
+    { key: "evening", label: "5-7 PM", start: 17, end: 19 },
+  ];
+
+  const counts = new Map<string, number>();
+  requests.forEach((request) => {
+    if (request.status === "CANCELLED") return;
+    const dateValue = new Date(`${request.date}T00:00:00`);
+    const dayLabel = dayNames[dateValue.getDay()];
+    const hour = Number(request.start.split(":")[0] ?? 0);
+    const bucket = timeBuckets.find((item) => hour >= item.start && hour < item.end);
+    if (!bucket) return;
+    const key = `${dayLabel}|${bucket.key}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  let bestKey: string | null = null;
+  let bestCount = 0;
+  for (const [key, value] of counts.entries()) {
+    if (value > bestCount) {
+      bestCount = value;
+      bestKey = key;
+    }
+  }
+
+  const pendingCount = requests.filter((item) => item.status === "PENDING").length;
+
+  if (!bestKey) {
+    return {
+      highlight: "next Tuesday 10 AM",
+      detail: `Not enough booking history yet. Pending requests: ${pendingCount}.`,
+    };
+  }
+
+  const [dayLabel, bucketKey] = bestKey.split("|");
+  const bucket = timeBuckets.find((item) => item.key === bucketKey);
+  const label = bucket?.label ?? "peak hours";
+
+  return {
+    highlight: `${dayLabel} ${label}`,
+    detail: `Most requests land in this window. Pending requests: ${pendingCount}.`,
+  };
+}
 
 type SlotStatus = "available" | "booked" | "full";
 
@@ -204,54 +253,7 @@ export default function LecturerAvailabilityPage() {
     return days;
   }, [currentDate, selectedDay]);
 
-  const aiInsight = useMemo(() => {
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const timeBuckets = [
-      { key: "morning", label: "9-11 AM", start: 9, end: 11 },
-      { key: "midday", label: "11 AM-2 PM", start: 11, end: 14 },
-      { key: "afternoon", label: "2-5 PM", start: 14, end: 17 },
-      { key: "evening", label: "5-7 PM", start: 17, end: 19 },
-    ];
-
-    const counts = new Map<string, number>();
-    lecturerBookingRequests.forEach((request) => {
-      if (request.status === "Declined") return;
-      const dateValue = new Date(`${request.date}T00:00:00`);
-      const dayLabel = dayNames[dateValue.getDay()];
-      const hour = Number(request.start.split(":")[0] ?? 0);
-      const bucket = timeBuckets.find((item) => hour >= item.start && hour < item.end);
-      if (!bucket) return;
-      const key = `${dayLabel}|${bucket.key}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-
-    let bestKey: string | null = null;
-    let bestCount = 0;
-    counts.forEach((value, key) => {
-      if (value > bestCount) {
-        bestCount = value;
-        bestKey = key;
-      }
-    });
-
-    const pendingCount = lecturerBookingRequests.filter((item) => item.status === "Pending").length;
-
-    if (!bestKey) {
-      return {
-        highlight: "next Tuesday 10 AM",
-        detail: `Not enough booking history yet. Pending requests: ${pendingCount}.`,
-      };
-    }
-
-    const [dayLabel, bucketKey] = bestKey.split("|");
-    const bucket = timeBuckets.find((item) => item.key === bucketKey);
-    const label = bucket?.label ?? "peak hours";
-
-    return {
-      highlight: `${dayLabel} ${label}`,
-      detail: `Most requests land in this window. Pending requests: ${pendingCount}.`,
-    };
-  }, []);
+  const aiInsight = buildAvailabilityInsight(lecturerBookingRequests);
 
   const handleAddSlot = () => {
     if (!date || !start || !end) {
@@ -452,7 +454,7 @@ export default function LecturerAvailabilityPage() {
                           <span style={{ display: "inline-flex", alignItems: "center", marginRight: 6 }}>
                             <Workflow size={16} />
                           </span>
-                          Booking Status Flow
+                          Booking Lifecycle
                         </div>
                         <div className="card-subtitle">Real-time lifecycle visualization</div>
                       </div>
@@ -462,14 +464,14 @@ export default function LecturerAvailabilityPage() {
                         <div className="flow-icon active-step" style={{ background: "var(--green-glow)" }}>
                           <CalendarDays size={20} />
                         </div>
-                        <div className="flow-label">Slot Created</div>
+                        <div className="flow-label">Slot Published</div>
                       </div>
                       <div className="flow-connector done" />
                       <div className="flow-step">
                         <div className="flow-icon active-step" style={{ background: "var(--teal-glow)" }}>
                           <Search size={20} />
                         </div>
-                        <div className="flow-label">Student Searches</div>
+                        <div className="flow-label">Pending Request</div>
                       </div>
                       <div className="flow-connector done" />
                       <div className="flow-step">
@@ -483,14 +485,14 @@ export default function LecturerAvailabilityPage() {
                         <div className="flow-icon" style={{ background: "var(--amber-glow)" }}>
                           <Mail size={20} />
                         </div>
-                        <div className="flow-label">Auto Reminder</div>
+                        <div className="flow-label">Reminder Sent</div>
                       </div>
                       <div className="flow-connector" />
                       <div className="flow-step">
                         <div className="flow-icon" style={{ background: "var(--purple-glow)" }}>
                           <GraduationCap size={20} />
                         </div>
-                        <div className="flow-label">Session Complete</div>
+                        <div className="flow-label">Completed</div>
                       </div>
                     </div>
                   </div>

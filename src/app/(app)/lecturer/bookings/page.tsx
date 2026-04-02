@@ -15,6 +15,10 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
+import {
+  getConsultationBookingStatusLabel,
+  type ConsultationBookingStatus,
+} from "@/models/consultation-booking";
 
 type ToastItem = {
   id: number;
@@ -30,7 +34,7 @@ type BookingRow = {
   date: string;
   type: string;
   mode: string;
-  status: "active" | "upcoming" | "confirmed";
+  status: ConsultationBookingStatus;
 };
 
 type HistoryRow = {
@@ -52,7 +56,7 @@ const bookingsSeed: BookingRow[] = [
     date: "Mar 21, 09:00",
     type: "Thesis Review",
     mode: "In-Person",
-    status: "active",
+    status: "CONFIRMED",
   },
   {
     student: "Ravi Perera",
@@ -62,7 +66,7 @@ const bookingsSeed: BookingRow[] = [
     date: "Mar 21, 10:30",
     type: "Academic",
     mode: "Online",
-    status: "upcoming",
+    status: "PENDING",
   },
   {
     student: "Maya Patel",
@@ -72,7 +76,7 @@ const bookingsSeed: BookingRow[] = [
     date: "Mar 21, 14:00",
     type: "Project Feedback",
     mode: "Hybrid",
-    status: "upcoming",
+    status: "CONFIRMED",
   },
   {
     student: "James Kim",
@@ -82,7 +86,7 @@ const bookingsSeed: BookingRow[] = [
     date: "Mar 25, 11:00",
     type: "Career",
     mode: "In-Person",
-    status: "confirmed",
+    status: "CONFIRMED",
   },
   {
     student: "Sara Rodriguez",
@@ -92,7 +96,7 @@ const bookingsSeed: BookingRow[] = [
     date: "Mar 26, 09:00",
     type: "Thesis Review",
     mode: "Online",
-    status: "confirmed",
+    status: "PENDING",
   },
 ];
 
@@ -207,9 +211,10 @@ export default function LecturerBookingsPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const statusMap: Record<BookingRow["status"], [string, string]> = {
-    active: ["badge-available", "Active Now"],
-    upcoming: ["badge-booked", "Upcoming"],
-    confirmed: ["badge-waitlist", "Confirmed"],
+    PENDING: ["badge-booked", getConsultationBookingStatusLabel("PENDING")],
+    CONFIRMED: ["badge-waitlist", getConsultationBookingStatusLabel("CONFIRMED")],
+    COMPLETED: ["badge-available", getConsultationBookingStatusLabel("COMPLETED")],
+    CANCELLED: ["badge-full", getConsultationBookingStatusLabel("CANCELLED")],
   };
 
   const validateStudentSearch = useCallback((value: string) => {

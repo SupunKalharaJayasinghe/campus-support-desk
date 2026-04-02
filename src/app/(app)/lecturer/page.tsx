@@ -2,21 +2,19 @@
 
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
+import {
+  getConsultationBookingBadgeVariant,
+  getConsultationBookingStatusLabel,
+  isActiveConsultationBookingStatus,
+} from "@/models/consultation-booking";
 import { lecturerBookingRequests, lecturerPosts, notificationsByRole } from "@/models/mockData";
 
-function bookingBadgeVariant(status: string) {
-  if (status === "Approved") return "success" as const;
-  if (status === "Declined") return "danger" as const;
-  if (status === "Completed") return "neutral" as const;
-  return "warning" as const;
-}
-
 export default function LecturerDashboardPage() {
-  const pendingRequests = lecturerBookingRequests.filter((item) => item.status === "Pending").length;
+  const pendingRequests = lecturerBookingRequests.filter((item) => item.status === "PENDING").length;
   const unread = notificationsByRole.LECTURER.filter((item) => item.unread).length;
   const todayKey = new Date().toISOString().slice(0, 10);
   const upcomingSessions = [...lecturerBookingRequests]
-    .filter((item) => item.status !== "Declined")
+    .filter((item) => isActiveConsultationBookingStatus(item.status))
     .sort((left, right) => {
       const leftDate = `${left.date} ${left.start}`;
       const rightDate = `${right.date} ${right.start}`;
@@ -81,7 +79,9 @@ export default function LecturerDashboardPage() {
                     </p>
                     <p className="text-xs text-text/60">{session.topic}</p>
                   </div>
-                  <Badge variant={bookingBadgeVariant(session.status)}>{session.status}</Badge>
+                  <Badge variant={getConsultationBookingBadgeVariant(session.status)}>
+                    {getConsultationBookingStatusLabel(session.status)}
+                  </Badge>
                 </div>
               ))}
             </div>

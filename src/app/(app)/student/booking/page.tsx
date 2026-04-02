@@ -6,17 +6,16 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
+import {
+  canCancelConsultationBooking,
+  getConsultationBookingBadgeVariant,
+  getConsultationBookingStatusLabel,
+} from "@/models/consultation-booking";
 import { availableLecturerSlots, studentBookings } from "@/models/mockData";
 import type { StudentBooking } from "@/models/mockData";
 
 function bookingVariant(status: StudentBooking["status"]) {
-  if (status === "Approved" || status === "Completed") {
-    return "success" as const;
-  }
-  if (status === "Declined") {
-    return "danger" as const;
-  }
-  return "warning" as const;
+  return getConsultationBookingBadgeVariant(status);
 }
 
 export default function StudentBookingPage() {
@@ -51,7 +50,7 @@ export default function StudentBookingPage() {
         purpose: "Consultation",
         date: slot.date,
         time: `${slot.start} - ${slot.end}`,
-        status: "Pending",
+        status: "PENDING",
       },
       ...prev,
     ]);
@@ -65,7 +64,7 @@ export default function StudentBookingPage() {
     }, 3000);
     toast({
       title: "Booking submitted",
-      message: "Your request was sent for lecturer approval.",
+      message: "Your request was sent for lecturer confirmation.",
     });
   };
 
@@ -101,7 +100,7 @@ export default function StudentBookingPage() {
                       onClick={() => confirmBooking(slot, lecturer.lecturer)}
                       variant="secondary"
                     >
-                      Confirm
+                      Request Slot
                     </Button>
                   </div>
                 ))}
@@ -126,9 +125,11 @@ export default function StudentBookingPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant={bookingVariant(booking.status)}>{booking.status}</Badge>
+                <Badge variant={bookingVariant(booking.status)}>
+                  {getConsultationBookingStatusLabel(booking.status)}
+                </Badge>
                 <Button
-                  disabled={booking.status === "Completed"}
+                  disabled={!canCancelConsultationBooking(booking.status)}
                   onClick={() =>
                     setBookings((prev) => prev.filter((item) => item.id !== booking.id))
                   }
