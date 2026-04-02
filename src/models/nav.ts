@@ -32,6 +32,7 @@ export const NAV_BY_ROLE: Record<AppRole, NavItem[]> = {
   ],
   LECTURER: [
     { label: "Dashboard", href: "/lecturer", icon: "home" },
+    { label: "Quizzes", href: "/lecturer/quizzes", icon: "book" },
     { label: "Availability", href: "/lecturer/availability", icon: "clock" },
     { label: "Bookings", href: "/lecturer/bookings", icon: "calendar", badge: 4 },
     { label: "Notifications", href: "/lecturer/notifications", icon: "bell", badge: 2 },
