@@ -8,6 +8,7 @@ import {
   getMongoDuplicateField,
   sanitizeName,
   sanitizeNicNumber,
+  sanitizeOptionalEmail,
   sanitizePhone,
   sanitizeStudentStatus,
   type EnrollmentPersistedRecord,
@@ -47,6 +48,7 @@ function toStudentProfileInput(
   const lastName = sanitizeName(body.lastName);
   const nicNumber = sanitizeNicNumber(body.nicNumber);
   const phone = sanitizePhone(body.phone);
+  const optionalEmail = sanitizeOptionalEmail(body.optionalEmail);
   const status = sanitizeStudentStatus(body.status);
 
   if (!firstName || !lastName || !nicNumber) {
@@ -58,6 +60,7 @@ function toStudentProfileInput(
     lastName,
     nicNumber,
     phone,
+    optionalEmail,
     status,
   };
 }
@@ -87,6 +90,7 @@ function toStudentRecordFromUnknown(row: unknown): StudentPersistedRecord | null
     lastName,
     nicNumber,
     phone: sanitizePhone(doc.phone),
+    optionalEmail: sanitizeOptionalEmail(doc.optionalEmail),
     status: sanitizeStudentStatus(doc.status),
     createdAt: toIsoDate(doc.createdAt),
     updatedAt: toIsoDate(doc.updatedAt),
@@ -164,6 +168,7 @@ export async function PUT(
     current.lastName = profile.lastName;
     current.nicNumber = profile.nicNumber;
     current.phone = profile.phone;
+    current.optionalEmail = profile.optionalEmail;
     current.status = profile.status;
     try {
       await current.save();

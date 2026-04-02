@@ -26,6 +26,7 @@ const StudentSchema = new Schema(
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
     phone: { type: String, trim: true, default: "" },
+    optionalEmail: { type: String, trim: true, lowercase: true, default: "" },
     status: {
       type: String,
       required: true,

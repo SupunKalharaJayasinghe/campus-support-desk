@@ -18,6 +18,7 @@ import {
   resolveStudentPrefix,
   sanitizeName,
   sanitizeNicNumber,
+  sanitizeOptionalEmail,
   sanitizePhone,
   sanitizeStudentStatus,
   sanitizeStudentStream,
@@ -104,6 +105,7 @@ function toStudentProfileInput(
   const lastName = sanitizeName(body.lastName);
   const nicNumber = sanitizeNicNumber(body.nicNumber);
   const phone = sanitizePhone(body.phone);
+  const optionalEmail = sanitizeOptionalEmail(body.optionalEmail);
   const status = sanitizeStudentStatus(body.status);
 
   if (!firstName || !lastName || !nicNumber) {
@@ -115,6 +117,7 @@ function toStudentProfileInput(
     lastName,
     nicNumber,
     phone,
+    optionalEmail,
     status,
   };
 }
@@ -168,6 +171,7 @@ function toStudentRecordFromUnknown(row: unknown): StudentPersistedRecord | null
     lastName,
     nicNumber,
     phone: sanitizePhone(doc.phone),
+    optionalEmail: sanitizeOptionalEmail(doc.optionalEmail),
     status: sanitizeStudentStatus(doc.status),
     createdAt: toIsoDate(doc.createdAt),
     updatedAt: toIsoDate(doc.updatedAt),
@@ -314,6 +318,7 @@ export async function GET(request: Request) {
       { firstName: searchRegex },
       { lastName: searchRegex },
       { email: searchRegex },
+      { optionalEmail: searchRegex },
       { nicNumber: searchRegex },
     ];
   }
@@ -445,6 +450,7 @@ export async function POST(request: Request) {
           lastName: profile.lastName,
           nicNumber: profile.nicNumber,
           phone: profile.phone,
+          optionalEmail: profile.optionalEmail,
           status: profile.status,
         });
         createdStudentRecordId = String(createdStudent._id);

@@ -53,6 +53,7 @@ interface StudentRecord {
   id: string;
   studentId: string;
   email: string;
+  optionalEmail: string;
   nicNumber: string;
   firstName: string;
   lastName: string;
@@ -103,6 +104,7 @@ interface StudentFormState {
   lastName: string;
   nicNumber: string;
   phone: string;
+  optionalEmail: string;
   status: StudentStatus;
   facultyId: string;
   degreeProgramId: string;
@@ -148,6 +150,14 @@ function sanitizeNicNumber(value: unknown) {
     .slice(0, 20);
 }
 
+function sanitizeOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -165,6 +175,7 @@ function emptyForm(): StudentFormState {
     lastName: "",
     nicNumber: "",
     phone: "",
+    optionalEmail: "",
     status: "ACTIVE",
     facultyId: "",
     degreeProgramId: "",
@@ -251,6 +262,7 @@ function parseStudentsResponse(payload: unknown): StudentsResponse {
       const id = String(item.id ?? item._id ?? "").trim();
       const studentId = String(item.studentId ?? "").trim().toUpperCase();
       const email = String(item.email ?? "").trim().toLowerCase();
+      const optionalEmail = sanitizeOptionalEmail(item.optionalEmail);
       const firstName = collapseSpaces(item.firstName);
       const lastName = collapseSpaces(item.lastName);
       const nicNumber = sanitizeNicNumber(item.nicNumber);
@@ -263,6 +275,7 @@ function parseStudentsResponse(payload: unknown): StudentsResponse {
         id,
         studentId,
         email,
+        optionalEmail,
         nicNumber,
         firstName,
         lastName,
@@ -794,6 +807,7 @@ export default function StudentsAdminPage() {
       lastName: student.lastName,
       nicNumber: student.nicNumber,
       phone: student.phone,
+      optionalEmail: student.optionalEmail,
       status: student.status,
       facultyId: "",
       degreeProgramId: "",
@@ -879,6 +893,7 @@ export default function StudentsAdminPage() {
           lastName: collapseSpaces(form.lastName),
           nicNumber: sanitizeNicNumber(form.nicNumber),
           phone: collapseSpaces(form.phone),
+          optionalEmail: sanitizeOptionalEmail(form.optionalEmail),
           status: form.status,
           facultyId: form.facultyId,
           degreeProgramId: form.degreeProgramId,
@@ -907,6 +922,7 @@ export default function StudentsAdminPage() {
           lastName: collapseSpaces(form.lastName),
           nicNumber: sanitizeNicNumber(form.nicNumber),
           phone: collapseSpaces(form.phone),
+          optionalEmail: sanitizeOptionalEmail(form.optionalEmail),
           status: form.status,
         };
 
@@ -1292,6 +1308,25 @@ export default function StudentsAdminPage() {
                       setForm((previous) => ({ ...previous, phone: event.target.value }))
                     }
                     value={form.phone}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-heading">
+                    Optional Email
+                  </label>
+                  <Input
+                    className="h-12"
+                    disabled={isSaving}
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        optionalEmail: sanitizeOptionalEmail(event.target.value),
+                      }))
+                    }
+                    placeholder="Optional"
+                    type="email"
+                    value={form.optionalEmail}
                   />
                 </div>
 
