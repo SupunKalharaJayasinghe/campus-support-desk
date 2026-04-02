@@ -267,6 +267,49 @@ const categoryEmoji: Record<Post["category"], string> = {
     study_material: "📂",
 };
 
+type CommunityCategory = (typeof CATEGORIES)[number];
+
+function CommunityCategoryChips({
+    activeCategory,
+    onSelect,
+    className = "",
+}: {
+    activeCategory: CommunityCategory;
+    onSelect: (category: CommunityCategory) => void;
+    className?: string;
+}) {
+    return (
+        <div
+            className={`flex gap-2 overflow-x-auto pb-0.5 ${className}`}
+            role="tablist"
+            aria-label="Filter posts by category"
+        >
+            {CATEGORIES.map((category) => {
+                const chip = categoryChipStyles[category];
+                return (
+                    <button
+                        key={category}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeCategory === category}
+                        onClick={() => onSelect(category)}
+                        className={`whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                            activeCategory === category ? chip.active : chip.inactive
+                        }`}
+                    >
+                        {categoryLabel[category]}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** Matches fixed header height (search row + category chips). */
+const HEADER_TOP_CLASS = "top-28";
+const HEADER_OFFSET_PT = "pt-28";
+const MAIN_SCROLL_HEIGHT = "h-[calc(100vh-7rem)]";
+
 export default function CommunityPage() {
     const router = useRouter();
     const currentUser = useMemo(() => readStoredUser(), []);
@@ -692,36 +735,44 @@ export default function CommunityPage() {
     return (
         <main className="relative h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-blue-50 text-[#0f0f0f]">
             <div className="relative h-full">
-            <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
-                <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
-                    <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setSidebarOpen((prev) => !prev)}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-blue-100"
-                            aria-label="Toggle sidebar"
-                        >
-                            <Menu size={22} />
-                        </button>
-                        <div className="flex items-center gap-2">
-                            <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
-                            <span className="text-lg font-bold tracking-tight text-slate-800">Community</span>
+            <header className="fixed inset-x-0 top-0 z-50 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
+                <div className="flex flex-col gap-2 px-3 py-2 sm:px-5">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-10 shrink-0 items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setSidebarOpen((prev) => !prev)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-blue-100"
+                                aria-label="Toggle sidebar"
+                            >
+                                <Menu size={22} />
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
+                                <span className="text-lg font-bold tracking-tight text-slate-800">Community</span>
+                            </div>
                         </div>
-                    </div>
-{/*search bar  */ }
-                    <div className="hidden w-full max-w-2xl items-center gap-2 md:flex">
-                        <div className="flex h-10 flex-1 items-center rounded-full border border-blue-200 bg-white/90 px-4">
-                            <Search size={18} className="text-slate-500" />
-                            <input
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search community post's title"
-                                className="ml-3 w-full bg-transparent text-sm text-slate-700 outline-none"
+
+                    <div className="hidden min-w-0 flex-1 md:flex md:justify-center">
+                        <div className="flex w-full max-w-2xl flex-col gap-2">
+                            <div className="flex h-10 w-full items-center rounded-full border border-blue-200 bg-white/90 px-4">
+                                <Search size={18} className="shrink-0 text-slate-500" />
+                                <input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search community post's title"
+                                    className="ml-3 w-full min-w-0 bg-transparent text-sm text-slate-700 outline-none"
+                                />
+                            </div>
+                            <CommunityCategoryChips
+                                activeCategory={activeCategory}
+                                onSelect={setActiveCategory}
+                                className="w-full px-0.5"
                             />
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex h-10 shrink-0 items-center gap-2 sm:gap-3">
                         <Link
                             href="/community/profile/#create-post"
                             className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
@@ -777,10 +828,11 @@ export default function CommunityPage() {
                             )}
                         </div>
                     </div>
+                    </div>
                 </div>
             </header>
 
-            <div className="flex h-full pt-16">
+            <div className={`flex h-full ${HEADER_OFFSET_PT}`}>
                 {sidebarOpen && (
                     <button
                         type="button"
@@ -791,7 +843,7 @@ export default function CommunityPage() {
                 )}
 
                 <aside
-                    className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:top-16 lg:translate-x-0 ${
+                    className={`fixed left-0 z-40 w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:translate-x-0 ${HEADER_TOP_CLASS} ${MAIN_SCROLL_HEIGHT} ${
                         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:hidden"
                     }`}
                 >
@@ -809,35 +861,7 @@ export default function CommunityPage() {
                         <div className="my-3 h-px bg-blue-100" />
 
                         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-
-                        <div className="rounded-xl border border-amber-200/80 bg-white/95 p-3">
-                            <div className="flex w-full items-center text-sm font-semibold text-slate-700">
-                                <span className="flex items-center gap-2">
-                                    <Flame size={16} className="text-amber-600" aria-hidden />
-                                    Urgent posts
-                                    {urgentPostsActive.length > 0 ? (
-                                        <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800">
-                                            {urgentPostsActive.length}
-                                        </span>
-                                    ) : null}
-                                </span>
-                            </div>
-                            <div className="mt-3 pr-1">
-                                {urgentPostsActive.length === 0 ? (
-                                    <p className="text-xs text-slate-500">No active urgent posts right now.</p>
-                                ) : (
-                                    <UrgentPostsCarousel
-                                        posts={urgentCarouselPosts}
-                                        baseWidth={252}
-                                        autoplay
-                                        autoplayDelay={3800}
-                                        pauseOnHover
-                                        loop={urgentCarouselPosts.length > 1}
-                                        onSelectPost={handleJumpToPost}
-                                    />
-                                )}
-                            </div>
-                        </div>
+                        <CommunitySidebarCalendar />
 
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
@@ -916,21 +940,11 @@ export default function CommunityPage() {
                 </aside>
 
                 <section className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
-                    <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
-                        {CATEGORIES.map((category) => {
-                            const chip = categoryChipStyles[category];
-                            return (
-                                <button
-                                    key={category}
-                                    onClick={() => setActiveCategory(category)}
-                                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                                        activeCategory === category ? chip.active : chip.inactive
-                                    }`}
-                                >
-                                    {categoryLabel[category]}
-                                </button>
-                            );
-                        })}
+                    <div className="mb-4 md:hidden">
+                        <CommunityCategoryChips
+                            activeCategory={activeCategory}
+                            onSelect={setActiveCategory}
+                        />
                     </div>
                     {actionError ? (
                         <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -1116,11 +1130,38 @@ export default function CommunityPage() {
 
                 <aside
                     id="community-instructions"
-                    className="hidden shrink-0 border-l border-blue-100 bg-slate-100/95 lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:w-80 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:self-start lg:p-4"
-                    aria-label="Instructions and calendar"
+                    className={`hidden shrink-0 border-l border-blue-100 bg-slate-100/95 lg:sticky lg:flex lg:w-80 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:self-start lg:p-4 ${HEADER_TOP_CLASS} ${MAIN_SCROLL_HEIGHT}`}
+                    aria-label="Urgent posts and community instructions"
                 >
+                    <div className="rounded-xl border border-amber-200/80 bg-white/95 p-3">
+                        <div className="flex w-full items-center text-sm font-semibold text-slate-700">
+                            <span className="flex items-center gap-2">
+                                <Flame size={16} className="text-amber-600" aria-hidden />
+                                Urgent posts
+                                {urgentPostsActive.length > 0 ? (
+                                    <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800">
+                                        {urgentPostsActive.length}
+                                    </span>
+                                ) : null}
+                            </span>
+                        </div>
+                        <div className="mt-3 pr-1">
+                            {urgentPostsActive.length === 0 ? (
+                                <p className="text-xs text-slate-500">No active urgent posts right now.</p>
+                            ) : (
+                                <UrgentPostsCarousel
+                                    posts={urgentCarouselPosts}
+                                    baseWidth={260}
+                                    autoplay
+                                    autoplayDelay={3800}
+                                    pauseOnHover
+                                    loop={urgentCarouselPosts.length > 1}
+                                    onSelectPost={handleJumpToPost}
+                                />
+                            )}
+                        </div>
+                    </div>
                     <CommunityInstructionsPanel className="rounded-xl border border-blue-100 bg-white/95 p-4 shadow-sm" />
-                    <CommunitySidebarCalendar />
                 </aside>
             </div>
             </div>
