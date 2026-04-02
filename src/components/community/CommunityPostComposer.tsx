@@ -198,10 +198,15 @@ export default function CommunityPostComposer({
     const pointsFeeReserved = Boolean(
         urgentPrepayId || (draftToEdit?.urgentPrepayId && String(draftToEdit.urgentPrepayId).length > 0)
     );
+    /** Card fee already captured: pending payment row and/or draft shows last4 + card method. */
     const cardUrgentPaymentActive = Boolean(
         urgentCardPaymentRecordId ||
             (draftToEdit?.urgentCardPaymentRecordId &&
-                String(draftToEdit.urgentCardPaymentRecordId).length > 0)
+                String(draftToEdit.urgentCardPaymentRecordId).length > 0) ||
+            (Boolean(draftToEdit?.isUrgent) &&
+                draftToEdit?.urgentPaymentMethod === "card" &&
+                typeof draftToEdit?.urgentCardLast4 === "string" &&
+                /^\d{4}$/.test(draftToEdit.urgentCardLast4))
     );
 
     /** Same non-refundable Done acknowledgement as card, once per points prepay id. */
@@ -476,7 +481,7 @@ export default function CommunityPostComposer({
                 cardNumber,
                 cardExpiry,
                 cardCvc,
-                hasCardPaymentOnFile: Boolean(urgentCardPaymentRecordId),
+                hasCardPaymentOnFile: cardUrgentPaymentActive,
             });
             if (cardFieldErr) {
                 setCardError(cardFieldErr);
@@ -699,7 +704,7 @@ export default function CommunityPostComposer({
                 cardNumber,
                 cardExpiry,
                 cardCvc,
-                hasCardPaymentOnFile: Boolean(urgentCardPaymentRecordId),
+                hasCardPaymentOnFile: cardUrgentPaymentActive,
             });
             if (cardFieldErr) {
                 setCardError(cardFieldErr);
@@ -793,7 +798,7 @@ export default function CommunityPostComposer({
                 cardNumber,
                 cardExpiry,
                 cardCvc,
-                hasCardPaymentOnFile: Boolean(urgentCardPaymentRecordId),
+                hasCardPaymentOnFile: cardUrgentPaymentActive,
             });
             if (postCardErr) {
                 setSubmitError(postCardErr);
@@ -880,7 +885,11 @@ export default function CommunityPostComposer({
         const storedUserEarly = readStoredUser();
 
         let urgentCardLast4Resolved: string | null = null;
-        let urgentCardPaymentRecordIdOut: string | null = urgentCardPaymentRecordId;
+        let urgentCardPaymentRecordIdOut: string | null =
+            urgentCardPaymentRecordId ||
+            (draftToEdit?.urgentCardPaymentRecordId
+                ? String(draftToEdit.urgentCardPaymentRecordId)
+                : null);
         let didSubmitFreshCardPayment = false;
         if (isUrgent && urgentPaymentMethod === "card") {
             const raw = cardNumber.replace(/\s+/g, "");
@@ -888,7 +897,7 @@ export default function CommunityPostComposer({
                 cardNumber,
                 cardExpiry,
                 cardCvc,
-                hasCardPaymentOnFile: Boolean(urgentCardPaymentRecordId),
+                hasCardPaymentOnFile: cardUrgentPaymentActive,
             });
             if (postCardErr) {
                 setCardError(postCardErr);
@@ -944,7 +953,7 @@ export default function CommunityPostComposer({
                     setUrgentCardPaymentRecordId(urgentCardPaymentRecordIdOut);
                 }
             }
-            if (!urgentCardPaymentRecordIdOut) {
+            if (!urgentCardPaymentRecordIdOut && !urgentCardLast4Resolved) {
                 setCardError(
                     "Card payment is not on file. Use Done / Save draft with full card details, or enter full card, expiry, and CVC."
                 );
