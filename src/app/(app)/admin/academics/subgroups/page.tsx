@@ -349,6 +349,8 @@ export default function SubgroupsPage() {
   );
   const parsedSubgroupCount = toPositiveInteger(subgroupCountInput);
   const parsedStudentsPerSubgroup = toPositiveInteger(studentsPerSubgroupInput);
+  const activeAllocationInput =
+    mode === "GROUP_COUNT" ? subgroupCountInput : studentsPerSubgroupInput;
 
   const validationError = useMemo(() => {
     if (!selectedFaculty) {
@@ -701,13 +703,12 @@ export default function SubgroupsPage() {
   useEffect(() => {
     setPreview(null);
   }, [
+    activeAllocationInput,
     mode,
     selectedDegree,
     selectedFaculty,
     selectedIntakeId,
     selectedTerm,
-    studentsPerSubgroupInput,
-    subgroupCountInput,
   ]);
 
   return (

@@ -282,7 +282,7 @@ export async function GET(
     return NextResponse.json({ message: "Failed to map student" }, { status: 500 });
   }
 
-  const enrollmentRows = (await EnrollmentModel.find({ studentId: studentRecordId })
+  const enrollmentRows = (await EnrollmentModel.find({ studentId: studentRecord.id })
     .sort({ updatedAt: -1 })
     .lean()
     .exec()
