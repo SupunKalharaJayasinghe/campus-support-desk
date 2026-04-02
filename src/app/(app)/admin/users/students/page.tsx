@@ -431,7 +431,6 @@ export default function StudentsAdminPage() {
   const [modal, setModal] = useState<StudentModalState | null>(null);
   const [form, setForm] = useState<StudentFormState>(emptyForm());
   const [selectedIntakeTerm, setSelectedIntakeTerm] = useState("");
-  const [isCustomSubgroup, setIsCustomSubgroup] = useState(false);
   const [formError, setFormError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<StudentRecord | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] =
@@ -638,7 +637,28 @@ export default function StudentsAdminPage() {
           return;
         }
 
-        setSubgroupOptions(parseSubgroups(payload));
+        const nextOptions = parseSubgroups(payload);
+        setSubgroupOptions(nextOptions);
+        setForm((previous) => {
+          if (previous.intakeId !== intakeId) {
+            return previous;
+          }
+
+          const subgroup = collapseSpaces(previous.subgroup);
+          if (!subgroup) {
+            return previous;
+          }
+
+          const hasMatch = nextOptions.some((item) => item.code === subgroup);
+          if (hasMatch) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            subgroup: "",
+          };
+        });
       } catch {
         if (subgroupRequestIdRef.current !== requestId) {
           return;
@@ -756,7 +776,6 @@ export default function StudentsAdminPage() {
   const openAddModal = () => {
     setModal({ mode: "add" });
     setForm(emptyForm());
-    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
     setSubgroupOptions([]);
@@ -785,7 +804,6 @@ export default function StudentsAdminPage() {
       studentId: student.studentId,
       email: student.email,
     });
-    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
     setSubgroupOptions([]);
@@ -804,7 +822,6 @@ export default function StudentsAdminPage() {
 
     setModal(null);
     setForm(emptyForm());
-    setIsCustomSubgroup(false);
     setDegreeOptions([]);
     setIntakeOptions([]);
     setSubgroupOptions([]);
@@ -826,6 +843,10 @@ export default function StudentsAdminPage() {
       if (!form.degreeProgramId) return "Degree is required";
       if (!form.intakeId) return "Intake is required";
       if (!form.stream) return "Stream is required";
+      const subgroup = collapseSpaces(form.subgroup);
+      if (subgroup && !subgroupOptions.some((item) => item.code === subgroup)) {
+        return "Select subgroup from the list";
+      }
       if (!form.studentId || !form.email) {
         return "Student ID and email preview are required";
       }
@@ -1007,20 +1028,7 @@ export default function StudentsAdminPage() {
       ),
     [degreeOptions, form.facultyId]
   );
-
-  const subgroupSelectValue = useMemo(() => {
-    if (isCustomSubgroup) {
-      return "__custom__";
-    }
-
-    const subgroup = collapseSpaces(form.subgroup);
-    if (!subgroup) {
-      return "";
-    }
-
-    const hasMatchingOption = subgroupOptions.some((item) => item.code === subgroup);
-    return hasMatchingOption ? subgroup : "__custom__";
-  }, [form.subgroup, isCustomSubgroup, subgroupOptions]);
+  const subgroupSelectValue = collapseSpaces(form.subgroup);
 
   return (
     <div className="space-y-5">
@@ -1332,7 +1340,6 @@ export default function StudentsAdminPage() {
                         disabled={isSaving}
                         onChange={(event) => {
                           const facultyId = normalizeAcademicCode(event.target.value);
-                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             facultyId,
@@ -1367,7 +1374,6 @@ export default function StudentsAdminPage() {
                         disabled={isSaving || !form.facultyId || isLoadingDegrees}
                         onChange={(event) => {
                           const degreeProgramId = normalizeAcademicCode(event.target.value);
-                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             degreeProgramId,
@@ -1402,7 +1408,6 @@ export default function StudentsAdminPage() {
                         disabled={isSaving || !form.degreeProgramId || isLoadingIntakes}
                         onChange={(event) => {
                           const intakeId = String(event.target.value ?? "").trim();
-                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             intakeId,
@@ -1459,7 +1464,6 @@ export default function StudentsAdminPage() {
                         disabled={isSaving}
                         onChange={(event) => {
                           const stream = sanitizeStudentStream(event.target.value);
-                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             stream,
@@ -1486,19 +1490,6 @@ export default function StudentsAdminPage() {
                         disabled={isSaving || !form.intakeId}
                         onChange={(event) => {
                           const value = String(event.target.value ?? "").trim();
-                          if (value === "__custom__") {
-                            setIsCustomSubgroup(true);
-                            setForm((previous) => ({
-                              ...previous,
-                              subgroup:
-                                subgroupSelectValue === "__custom__"
-                                  ? previous.subgroup
-                                  : "",
-                            }));
-                            return;
-                          }
-
-                          setIsCustomSubgroup(false);
                           setForm((previous) => ({
                             ...previous,
                             subgroup: value,
@@ -1507,38 +1498,23 @@ export default function StudentsAdminPage() {
                         value={subgroupSelectValue}
                       >
                         <option value="">
-                          {isLoadingSubgroups ? "Loading..." : "No Subgroup"}
+                          {isLoadingSubgroups
+                            ? "Loading..."
+                            : subgroupOptions.length > 0
+                              ? "No Subgroup"
+                              : "No Subgroups Available"}
                         </option>
                         {subgroupOptions.map((option) => (
                           <option key={option.code} value={option.code}>
                             {option.code} ({option.count})
                           </option>
                         ))}
-                        <option value="__custom__">Custom subgroup...</option>
                       </Select>
-                      {isCustomSubgroup || subgroupOptions.length === 0 ? (
-                        <Input
-                          className="mt-2 h-12"
-                          disabled={isSaving || !form.intakeId}
-                          onChange={(event) =>
-                            setForm((previous) => ({
-                              ...previous,
-                              subgroup: event.target.value,
-                            }))
-                          }
-                          placeholder={
-                            subgroupOptions.length === 0
-                              ? "No subgroup found. Enter new subgroup"
-                              : "Enter custom subgroup"
-                          }
-                          value={form.subgroup}
-                        />
-                      ) : null}
                       <p className="mt-1 text-xs text-text/60">
                         {form.intakeId
                           ? subgroupOptions.length > 0
-                            ? "Select an existing subgroup from this intake and stream."
-                            : "No existing subgroups for this intake + stream."
+                            ? "Assign subgroup using this list only."
+                            : "No subgroups found for selected intake + stream."
                           : "Select intake first to load subgroup options."}
                       </p>
                     </div>

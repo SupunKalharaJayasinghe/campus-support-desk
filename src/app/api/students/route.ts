@@ -28,6 +28,7 @@ import {
   type StudentPersistedRecord,
   type StudentProfileWriteInput,
   type StudentSort,
+  type StudentStream,
   type StudentStatus,
 } from "@/models/student-registration";
 import { CounterModel } from "@/models/Counter";
@@ -261,6 +262,30 @@ function groupEnrollmentsByStudent(
   return grouped;
 }
 
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const exists = await EnrollmentModel.exists({
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    status: "ACTIVE",
+    subgroup,
+  }).catch(() => null);
+
+  return Boolean(exists);
+}
+
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
   if (!mongooseConnection) {
@@ -386,6 +411,21 @@ export async function POST(request: Request) {
     } catch (error) {
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid student data" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: enrollment.facultyId,
+        degreeProgramId: enrollment.degreeProgramId,
+        intakeId: enrollment.intakeId,
+        stream: enrollment.stream,
+        subgroup: enrollment.subgroup ?? null,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
         { status: 400 }
       );
     }

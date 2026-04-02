@@ -11,6 +11,7 @@ import {
   sanitizeSubgroup,
   validateStudentRelations,
   type EnrollmentPersistedRecord,
+  type StudentStream,
 } from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
@@ -79,6 +80,30 @@ function toApiEnrollmentResponseItem(
     degreeCode: row.degreeProgramId,
     intakeCurrentTerm: row.currentTerm,
   };
+}
+
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const query: Record<string, unknown> = {
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    subgroup,
+  };
+
+  const exists = await EnrollmentModel.exists(query).catch(() => null);
+  return Boolean(exists);
 }
 
 async function hasLockedEnrollmentData(enrollmentId: mongoose.Types.ObjectId | string) {
@@ -183,6 +208,23 @@ export async function PUT(
     } catch (error) {
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid enrollment data" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: String(current.facultyId ?? "").trim().toUpperCase(),
+        degreeProgramId: String(current.degreeProgramId ?? "")
+          .trim()
+          .toUpperCase(),
+        intakeId: nextIntakeId,
+        stream: nextStream,
+        subgroup: nextSubgroup,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
         { status: 400 }
       );
     }

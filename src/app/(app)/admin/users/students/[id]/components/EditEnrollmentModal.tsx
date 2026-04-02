@@ -25,15 +25,22 @@ export interface EditIntakeOption {
   currentTerm: string;
 }
 
+export interface EditSubgroupOption {
+  code: string;
+  count: number;
+}
+
 interface EditEnrollmentModalProps {
   open: boolean;
   saving: boolean;
   loadingIntakes: boolean;
   loadingTerm: boolean;
+  loadingSubgroups: boolean;
   formError: string;
   selectedIntakeTerm: string;
   form: EditEnrollmentFormState;
   intakeOptions: EditIntakeOption[];
+  subgroupOptions: EditSubgroupOption[];
   onChange: (patch: Partial<EditEnrollmentFormState>) => void;
   onIntakeChange: (intakeId: string) => void;
   onClose: () => void;
@@ -45,10 +52,12 @@ export default function EditEnrollmentModal({
   saving,
   loadingIntakes,
   loadingTerm,
+  loadingSubgroups,
   formError,
   selectedIntakeTerm,
   form,
   intakeOptions,
+  subgroupOptions,
   onChange,
   onIntakeChange,
   onClose,
@@ -192,13 +201,34 @@ export default function EditEnrollmentModal({
               <label className="mb-1.5 block text-sm font-medium text-heading">
                 Subgroup
               </label>
-              <Input
+              <Select
                 className="h-12"
-                disabled={saving}
-                onChange={(event) => onChange({ subgroup: event.target.value })}
-                placeholder="Optional"
-                value={form.subgroup}
-              />
+                disabled={saving || !form.intakeId}
+                onChange={(event) =>
+                  onChange({ subgroup: String(event.target.value ?? "").trim() })
+                }
+                value={String(form.subgroup ?? "").trim()}
+              >
+                <option value="">
+                  {loadingSubgroups
+                    ? "Loading..."
+                    : subgroupOptions.length > 0
+                      ? "No Subgroup"
+                      : "No Subgroups Available"}
+                </option>
+                {subgroupOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.code} ({option.count})
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-xs text-text/60">
+                {form.intakeId
+                  ? subgroupOptions.length > 0
+                    ? "Assign subgroup using this list only."
+                    : "No subgroups found for selected intake + stream."
+                  : "Select intake first to load subgroup options."}
+              </p>
             </div>
 
             <div>

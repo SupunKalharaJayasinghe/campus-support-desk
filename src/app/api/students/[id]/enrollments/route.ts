@@ -13,6 +13,7 @@ import {
   validateStudentRelations,
   type EnrollmentPersistedRecord,
   type EnrollmentWriteInput,
+  type StudentStream,
 } from "@/models/student-registration";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { StudentModel } from "@/models/Student";
@@ -105,6 +106,30 @@ function toApiEnrollmentResponseItem(row: ReturnType<typeof decorateEnrollmentRe
   };
 }
 
+async function isSelectableSubgroupInDb(input: {
+  facultyId: string;
+  degreeProgramId: string;
+  intakeId: string;
+  stream: StudentStream;
+  subgroup: string | null;
+}) {
+  const subgroup = sanitizeSubgroup(input.subgroup);
+  if (!subgroup) {
+    return true;
+  }
+
+  const exists = await EnrollmentModel.exists({
+    facultyId: input.facultyId,
+    degreeProgramId: input.degreeProgramId,
+    intakeId: input.intakeId,
+    stream: input.stream,
+    status: "ACTIVE",
+    subgroup,
+  }).catch(() => null);
+
+  return Boolean(exists);
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } }
@@ -191,6 +216,21 @@ export async function POST(
     } catch (error) {
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid enrollment data" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !(await isSelectableSubgroupInDb({
+        facultyId: enrollment.facultyId,
+        degreeProgramId: enrollment.degreeProgramId,
+        intakeId: enrollment.intakeId,
+        stream: enrollment.stream,
+        subgroup: enrollment.subgroup ?? null,
+      }))
+    ) {
+      return NextResponse.json(
+        { message: "Select subgroup from the available list" },
         { status: 400 }
       );
     }
