@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { lostItemReports } from "@/models/mockData";
-import type { LostItemReport } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { LostItemReport } from "@/models/portal-types";
 
 function statusVariant(status: LostItemReport["status"]) {
   if (status === "Claimed") {
@@ -18,7 +18,33 @@ function statusVariant(status: LostItemReport["status"]) {
 }
 
 export default function LostItemsQueuePage() {
-  const [reports, setReports] = useState<LostItemReport[]>(lostItemReports);
+  const [reports, setReports] = useState<LostItemReport[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<LostItemReport[]>(PORTAL_DATA_KEYS.lostItemReports, []).then(
+      (rows) => {
+        if (cancelled) {
+          return;
+        }
+
+        setReports(rows);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateReports = (next: LostItemReport[]) => {
+    void savePortalData(PORTAL_DATA_KEYS.lostItemReports, next)
+      .then((saved) => {
+        setReports(saved);
+      })
+      .catch(() => null);
+  };
 
   return (
     <div className="space-y-4">
@@ -42,8 +68,8 @@ export default function LostItemsQueuePage() {
                 {report.status === "Pending Review" ? (
                   <Button
                     onClick={() =>
-                      setReports((prev) =>
-                        prev.map((item) =>
+                      updateReports(
+                        reports.map((item) =>
                           item.id === report.id ? { ...item, status: "Verified" } : item
                         )
                       )
@@ -56,8 +82,8 @@ export default function LostItemsQueuePage() {
                 {report.status === "Verified" ? (
                   <Button
                     onClick={() =>
-                      setReports((prev) =>
-                        prev.map((item) =>
+                      updateReports(
+                        reports.map((item) =>
                           item.id === report.id ? { ...item, status: "Claimed" } : item
                         )
                       )
@@ -71,8 +97,12 @@ export default function LostItemsQueuePage() {
             </div>
           </Card>
         ))}
+        {reports.length === 0 ? (
+          <Card>
+            <p className="text-sm text-text/72">No queue reports available.</p>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
 }
-

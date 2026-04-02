@@ -166,9 +166,9 @@ export async function PUT(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
+        if (!mongooseConnection) {
       return NextResponse.json(
-        { message: "MongoDB connection is required" },
+        { message: "Database connection is required" },
         { status: 503 }
       );
     }
@@ -296,9 +296,9 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
+        if (!mongooseConnection) {
       return NextResponse.json(
-        { message: "MongoDB connection is required" },
+        { message: "Database connection is required" },
         { status: 503 }
       );
     }

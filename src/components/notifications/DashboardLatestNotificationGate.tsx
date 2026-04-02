@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
-import { resolveNotificationsForUser } from "@/models/notification-center";
+import {
+  listNotificationsForUser,
+  type NotificationFeedItem,
+} from "@/models/notification-center";
 import { readStoredUser } from "@/models/rbac";
 import type { AppRole } from "@/models/rbac";
 
@@ -30,9 +33,29 @@ export default function DashboardLatestNotificationGate({
 }: DashboardLatestNotificationGateProps) {
   const pathname = usePathname();
   const user = useMemo(() => readStoredUser(), []);
-  const latestNotification = useMemo(() => {
-    const notifications = resolveNotificationsForUser(user, fallbackRole);
-    return notifications[0] ?? null;
+  const [latestNotification, setLatestNotification] =
+    useState<NotificationFeedItem | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void listNotificationsForUser(user, fallbackRole)
+      .then((notifications) => {
+        if (cancelled) {
+          return;
+        }
+        setLatestNotification(notifications[0] ?? null);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setLatestNotification(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [fallbackRole, user]);
 
   if (normalizePath(pathname ?? "") !== normalizePath(dashboardPath)) {

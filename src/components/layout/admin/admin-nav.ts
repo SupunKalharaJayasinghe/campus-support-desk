@@ -121,10 +121,8 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     icon: MessageSquareText,
     roles: ["SUPER_ADMIN", "LECTURER"],
     items: [
-      { label: "Notifications", href: "/notifications" },
       { label: "Announcements", href: "/admin/communication/announcements" },
       { label: "Targeted Notifications", href: "/admin/communication/targeted-notifications" },
-      { label: "Messages", href: "/admin/communication/messages" },
     ],
   },
   {

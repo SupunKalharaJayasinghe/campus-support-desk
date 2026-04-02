@@ -54,7 +54,7 @@ const CONFIG_BY_ROLE: Record<AppRole, NotificationPortalConfig> = {
       NOTIFICATIONS_LINK,
       { label: "Book Lecturer", href: "/student/booking" },
       { label: "Report Lost Item", href: "/student/lost-items" },
-      { label: "Announcements", href: "/student/announcements" },
+      { label: "Announcements", href: "/announcements" },
       { label: "Help Requests", href: "/student/support" },
     ],
     subtitle: "All notifications targeted to your student profile.",

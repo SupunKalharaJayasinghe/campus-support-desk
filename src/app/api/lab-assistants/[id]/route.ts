@@ -76,13 +76,11 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-  if (!mongooseConnection) {
-    const row = findLabAssistantInMemoryById(labAssistantId);
-    if (!row) {
-      return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(toApiLabAssistant(row));
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const row = await LabAssistantModel.findById(labAssistantId).lean().exec().catch(() => null);
@@ -140,27 +138,11 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      try {
-        const updated = updateLabAssistantInMemory({
-          id: labAssistantId,
-          ...input,
-          ...validated,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-        }
-
-        return NextResponse.json(toApiLabAssistant(updated));
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update lab assistant";
-        if (message === "NIC/Staff ID already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const row = await LabAssistantModel.findById(labAssistantId).exec();
@@ -234,21 +216,11 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const assignedOfferings = listModuleOfferingsByLabAssistantId(labAssistantId);
-      if (assignedOfferings.length > 0) {
-        return NextResponse.json(
-          { message: "Lab assistant is assigned to module offerings" },
-          { status: 409 }
-        );
-      }
-
-      const deleted = deleteLabAssistantInMemory(labAssistantId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Lab assistant not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const assignedOfferingExists = Boolean(

@@ -1,15 +1,64 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import Card from "@/components/ui/Card";
 import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
 import RecentNotificationsCard from "@/components/notifications/RecentNotificationsCard";
-import { resolveNotificationsForRole } from "@/models/notification-center";
-import { foundItemsSeed, lostItemReports } from "@/models/mockData";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
+import {
+  listNotificationsForRole,
+  type NotificationFeedItem,
+} from "@/models/notification-center";
+import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
+import type { FoundItemRecord, LostItemReport } from "@/models/portal-types";
+
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
 
 export default function LostItemsDashboardPage() {
-  const pending = lostItemReports.filter((item) => item.status === "Pending Review").length;
-  const verified = lostItemReports.filter((item) => item.status === "Verified").length;
-  const stored = foundItemsSeed.filter((item) => item.status === "Stored").length;
-  const notifications = resolveNotificationsForRole("LOST_ITEM_STAFF");
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [pending, setPending] = useState(0);
+  const [verified, setVerified] = useState(0);
+  const [stored, setStored] = useState(0);
+  const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
   const latestNotification = notifications[0] ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
+      listNotificationsForRole("LOST_ITEM_STAFF").catch(
+        () => [] as NotificationFeedItem[]
+      ),
+      loadPortalData<LostItemReport[]>(PORTAL_DATA_KEYS.lostItemReports, []),
+      loadPortalData<FoundItemRecord[]>(PORTAL_DATA_KEYS.foundItems, []),
+    ]).then(([latestAnnouncements, scopedNotifications, reports, foundItems]) => {
+      if (cancelled) {
+        return;
+      }
+
+      setAnnouncements(latestAnnouncements);
+      setNotifications(scopedNotifications);
+      setPending(
+        reports.filter((item) => item.status === "Pending Review").length
+      );
+      setVerified(reports.filter((item) => item.status === "Verified").length);
+      setStored(foundItems.filter((item) => item.status === "Stored").length);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -42,6 +91,30 @@ export default function LostItemsDashboardPage() {
         href="/notifications"
         items={notifications}
       />
+
+      <Card title="Latest Announcements">
+        {announcements.length === 0 ? (
+          <p className="text-sm text-text/70">No announcements available yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {announcements.map((item) => (
+              <div className="rounded-2xl bg-tint p-3.5" key={item.id}>
+                <p className="text-sm font-medium text-text">{item.title}</p>
+                <p className="mt-1 text-xs text-text/72">{item.message}</p>
+                <p className="mt-2 text-[11px] text-text/65">{formatDateTime(item.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-4">
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+            href="/announcements"
+          >
+            View All
+          </Link>
+        </div>
+      </Card>
     </div>
   );
 }

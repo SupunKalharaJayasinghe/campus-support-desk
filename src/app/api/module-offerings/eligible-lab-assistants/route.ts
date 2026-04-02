@@ -74,30 +74,11 @@ export async function GET(request: Request) {
 
   const mongooseConnection = await connectMongoose().catch(() => null);
 
-  if (!mongooseConnection) {
-    const items = listLabAssistantsInMemory({ status: "ACTIVE", sort: "az" })
-      .filter((row) =>
-        isStaffEligibleForOffering(
-          {
-            facultyIds: row.facultyIds,
-            degreeProgramIds: row.degreeProgramIds,
-            moduleIds: row.moduleIds,
-          },
-          {
-            facultyCode,
-            degreeCode,
-            moduleCode: resolvedModuleCode,
-            moduleId,
-          }
-        )
-      )
-      .filter((row) => matchesSearch(row, search))
-      .map((row) => toApiItem(row));
-
-    return NextResponse.json({
-      items,
-      total: items.length,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query: Record<string, unknown> = staffEligibilityMongoFilter({

@@ -186,15 +186,11 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-  if (!mongooseConnection) {
-    const items = listModuleOfferingsByLecturerId(lecturerId)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .map((item) => toApiFromMemory(item));
-
-    return NextResponse.json({
-      items,
-      total: items.length,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const rows = (await ModuleOfferingModel.find({

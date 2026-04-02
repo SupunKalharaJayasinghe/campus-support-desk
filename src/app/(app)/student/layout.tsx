@@ -13,7 +13,7 @@ const STUDENT_LINKS = [
   { label: "Notifications", href: "/notifications" },
   { label: "Book Lecturer", href: "/student/booking" },
   { label: "Report Lost Item", href: "/student/lost-items" },
-  { label: "Announcements", href: "/student/announcements" },
+  { label: "Announcements", href: "/announcements" },
   { label: "Help Requests", href: "/student/support" },
 ];
 

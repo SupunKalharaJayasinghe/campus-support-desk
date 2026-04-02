@@ -112,19 +112,11 @@ export async function GET(request: Request) {
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
   const page = parsePageParam(searchParams.get("page"), 1);
 
-  if (!mongooseConnection) {
-    const allItems = listAdminUsersInMemory({ search, role, status, sort });
-    const total = allItems.length;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, pageCount);
-    const start = (safePage - 1) * pageSize;
-
-    return NextResponse.json({
-      items: allItems.slice(start, start + pageSize),
-      total,
-      page: safePage,
-      pageSize,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query: Record<string, unknown> = {
@@ -212,31 +204,11 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(rawPassword, 10);
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      try {
-        const created = createAdminUserInMemory({
-          fullName: input.fullName,
-          username: input.username,
-          email: input.email,
-          role: input.role,
-          status: input.status,
-          passwordHash,
-          mustChangePassword: true,
-        });
-        return NextResponse.json(
-          {
-            item: created,
-            generatedPassword: generatedPassword || undefined,
-          },
-          { status: 201 }
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to create admin user";
-        if (message === "Email already exists" || message === "Username already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const created = await UserModel.create({

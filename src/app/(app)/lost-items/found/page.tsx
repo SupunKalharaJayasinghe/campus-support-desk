@@ -1,21 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import { foundItemsSeed } from "@/models/mockData";
-import type { FoundItemRecord } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { FoundItemRecord } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
 function statusVariant(status: FoundItemRecord["status"]) {
   return status === "Returned" ? ("success" as const) : ("neutral" as const);
 }
 
 export default function FoundItemsPage() {
-  const [items, setItems] = useState<FoundItemRecord[]>(foundItemsSeed);
+  const user = useMemo(() => readStoredUser(), []);
+  const [items, setItems] = useState<FoundItemRecord[]>([]);
   const [item, setItem] = useState("");
   const [location, setLocation] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<FoundItemRecord[]>(PORTAL_DATA_KEYS.foundItems, []).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+
+      setItems(rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistItems = (next: FoundItemRecord[]) => {
+    void savePortalData(PORTAL_DATA_KEYS.foundItems, next)
+      .then((saved) => {
+        setItems(saved);
+      })
+      .catch(() => null);
+  };
 
   return (
     <div className="space-y-4">
@@ -33,17 +59,19 @@ export default function FoundItemsPage() {
               if (!item.trim() || !location.trim()) {
                 return;
               }
-              setItems((prev) => [
+
+              persistItems([
                 {
-                  id: `fi-${Date.now()}`,
+                  id: `found-${Date.now()}`,
                   item: item.trim(),
                   location: location.trim(),
-                  recordedBy: "Nora Perera",
-                  date: "Today",
+                  recordedBy: String(user?.name ?? "Lost Item Officer"),
+                  date: new Date().toLocaleDateString(),
                   status: "Stored",
                 },
-                ...prev,
+                ...items,
               ]);
+
               setItem("");
               setLocation("");
             }}
@@ -68,8 +96,8 @@ export default function FoundItemsPage() {
                 {entry.status === "Stored" ? (
                   <Button
                     onClick={() =>
-                      setItems((prev) =>
-                        prev.map((itemRow) =>
+                      persistItems(
+                        items.map((itemRow) =>
                           itemRow.id === entry.id ? { ...itemRow, status: "Returned" } : itemRow
                         )
                       )
@@ -82,9 +110,11 @@ export default function FoundItemsPage() {
               </div>
             </div>
           ))}
+          {items.length === 0 ? (
+            <p className="text-sm text-text/72">No found items registered yet.</p>
+          ) : null}
         </div>
       </Card>
     </div>
   );
 }
-

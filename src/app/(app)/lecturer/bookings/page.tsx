@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import { lecturerBookingRequests } from "@/models/mockData";
-import type { LecturerBookingRequest } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { ConsultationBooking } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
-function badgeVariant(status: LecturerBookingRequest["status"]) {
+function badgeVariant(status: ConsultationBooking["status"]) {
   if (status === "Approved" || status === "Completed") {
     return "success" as const;
   }
@@ -18,7 +19,65 @@ function badgeVariant(status: LecturerBookingRequest["status"]) {
 }
 
 export default function LecturerBookingsPage() {
-  const [requests, setRequests] = useState<LecturerBookingRequest[]>(lecturerBookingRequests);
+  const user = useMemo(() => readStoredUser(), []);
+  const [allRequests, setAllRequests] = useState<ConsultationBooking[]>([]);
+
+  const lecturerId = String(user?.id ?? "").trim();
+  const lecturerName = String(user?.name ?? "")
+    .trim()
+    .toLowerCase();
+
+  const requests = useMemo(() => {
+    if (!lecturerId && !lecturerName) {
+      return allRequests;
+    }
+
+    return allRequests.filter((item) => {
+      if (lecturerId && String(item.lecturerUserId ?? "").trim() === lecturerId) {
+        return true;
+      }
+
+      if (
+        lecturerName &&
+        String(item.lecturer ?? "").trim().toLowerCase() === lecturerName
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [allRequests, lecturerId, lecturerName]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<ConsultationBooking[]>(
+      PORTAL_DATA_KEYS.consultationBookings,
+      []
+    ).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+
+      setAllRequests(rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateStatus = (id: string, status: ConsultationBooking["status"]) => {
+    const next = allRequests.map((item) =>
+      item.id === id ? { ...item, status } : item
+    );
+
+    void savePortalData(PORTAL_DATA_KEYS.consultationBookings, next)
+      .then((saved) => {
+        setAllRequests(saved);
+      })
+      .catch(() => null);
+  };
 
   return (
     <div className="space-y-4">
@@ -43,25 +102,13 @@ export default function LecturerBookingsPage() {
                 {request.status === "Pending" ? (
                   <>
                     <Button
-                      onClick={() =>
-                        setRequests((prev) =>
-                          prev.map((item) =>
-                            item.id === request.id ? { ...item, status: "Approved" } : item
-                          )
-                        )
-                      }
+                      onClick={() => updateStatus(request.id, "Approved")}
                       variant="secondary"
                     >
                       Approve
                     </Button>
                     <Button
-                      onClick={() =>
-                        setRequests((prev) =>
-                          prev.map((item) =>
-                            item.id === request.id ? { ...item, status: "Declined" } : item
-                          )
-                        )
-                      }
+                      onClick={() => updateStatus(request.id, "Declined")}
                       variant="ghost"
                     >
                       Decline
@@ -72,8 +119,12 @@ export default function LecturerBookingsPage() {
             </div>
           </Card>
         ))}
+        {requests.length === 0 ? (
+          <Card>
+            <p className="text-sm text-text/72">No booking requests found.</p>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
 }
-

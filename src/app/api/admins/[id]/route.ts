@@ -63,12 +63,11 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-  if (!mongooseConnection) {
-    const row = findAdminUserInMemoryById(userId);
-    if (!row) {
-      return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
-    }
-    return NextResponse.json(row);
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const row = await UserModel.findOne({ _id: userId, role: { $in: ADMIN_ROLES } })
@@ -127,37 +126,11 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      try {
-        const updated = updateAdminUserInMemory({
-          id: userId,
-          fullName: input.fullName,
-          username: input.username,
-          email: input.email,
-          role: input.role,
-          status: input.status,
-          mustChangePassword:
-            input.password || input.mustChangePassword !== undefined
-              ? input.password
-                ? true
-                : input.mustChangePassword
-              : undefined,
-          passwordHash: input.password
-            ? await bcrypt.hash(input.password, 10)
-            : undefined,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
-        }
-
-        return NextResponse.json(updated);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to update admin user";
-        if (message === "Email already exists" || message === "Username already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const row = await UserModel.findOne({
@@ -220,12 +193,11 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const deleted = deleteAdminUserInMemory(userId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
-      }
-      return NextResponse.json({ ok: true });
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const deletedRow = await UserModel.findOneAndDelete({

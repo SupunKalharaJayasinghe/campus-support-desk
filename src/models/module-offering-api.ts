@@ -8,12 +8,10 @@ import {
   type TermCode,
 } from "@/models/intake-store";
 import {
-  listLabAssistantsInMemory,
   toLabAssistantPersistedRecordFromUnknown,
   type LabAssistantPersistedRecord,
 } from "@/models/lab-assistant-store";
 import {
-  listLecturersInMemory,
   toLecturerPersistedRecordFromUnknown,
   type LecturerPersistedRecord,
 } from "@/models/lecturer-store";
@@ -432,9 +430,6 @@ async function loadLecturersByIds(
   mongooseConnection: typeof mongoose | null
 ) {
   const map = new Map<string, LecturerPersistedRecord>();
-  listLecturersInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
 
   if (!mongooseConnection) {
     return map;
@@ -467,9 +462,6 @@ async function loadLabAssistantsByIds(
   mongooseConnection: typeof mongoose | null
 ) {
   const map = new Map<string, LabAssistantPersistedRecord>();
-  listLabAssistantsInMemory().forEach((row) => {
-    map.set(row.id, row);
-  });
 
   if (!mongooseConnection) {
     return map;

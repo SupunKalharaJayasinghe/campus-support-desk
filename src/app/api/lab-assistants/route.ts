@@ -142,19 +142,11 @@ export async function GET(request: Request) {
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
   const page = parsePageParam(searchParams.get("page"), 1);
 
-  if (!mongooseConnection) {
-    const allItems = listLabAssistantsInMemory({ search, status, sort });
-    const total = allItems.length;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, pageCount);
-    const start = (safePage - 1) * pageSize;
-
-    return NextResponse.json({
-      items: allItems.slice(start, start + pageSize).map((item) => toApiLabAssistant(item)),
-      total,
-      page: safePage,
-      pageSize,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query: Record<string, unknown> = {};
@@ -242,22 +234,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!mongooseConnection) {
-      try {
-        const created = createLabAssistantInMemory({
-          ...input,
-          ...validated,
-        });
-        return NextResponse.json(toApiLabAssistant(created), { status: 201 });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to create lab assistant";
-        if (message === "NIC/Staff ID already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
+        if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
     }
 
     const maxAttempts = 10;

@@ -9,8 +9,9 @@ import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/ToastProvider";
-import { studentPosts } from "@/models/mockData";
-import type { PostCategory, PostItem } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { PostCategory, PostItem } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
 type Filter = "All" | PostCategory;
 
@@ -20,8 +21,9 @@ function cn(...classes: Array<string | undefined | false>) {
 
 export default function StudentPostsPage() {
   const { toast } = useToast();
+  const user = useMemo(() => readStoredUser(), []);
   const [loading, setLoading] = useState(true);
-  const [posts, setPosts] = useState<PostItem[]>(studentPosts);
+  const [posts, setPosts] = useState<PostItem[]>([]);
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -32,9 +34,35 @@ export default function StudentPostsPage() {
   const [upvoted, setUpvoted] = useState<string[]>([]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 500);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+
+    void loadPortalData<PostItem[]>(PORTAL_DATA_KEYS.discussionPosts, []).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+
+      setPosts(rows);
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const persistPosts = (next: PostItem[], onSuccess?: () => void) => {
+    void savePortalData(PORTAL_DATA_KEYS.discussionPosts, next)
+      .then((saved) => {
+        setPosts(saved);
+        onSuccess?.();
+      })
+      .catch(() => {
+        toast({
+          title: "Save failed",
+          message: "Unable to update posts right now.",
+        });
+      });
+  };
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase().trim();
@@ -146,13 +174,17 @@ export default function StudentPostsPage() {
                     if (upvoted.includes(selected.id)) {
                       return;
                     }
-                    setPosts((prev) =>
-                      prev.map((entry) =>
-                        entry.id === selected.id ? { ...entry, upvotes: entry.upvotes + 1 } : entry
-                      )
+
+                    const next = posts.map((entry) =>
+                      entry.id === selected.id
+                        ? { ...entry, upvotes: entry.upvotes + 1 }
+                        : entry
                     );
-                    setUpvoted((prev) => [...prev, selected.id]);
-                    toast({ title: "Upvoted", message: "Your vote has been recorded." });
+
+                    persistPosts(next, () => {
+                      setUpvoted((prev) => [...prev, selected.id]);
+                      toast({ title: "Upvoted", message: "Your vote has been recorded." });
+                    });
                   }}
                   variant="secondary"
                 >
@@ -196,14 +228,15 @@ export default function StudentPostsPage() {
                     if (!title.trim() || !description.trim()) {
                       return;
                     }
-                    setPosts((prev) => [
+
+                    const next: PostItem[] = [
                       {
-                        id: `sp-${Date.now()}`,
-                        ownerId: "u-student",
+                        id: `post-${Date.now()}`,
+                        ownerId: String(user?.id ?? "student"),
                         title: title.trim(),
                         description: description.trim(),
                         content: description.trim(),
-                        author: "Maya Rodrigo",
+                        author: String(user?.name ?? "Student"),
                         category,
                         tags: [],
                         replies: [],
@@ -211,13 +244,16 @@ export default function StudentPostsPage() {
                         status: "Open",
                         time: "Just now",
                       },
-                      ...prev,
-                    ]);
-                    setTitle("");
-                    setDescription("");
-                    setCategory("Academic Question");
-                    setCreateOpen(false);
-                    toast({ title: "Post created", message: "Your post was added to the feed." });
+                      ...posts,
+                    ];
+
+                    persistPosts(next, () => {
+                      setTitle("");
+                      setDescription("");
+                      setCategory("Academic Question");
+                      setCreateOpen(false);
+                      toast({ title: "Post created", message: "Your post was added to the feed." });
+                    });
                   }}
                 >
                   Create Post
@@ -230,4 +266,3 @@ export default function StudentPostsPage() {
     </div>
   );
 }
-

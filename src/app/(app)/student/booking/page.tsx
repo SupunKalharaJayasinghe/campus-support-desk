@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
-import { availableLecturerSlots, studentBookings } from "@/models/mockData";
-import type { StudentBooking } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type {
+  AvailableLecturerSlotsGroup,
+  ConsultationBooking,
+  LecturerAvailabilitySlot,
+} from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
 interface SelectedSlot {
+  lecturerUserId: string;
   lecturer: string;
+  department: string;
   date: string;
   start: string;
   end: string;
 }
 
-function bookingVariant(status: StudentBooking["status"]) {
+function bookingVariant(status: ConsultationBooking["status"]) {
   if (status === "Approved" || status === "Completed") {
     return "success" as const;
   }
@@ -26,15 +33,94 @@ function bookingVariant(status: StudentBooking["status"]) {
   return "warning" as const;
 }
 
+function groupSlotsByLecturer(
+  slots: LecturerAvailabilitySlot[]
+): AvailableLecturerSlotsGroup[] {
+  const grouped = new Map<string, AvailableLecturerSlotsGroup>();
+
+  slots.forEach((slot) => {
+    const bucketKey = `${slot.lecturerUserId}:${slot.lecturer}`;
+    const existing = grouped.get(bucketKey);
+    if (existing) {
+      existing.slots.push({
+        id: slot.id,
+        date: slot.date,
+        start: slot.start,
+        end: slot.end,
+      });
+      return;
+    }
+
+    grouped.set(bucketKey, {
+      id: bucketKey,
+      lecturer: slot.lecturer,
+      department: slot.department,
+      slots: [
+        {
+          id: slot.id,
+          date: slot.date,
+          start: slot.start,
+          end: slot.end,
+        },
+      ],
+    });
+  });
+
+  return Array.from(grouped.values()).map((entry) => ({
+    ...entry,
+    slots: [...entry.slots].sort((left, right) => {
+      const dateCompare = left.date.localeCompare(right.date);
+      if (dateCompare !== 0) {
+        return dateCompare;
+      }
+
+      return left.start.localeCompare(right.start);
+    }),
+  }));
+}
+
 export default function StudentBookingPage() {
   const { toast } = useToast();
+  const currentUser = useMemo(() => readStoredUser(), []);
   const [loading, setLoading] = useState(true);
-  const [bookings, setBookings] = useState<StudentBooking[]>(studentBookings);
+  const [allBookings, setAllBookings] = useState<ConsultationBooking[]>([]);
+  const [availableLecturerSlots, setAvailableLecturerSlots] = useState<
+    AvailableLecturerSlotsGroup[]
+  >([]);
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
 
+  const currentUserId = String(currentUser?.id ?? "").trim();
+  const currentUserName = String(currentUser?.name ?? "").trim() || "Student";
+
+  const bookings = useMemo(() => {
+    if (!currentUserId) {
+      return allBookings;
+    }
+
+    return allBookings.filter(
+      (item) => String(item.studentUserId ?? "").trim() === currentUserId
+    );
+  }, [allBookings, currentUserId]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 500);
-    return () => window.clearTimeout(timer);
+    let cancelled = false;
+
+    void Promise.all([
+      loadPortalData<ConsultationBooking[]>(PORTAL_DATA_KEYS.consultationBookings, []),
+      loadPortalData<LecturerAvailabilitySlot[]>(PORTAL_DATA_KEYS.lecturerAvailability, []),
+    ]).then(([bookingRows, slotRows]) => {
+      if (cancelled) {
+        return;
+      }
+
+      setAllBookings(bookingRows);
+      setAvailableLecturerSlots(groupSlotsByLecturer(slotRows));
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -69,7 +155,9 @@ export default function StudentBookingPage() {
                     key={slot.id}
                     onClick={() =>
                       setSelectedSlot({
+                        lecturerUserId: lecturer.id.split(":")[0] ?? "",
                         lecturer: lecturer.lecturer,
+                        department: lecturer.department,
                         date: slot.date,
                         start: slot.start,
                         end: slot.end,
@@ -83,6 +171,9 @@ export default function StudentBookingPage() {
               </div>
             </div>
           ))}
+          {availableLecturerSlots.length === 0 ? (
+            <p className="text-sm text-text/70">No lecturer slots available yet.</p>
+          ) : null}
         </div>
       </Card>
 
@@ -95,18 +186,32 @@ export default function StudentBookingPage() {
             >
               <div>
                 <p className="text-sm font-semibold text-heading">{booking.lecturer}</p>
-                <p className="text-sm text-text/72">{booking.purpose}</p>
+                <p className="text-sm text-text/72">{booking.topic}</p>
                 <p className="text-xs text-text/72">
-                  {booking.date} • {booking.time}
+                  {booking.date} • {booking.start} - {booking.end}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={bookingVariant(booking.status)}>{booking.status}</Badge>
                 <Button
                   disabled={booking.status === "Completed"}
-                  onClick={() =>
-                    setBookings((prev) => prev.filter((item) => item.id !== booking.id))
-                  }
+                  onClick={() => {
+                    const next = allBookings.filter((item) => item.id !== booking.id);
+                    void savePortalData(PORTAL_DATA_KEYS.consultationBookings, next)
+                      .then((saved) => {
+                        setAllBookings(saved);
+                        toast({
+                          title: "Booking cancelled",
+                          message: "Your booking request has been removed.",
+                        });
+                      })
+                      .catch(() => {
+                        toast({
+                          title: "Cancellation failed",
+                          message: "Try again in a moment.",
+                        });
+                      });
+                  }}
                   variant="ghost"
                 >
                   Cancel
@@ -114,6 +219,9 @@ export default function StudentBookingPage() {
               </div>
             </div>
           ))}
+          {bookings.length === 0 ? (
+            <p className="text-sm text-text/70">No bookings yet.</p>
+          ) : null}
         </div>
       </Card>
 
@@ -132,22 +240,38 @@ export default function StudentBookingPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    setBookings((prev) => [
+                    const next: ConsultationBooking[] = [
                       {
-                        id: `sb-${Date.now()}`,
+                        id: `booking-${Date.now()}`,
+                        studentUserId: currentUserId || `student-${Date.now()}`,
+                        studentName: currentUserName,
+                        lecturerUserId: selectedSlot.lecturerUserId,
                         lecturer: selectedSlot.lecturer,
-                        purpose: "Consultation",
+                        department: selectedSlot.department,
+                        topic: "Consultation",
                         date: selectedSlot.date,
-                        time: `${selectedSlot.start} - ${selectedSlot.end}`,
+                        start: selectedSlot.start,
+                        end: selectedSlot.end,
                         status: "Pending",
                       },
-                      ...prev,
-                    ]);
-                    setSelectedSlot(null);
-                    toast({
-                      title: "Booking submitted",
-                      message: "Your request was sent for lecturer approval.",
-                    });
+                      ...allBookings,
+                    ];
+
+                    void savePortalData(PORTAL_DATA_KEYS.consultationBookings, next)
+                      .then((saved) => {
+                        setAllBookings(saved);
+                        setSelectedSlot(null);
+                        toast({
+                          title: "Booking submitted",
+                          message: "Your request was sent for lecturer approval.",
+                        });
+                      })
+                      .catch(() => {
+                        toast({
+                          title: "Booking failed",
+                          message: "Try again in a moment.",
+                        });
+                      });
                   }}
                 >
                   Confirm booking
@@ -160,4 +284,3 @@ export default function StudentBookingPage() {
     </div>
   );
 }
-

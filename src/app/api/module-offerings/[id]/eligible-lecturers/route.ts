@@ -72,15 +72,11 @@ export async function GET(
     return NextResponse.json({ message: "Module offering not found" }, { status: 404 });
   }
 
-  if (!mongooseConnection) {
-    const items = listLecturersInMemory({ status: "ACTIVE", sort: "az" })
-      .filter((row) => matchesSearch(row, search))
-      .map((row) => toApiItem(row));
-
-    return NextResponse.json({
-      items,
-      total: items.length,
-    });
+    if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
   }
 
   const query: Record<string, unknown> = { status: "ACTIVE" };

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import {
-  resolveNotificationsForUser,
+  listNotificationsForUser,
   type NotificationFeedItem,
 } from "@/models/notification-center";
 import { readStoredUser } from "@/models/rbac";
@@ -32,13 +32,32 @@ export default function NotificationCenter({
   subtitle,
 }: NotificationCenterProps) {
   const user = useMemo(() => readStoredUser(), []);
-  const baseItems = useMemo(
-    () => resolveNotificationsForUser(user, role),
-    [role, user]
-  );
+  const [baseItems, setBaseItems] = useState<NotificationFeedItem[]>([]);
   const [tab, setTab] = useState<NotificationTab>("All");
   const [search, setSearch] = useState("");
   const [readMap, setReadMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void listNotificationsForUser(user, role)
+      .then((items) => {
+        if (cancelled) {
+          return;
+        }
+        setBaseItems(items);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setBaseItems([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role, user]);
 
   const notifications = useMemo(
     () =>

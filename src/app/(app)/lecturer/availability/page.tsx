@@ -1,24 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/ToastProvider";
-import { lecturerAvailabilitySeed } from "@/models/mockData";
-import type { LecturerSlot } from "@/models/mockData";
+import { PORTAL_DATA_KEYS, loadPortalData, savePortalData } from "@/models/portal-data";
+import type { LecturerAvailabilitySlot } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
-function overlaps(a: LecturerSlot, b: LecturerSlot) {
+function overlaps(a: LecturerAvailabilitySlot, b: LecturerAvailabilitySlot) {
   return a.date === b.date && a.start < b.end && b.start < a.end;
 }
 
 export default function LecturerAvailabilityPage() {
   const { toast } = useToast();
-  const [slots, setSlots] = useState<LecturerSlot[]>(lecturerAvailabilitySeed);
+  const user = useMemo(() => readStoredUser(), []);
+  const [allSlots, setAllSlots] = useState<LecturerAvailabilitySlot[]>([]);
   const [date, setDate] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState("");
+
+  const lecturerUserId = String(user?.id ?? "").trim();
+  const lecturerName = String(user?.name ?? "").trim() || "Lecturer";
+  const department = user?.facultyCodes?.[0] ?? "General";
+
+  const slots = useMemo(
+    () =>
+      allSlots
+        .filter((slot) => {
+          if (lecturerUserId) {
+            return String(slot.lecturerUserId ?? "").trim() === lecturerUserId;
+          }
+
+          return String(slot.lecturer ?? "").trim() === lecturerName;
+        })
+        .sort((left, right) => {
+          const dateCompare = left.date.localeCompare(right.date);
+          if (dateCompare !== 0) {
+            return dateCompare;
+          }
+          return left.start.localeCompare(right.start);
+        }),
+    [allSlots, lecturerName, lecturerUserId]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadPortalData<LecturerAvailabilitySlot[]>(
+      PORTAL_DATA_KEYS.lecturerAvailability,
+      []
+    ).then((rows) => {
+      if (cancelled) {
+        return;
+      }
+
+      setAllSlots(rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveSlots = (next: LecturerAvailabilitySlot[]) => {
+    void savePortalData(PORTAL_DATA_KEYS.lecturerAvailability, next)
+      .then((saved) => {
+        setAllSlots(saved);
+      })
+      .catch(() => {
+        setError("Failed to save availability. Try again.");
+      });
+  };
 
   return (
     <div className="space-y-4">
@@ -39,12 +94,24 @@ export default function LecturerAvailabilityPage() {
                 setError("Provide a valid date and time range.");
                 return;
               }
-              const candidate: LecturerSlot = { id: `ls-${Date.now()}`, date, start, end };
+
+              const candidate: LecturerAvailabilitySlot = {
+                id: `slot-${Date.now()}`,
+                lecturerUserId: lecturerUserId || `lecturer-${Date.now()}`,
+                lecturer: lecturerName,
+                department,
+                date,
+                start,
+                end,
+              };
+
               if (slots.some((entry) => overlaps(entry, candidate))) {
                 setError("This slot overlaps an existing entry.");
                 return;
               }
-              setSlots((prev) => [...prev, candidate]);
+
+              const next = [...allSlots, candidate];
+              saveSlots(next);
               setDate("");
               setStart("");
               setEnd("");
@@ -64,14 +131,22 @@ export default function LecturerAvailabilityPage() {
               <p className="text-sm text-text/72">
                 {slot.date} • {slot.start} - {slot.end}
               </p>
-              <Button onClick={() => setSlots((prev) => prev.filter((entry) => entry.id !== slot.id))} variant="ghost">
+              <Button
+                onClick={() => {
+                  const next = allSlots.filter((entry) => entry.id !== slot.id);
+                  saveSlots(next);
+                }}
+                variant="ghost"
+              >
                 Remove
               </Button>
             </div>
           ))}
+          {slots.length === 0 ? (
+            <p className="text-sm text-text/70">No availability slots added yet.</p>
+          ) : null}
         </div>
       </Card>
     </div>
   );
 }
-

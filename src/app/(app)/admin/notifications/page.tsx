@@ -26,6 +26,18 @@ import {
   SUBGROUP_OPTIONS,
   TERM_OPTIONS,
 } from "@/components/admin/AdminContext";
+import {
+  PORTAL_DATA_KEYS,
+  loadPortalData,
+  savePortalData,
+} from "@/models/portal-data";
+import type {
+  NotificationAudience,
+  NotificationFeedItem,
+  SemesterCode,
+  StreamCode,
+} from "@/models/notification-center";
+import type { AppRole } from "@/models/rbac";
 
 type MainTab = "sent" | "inbox";
 type PageSize = 10 | 25 | 50 | 100;
@@ -161,99 +173,8 @@ const STREAM_TARGET_OPTIONS = [
   })),
 ];
 
-const INITIAL_SENT_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: "ann-001",
-    title: "Semester Orientation Schedule",
-    message: "Orientation sessions will begin Monday at 9:00 AM in Main Hall.",
-    audienceType: "All",
-    audienceLabel: "All Users",
-    channel: "Both",
-    status: "Sent",
-    priority: "Normal",
-    deliveryAt: "Mar 02, 2026 • 09:00 AM",
-  },
-  {
-    id: "ann-002",
-    title: "Faculty of Computing Lab Maintenance",
-    message: "Lab C2 will be unavailable on Friday from 1 PM to 4 PM.",
-    audienceType: "Faculty",
-    audienceLabel: "Faculty of Computing",
-    channel: "In-app",
-    status: "Scheduled",
-    priority: "High",
-    deliveryAt: "Mar 05, 2026 • 01:00 PM",
-  },
-  {
-    id: "ann-003",
-    title: "Lecturer Consultation Reminder",
-    message: "Please confirm weekly consultation slots before Thursday noon.",
-    audienceType: "Role",
-    audienceLabel: "Lecturer",
-    channel: "Email",
-    status: "Draft",
-    priority: "Normal",
-    deliveryAt: "Not scheduled",
-  },
-  {
-    id: "ann-004",
-    title: "New Lost Item Intake Protocol",
-    message: "All found items must include location and timestamp in submissions.",
-    audienceType: "Role",
-    audienceLabel: "Lost Item Officer",
-    channel: "Both",
-    status: "Sent",
-    priority: "High",
-    deliveryAt: "Feb 27, 2026 • 10:15 AM",
-  },
-];
-
-const INITIAL_INBOX_NOTIFICATIONS: InboxNotification[] = [
-  {
-    id: "inbox-001",
-    type: "System",
-    subject: "Delivery Report: Orientation Schedule",
-    preview: "98.4% of recipients received the message successfully.",
-    message:
-      "Delivery summary completed. 98.4% delivered in-app and 97.9% delivered by email.",
-    source: "Notification Service",
-    timestamp: "15 minutes ago",
-    read: false,
-  },
-  {
-    id: "inbox-002",
-    type: "User Report",
-    subject: "Announcement typo reported",
-    preview: "Student user reported an incorrect room number in an announcement.",
-    message:
-      "A student reported that the announced room number for tomorrow's workshop appears incorrect.",
-    source: "Student Support",
-    timestamp: "1 hour ago",
-    read: false,
-  },
-  {
-    id: "inbox-003",
-    type: "Delivery",
-    subject: "Scheduled message sent",
-    preview: "Your scheduled faculty update was delivered to 412 recipients.",
-    message:
-      "The scheduled faculty notification has been sent successfully to all targeted recipients.",
-    source: "Delivery Engine",
-    timestamp: "Today, 09:32 AM",
-    read: true,
-  },
-  {
-    id: "inbox-004",
-    type: "Other",
-    subject: "Moderation queue notice",
-    preview: "Three content reports are awaiting administrative review.",
-    message:
-      "Moderation queue count increased to 3 pending reports. Please review and assign.",
-    source: "Moderation Center",
-    timestamp: "Yesterday, 04:20 PM",
-    read: true,
-  },
-];
+const INITIAL_SENT_ANNOUNCEMENTS: Announcement[] = [];
+const INITIAL_INBOX_NOTIFICATIONS: InboxNotification[] = [];
 
 function cn(...classes: Array<string | undefined | false>) {
   return classes.filter(Boolean).join(" ");
@@ -307,8 +228,129 @@ function currentTimestamp() {
   });
 }
 
+function mapRoleTargetToRoles(roleTarget: string): AppRole[] {
+  const normalized = roleTarget.trim().toLowerCase();
+  if (normalized === "student") {
+    return ["STUDENT"];
+  }
+  if (
+    normalized === "lecturer" ||
+    normalized === "lecture incharge" ||
+    normalized === "lecture supporter"
+  ) {
+    return ["LECTURER"];
+  }
+  if (normalized === "lost item officer") {
+    return ["LOST_ITEM_STAFF"];
+  }
+  if (normalized === "administrator") {
+    return ["SUPER_ADMIN"];
+  }
+  return ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"];
+}
+
+function buildNotificationAudience(announcement: Announcement): NotificationAudience {
+  if (announcement.audienceType === "All") {
+    return {
+      roles: ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"],
+    };
+  }
+
+  if (announcement.audienceType === "Role") {
+    return { roles: mapRoleTargetToRoles(announcement.audienceLabel) };
+  }
+
+  if (announcement.audienceType === "Faculty") {
+    const facultyCode =
+      ACADEMIC_FACULTY_OPTIONS.find(
+        (item) =>
+          item.code === announcement.audienceLabel ||
+          item.label === announcement.audienceLabel
+      )?.code ??
+      announcement.audienceLabel.trim().toUpperCase();
+
+    return {
+      roles: ["STUDENT", "LECTURER"],
+      facultyCodes: [facultyCode],
+    };
+  }
+
+  if (announcement.audienceType === "Semester") {
+    const semester = announcement.audienceLabel.trim().toUpperCase();
+    return semester === "ALL SEMESTER"
+      ? { roles: ["STUDENT"] }
+      : { roles: ["STUDENT"], semesterCodes: [semester as SemesterCode] };
+  }
+
+  const targeting = announcement.targeting;
+  if (!targeting) {
+    return { roles: ["STUDENT"] };
+  }
+
+  const semester = targeting.semester.trim().toUpperCase();
+  const stream = targeting.stream.trim().toUpperCase();
+
+  return {
+    roles: ["STUDENT"],
+    facultyCodes: targeting.facultyCode
+      ? [targeting.facultyCode.trim().toUpperCase()]
+      : [],
+    degreeCodes: targeting.degreeCode
+      ? [targeting.degreeCode.trim().toUpperCase()]
+      : [],
+    semesterCodes:
+      semester && semester !== "ALL" ? [semester as SemesterCode] : [],
+    streamCodes: stream && stream !== "ALL" ? [stream as StreamCode] : [],
+    intakeIds: targeting.allIntakes ? [] : targeting.intakeIds,
+    subgroupCodes: targeting.allSubgroups ? [] : targeting.subgroupCodes,
+  };
+}
+
+function toNotificationFeedItem(
+  announcement: Announcement,
+  index: number
+): NotificationFeedItem | null {
+  if (announcement.status !== "Sent") {
+    return null;
+  }
+
+  const publishedAt = new Date().toISOString();
+
+  return {
+    id: `notification-${announcement.id}-${index + 1}`,
+    type: "Announcement",
+    title: announcement.title,
+    message: announcement.message,
+    time: "Just now",
+    publishedAt,
+    unread: true,
+    targetLabel: announcement.audienceLabel || "All Users",
+    audience: buildNotificationAudience(announcement),
+  };
+}
+
+function resolveNextAnnouncementCounter(rows: Announcement[]) {
+  let maxValue = 0;
+
+  rows.forEach((row) => {
+    const match = row.id.match(/^ann-(\d{1,})$/i);
+    if (!match) {
+      return;
+    }
+
+    const value = Number(match[1] ?? "");
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    maxValue = Math.max(maxValue, Math.floor(value));
+  });
+
+  return maxValue;
+}
+
 export default function AdminNotificationsPage() {
-  const idCounter = useRef(INITIAL_SENT_ANNOUNCEMENTS.length);
+  const idCounter = useRef(0);
   const [activeTab, setActiveTab] = useState<MainTab>("sent");
   const [sentAnnouncements, setSentAnnouncements] = useState<Announcement[]>(
     INITIAL_SENT_ANNOUNCEMENTS
@@ -337,12 +379,11 @@ export default function AdminNotificationsPage() {
   const [previewAnnouncementId, setPreviewAnnouncementId] = useState<string | null>(
     null
   );
-  const [selectedInboxId, setSelectedInboxId] = useState<string | null>(
-    INITIAL_INBOX_NOTIFICATIONS[0]?.id ?? null
-  );
+  const [selectedInboxId, setSelectedInboxId] = useState<string | null>(null);
   const [availableIntakes, setAvailableIntakes] = useState<IntakeOption[]>([]);
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
   const [intakeLoadError, setIntakeLoadError] = useState("");
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     if (!rowMenuAnnouncementId) return;
@@ -370,6 +411,54 @@ export default function AdminNotificationsPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [composeOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      loadPortalData<Announcement[]>(PORTAL_DATA_KEYS.adminSentAnnouncements, []),
+      loadPortalData<InboxNotification[]>(PORTAL_DATA_KEYS.adminInboxNotifications, []),
+    ]).then(([savedAnnouncements, savedInbox]) => {
+      if (cancelled) {
+        return;
+      }
+
+      setSentAnnouncements(savedAnnouncements);
+      setInboxNotifications(savedInbox);
+      setSelectedInboxId(savedInbox[0]?.id ?? null);
+      idCounter.current = resolveNextAnnouncementCounter(savedAnnouncements);
+      setIsHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    void savePortalData(PORTAL_DATA_KEYS.adminSentAnnouncements, sentAnnouncements).catch(
+      () => null
+    );
+
+    const feed = sentAnnouncements
+      .map((item, index) => toNotificationFeedItem(item, index))
+      .filter((item): item is NotificationFeedItem => Boolean(item));
+    void savePortalData(PORTAL_DATA_KEYS.notificationFeed, feed).catch(() => null);
+  }, [isHydrated, sentAnnouncements]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    void savePortalData(PORTAL_DATA_KEYS.adminInboxNotifications, inboxNotifications).catch(
+      () => null
+    );
+  }, [inboxNotifications, isHydrated]);
 
   const sentCount = sentAnnouncements.length;
   const inboxCount = inboxNotifications.filter((item) => !item.read).length;

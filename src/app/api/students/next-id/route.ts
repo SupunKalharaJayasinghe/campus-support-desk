@@ -26,9 +26,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "intakeId is required" }, { status: 400 });
   }
 
-  if (!mongooseConnection) {
+    if (!mongooseConnection) {
     return NextResponse.json(
-      { message: "MongoDB connection is required" },
+      { message: "Database connection is required" },
       { status: 503 }
     );
   }

@@ -39,9 +39,9 @@ export async function POST(request: Request) {
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
+        if (!mongooseConnection) {
       return NextResponse.json(
-        { message: "Authentication service is unavailable" },
+        { message: "Database connection is required" },
         { status: 503 }
       );
     }
