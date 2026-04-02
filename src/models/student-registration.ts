@@ -15,6 +15,7 @@ export interface StudentProfileWriteInput {
   lastName: string;
   nicNumber: string;
   phone: string;
+  optionalEmail: string;
   status: StudentStatus;
 }
 
@@ -222,6 +223,15 @@ export function sanitizePhone(value: unknown) {
   return collapseSpaces(String(value ?? "")).slice(0, 32);
 }
 
+export function sanitizeOptionalEmail(value: unknown) {
+  const normalized = collapseSpaces(String(value ?? "")).toLowerCase().slice(0, 120);
+  if (!normalized) {
+    return "";
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : "";
+}
+
 export function sanitizeNicNumber(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -416,6 +426,7 @@ export function listStudentsInMemory(options?: {
         student.firstName,
         student.lastName,
         student.email,
+        student.optionalEmail,
         student.nicNumber,
       ]
         .join(" ")
@@ -577,6 +588,7 @@ export async function createStudentAndUserInMemory(
     lastName: input.profile.lastName,
     nicNumber: input.profile.nicNumber,
     phone: input.profile.phone,
+    optionalEmail: input.profile.optionalEmail,
     status: input.profile.status,
     createdAt: now,
     updatedAt: now,
@@ -778,6 +790,7 @@ export function updateStudentInMemory(
     lastName: input.lastName,
     nicNumber: input.nicNumber,
     phone: input.phone,
+    optionalEmail: input.optionalEmail,
     status: input.status,
     updatedAt: new Date().toISOString(),
   };
