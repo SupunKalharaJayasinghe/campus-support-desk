@@ -29,13 +29,14 @@ import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
 import UrgentPostsCarousel from "@/components/community/UrgentPostsCarousel";
+import CommunityInstructionsPanel from "@/components/community/CommunityInstructionsPanel";
+import CommunitySidebarCalendar from "@/components/community/CommunitySidebarCalendar";
 import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import {
     COMMUNITY_POST_REPORT_REASONS,
     type CommunityPostReportReasonKey,
 } from "@/lib/community-post-report-reasons";
-import communityBackground from "@/app/images/community/community2.jpg";
 
 type Reply = {
     id: string;
@@ -155,7 +156,7 @@ function readReplyAttachmentFile(file: File): Promise<{ dataUrl: string; name: s
     });
 }
 
-const CATEGORIES = ["all", "lost_item", "study_material", "academic_question"] as const;
+const CATEGORIES = ["all", "urgent", "lost_item", "study_material", "academic_question"] as const;
 
 const INITIAL_POSTS: Post[] = [
     {
@@ -225,6 +226,7 @@ const MOCK_MEMBERS = [
 
 const categoryLabel: Record<(typeof CATEGORIES)[number], string> = {
     all: "All",
+    urgent: "🔥 Urgent",
     lost_item: "🎒 Lost Items",
     study_material: "📂 Study Materials",
     academic_question: "📘 Academic",
@@ -240,6 +242,10 @@ const categoryChipStyles: Record<(typeof CATEGORIES)[number], { active: string; 
     all: {
         active: "bg-slate-700 text-white",
         inactive: "bg-slate-200 text-slate-700 hover:bg-slate-300",
+    },
+    urgent: {
+        active: "bg-amber-600 text-white",
+        inactive: "bg-amber-100 text-amber-900 hover:bg-amber-200",
     },
     academic_question: {
         active: "bg-blue-600 text-white",
@@ -269,7 +275,6 @@ export default function CommunityPage() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMembersVisible, setIsMembersVisible] = useState(false);
-    const [isUrgentSidebarVisible, setIsUrgentSidebarVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
@@ -318,7 +323,11 @@ export default function CommunityPage() {
     );
 
     const filteredPosts = useMemo(() => {
-        const byCategory = posts.filter((post) => activeCategory === "all" || post.category === activeCategory);
+        const byCategory = posts.filter((post) => {
+            if (activeCategory === "all") return true;
+            if (activeCategory === "urgent") return isActiveUrgentPost(post);
+            return post.category === activeCategory;
+        });
         const titleQuery = titleSearch.trim().toLowerCase();
         const byTitle =
             titleQuery.length === 0
@@ -681,12 +690,8 @@ export default function CommunityPage() {
     };
 
     return (
-        <main
-            className="relative h-screen overflow-hidden text-[#0f0f0f]"
-            style={{ backgroundImage: `url(${communityBackground.src})`, backgroundSize: "cover", backgroundPosition: "center" }}
-        >
-            <div className="absolute inset-0 bg-slate-100/70" />
-            <div className="relative z-10 h-full">
+        <main className="relative h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-blue-50 text-[#0f0f0f]">
+            <div className="relative h-full">
             <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
                 <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
                     <div className="flex items-center gap-3">
@@ -798,13 +803,7 @@ export default function CommunityPage() {
                             <Link href="/community/profile" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
                                 <User size={18} /> Profile
                             </Link>
-                            <button
-                                type="button"
-                                onClick={() => setIsInstructionsOpen(true)}
-                                className="flex w-full items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-left text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
-                            >
-                                <BookOpen size={18} /> Instructions
-                            </button>
+                            
                         </div>
 
                         <div className="my-3 h-px bg-blue-100" />
@@ -812,11 +811,7 @@ export default function CommunityPage() {
                         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
 
                         <div className="rounded-xl border border-amber-200/80 bg-white/95 p-3">
-                            <button
-                                type="button"
-                               
-                                className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
-                            >
+                            <div className="flex w-full items-center text-sm font-semibold text-slate-700">
                                 <span className="flex items-center gap-2">
                                     <Flame size={16} className="text-amber-600" aria-hidden />
                                     Urgent posts
@@ -826,25 +821,22 @@ export default function CommunityPage() {
                                         </span>
                                     ) : null}
                                 </span>
-                                {isUrgentSidebarVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </button>
-                            {isUrgentSidebarVisible && (
-                                <div className="mt-3 pr-1">
-                                    {urgentPostsActive.length === 0 ? (
-                                        <p className="text-xs text-slate-500">No active urgent posts right now.</p>
-                                    ) : (
-                                        <UrgentPostsCarousel
-                                            posts={urgentCarouselPosts}
-                                            baseWidth={252}
-                                            autoplay
-                                            autoplayDelay={3800}
-                                            pauseOnHover
-                                            loop={urgentCarouselPosts.length > 1}
-                                            onSelectPost={handleJumpToPost}
-                                        />
-                                    )}
-                                </div>
-                            )}
+                            </div>
+                            <div className="mt-3 pr-1">
+                                {urgentPostsActive.length === 0 ? (
+                                    <p className="text-xs text-slate-500">No active urgent posts right now.</p>
+                                ) : (
+                                    <UrgentPostsCarousel
+                                        posts={urgentCarouselPosts}
+                                        baseWidth={252}
+                                        autoplay
+                                        autoplayDelay={3800}
+                                        pauseOnHover
+                                        loop={urgentCarouselPosts.length > 1}
+                                        onSelectPost={handleJumpToPost}
+                                    />
+                                )}
+                            </div>
                         </div>
 
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
@@ -1121,6 +1113,15 @@ export default function CommunityPage() {
                         </div>
                     )}
                 </section>
+
+                <aside
+                    id="community-instructions"
+                    className="hidden shrink-0 border-l border-blue-100 bg-slate-100/95 lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:w-80 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:self-start lg:p-4"
+                    aria-label="Instructions and calendar"
+                >
+                    <CommunityInstructionsPanel className="rounded-xl border border-blue-100 bg-white/95 p-4 shadow-sm" />
+                    <CommunitySidebarCalendar />
+                </aside>
             </div>
             </div>
 
@@ -1128,7 +1129,7 @@ export default function CommunityPage() {
                 <>
                     <button
                         type="button"
-                        className="fixed inset-0 z-[62] bg-black/40"
+                        className="fixed inset-0 z-[62] bg-black/40 lg:hidden"
                         aria-label="Close instructions"
                         onClick={() => setIsInstructionsOpen(false)}
                     />
@@ -1136,55 +1137,25 @@ export default function CommunityPage() {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="community-instructions-title"
-                        className="fixed left-1/2 top-1/2 z-[72] w-[min(100%,26rem)] max-h-[min(90vh,36rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-blue-100 bg-white p-5 shadow-xl"
+                        className="fixed left-1/2 top-1/2 z-[72] w-[min(100%,26rem)] max-h-[min(90vh,40rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-blue-100 bg-white p-5 shadow-xl lg:hidden"
                     >
                         <div className="flex items-start justify-between gap-2">
-                            <h2 id="community-instructions-title" className="text-base font-semibold text-slate-800">
-                                Community — demo instructions
+                            <h2 id="community-instructions-title" className="sr-only">
+                                Community instructions
                             </h2>
                             <button
                                 type="button"
                                 onClick={() => setIsInstructionsOpen(false)}
-                                className="rounded-full p-1 text-slate-500 hover:bg-blue-50"
+                                className="ml-auto rounded-full p-1 text-slate-500 hover:bg-blue-50"
                                 aria-label="Close"
                             >
                                 <X size={20} />
                             </button>
                         </div>
-                        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700">
-                            <li>Use the category chips to filter posts (All, Academic, Lost Items, Study Materials).</li>
-                            <li>
-                                Search narrows the feed; the header search looks at titles and content in the list view.
-                            </li>
-                            <li>Sign in to like posts, reply, and report content. Guests can still browse.</li>
-                            <li>
-                                Open <strong className="font-semibold text-slate-800">Reply</strong> under a post to read
-                                threads and add a comment.
-                            </li>
-                            <li>
-                                Use <strong className="font-semibold text-slate-800">Create</strong> in the top bar (or your
-                                profile) to add a new community post.
-                            </li>
-                            <li>
-                                <strong className="font-semibold text-slate-800">Report</strong> opens a short form—pick a
-                                reason and, if you choose Other, describe the issue.
-                            </li>
-                            <li>
-                                Expand <strong className="font-semibold text-slate-800">Members Details</strong> and{" "}
-                                <strong className="font-semibold text-slate-800">Recent Posts</strong> in the sidebar when you
-                                need them.
-                            </li>
-                        </ul>
-                        <div className="mt-6 flex justify-end">
-                            <Button
-                                type="button"
-                                variant="primary"
-                                className="bg-blue-700 hover:bg-blue-800"
-                                onClick={() => setIsInstructionsOpen(false)}
-                            >
-                                OK
-                            </Button>
-                        </div>
+                        <CommunityInstructionsPanel
+                            className="-mt-2"
+                            onFinish={() => setIsInstructionsOpen(false)}
+                        />
                     </div>
                 </>
             ) : null}
