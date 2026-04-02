@@ -5,14 +5,11 @@ import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
   decorateStudentDetailRecord,
-  deleteStudentInMemory,
-  findStudentDetailInMemoryById,
   getMongoDuplicateField,
   sanitizeName,
   sanitizeNicNumber,
   sanitizePhone,
   sanitizeStudentStatus,
-  updateStudentInMemory,
   type EnrollmentPersistedRecord,
   type StudentPersistedRecord,
   type StudentProfileWriteInput,
@@ -135,6 +132,13 @@ export async function PUT(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const studentRecordId = String(params.id ?? "").trim();
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
@@ -149,31 +153,6 @@ export async function PUT(
         },
         { status: 400 }
       );
-    }
-
-    if (!mongooseConnection) {
-      let updated: StudentPersistedRecord | null = null;
-      try {
-        updated = updateStudentInMemory(studentRecordId, profile);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update student";
-        if (message === "NIC number already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
-      if (!updated) {
-        return NextResponse.json({ message: "Student not found" }, { status: 404 });
-      }
-
-      const detail = findStudentDetailInMemoryById(studentRecordId);
-      if (!detail) {
-        return NextResponse.json({ message: "Student not found" }, { status: 404 });
-      }
-
-      return NextResponse.json(detail);
     }
 
     const current = await StudentModel.findById(studentRecordId).exec();
@@ -234,16 +213,14 @@ export async function DELETE(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    const studentRecordId = String(params.id ?? "").trim();
-
     if (!mongooseConnection) {
-      const deleted = deleteStudentInMemory(studentRecordId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Student not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
     }
+
+    const studentRecordId = String(params.id ?? "").trim();
 
     const current = await StudentModel.findById(studentRecordId).exec();
     if (!current) {
@@ -278,16 +255,14 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-  const studentRecordId = String(params.id ?? "").trim();
-
   if (!mongooseConnection) {
-    const detail = findStudentDetailInMemoryById(studentRecordId);
-    if (!detail) {
-      return NextResponse.json({ message: "Student not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(detail);
+    return NextResponse.json(
+      { message: "MongoDB connection is required" },
+      { status: 503 }
+    );
   }
+
+  const studentRecordId = String(params.id ?? "").trim();
 
   const row = await StudentModel.findById(studentRecordId)
     .lean()

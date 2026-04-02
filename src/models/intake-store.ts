@@ -662,6 +662,26 @@ function intakeStore() {
   return globalForIntakeStore.__intakeStore;
 }
 
+export function replaceIntakeStore(records: IntakeRecord[]) {
+  globalForIntakeStore.__intakeStore = records.map((item) =>
+    normalizeIntakeRecord(item)
+  );
+}
+
+export function snapshotIntakes(options?: {
+  includeDeleted?: boolean;
+}) {
+  return intakeStore()
+    .filter((intake) => (options?.includeDeleted ? true : !intake.isDeleted))
+    .map((intake) =>
+      normalizeIntakeRecord({
+        ...intake,
+        termSchedules: intake.termSchedules.map((schedule) => ({ ...schedule })),
+        notifications: intake.notifications.map((notification) => ({ ...notification })),
+      })
+    );
+}
+
 function createNotificationRecord(
   intake: IntakeRecord,
   termCode: TermCode,

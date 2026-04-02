@@ -6,8 +6,6 @@ import { StudentModel } from "@/models/Student";
 import { connectMongoose } from "@/models/mongoose";
 import { findIntakeById, type TermCode } from "@/models/intake-store";
 import {
-  bulkAssignEnrollmentSubgroupsInMemory,
-  listIntakeEnrollmentCandidatesInMemory,
   sanitizeSubgroup,
 } from "@/models/student-registration";
 
@@ -365,14 +363,13 @@ export async function POST(request: Request) {
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-    const candidates = mongooseConnection
-      ? await listCandidatesFromDb(intakeId)
-      : listIntakeEnrollmentCandidatesInMemory(intakeId).map((row) => ({
-          enrollmentId: row.enrollmentId,
-          studentRecordId: row.studentRecordId,
-          studentId: row.studentId,
-          currentSubgroup: row.currentSubgroup,
-        }));
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+    const candidates = await listCandidatesFromDb(intakeId);
 
     const plan = buildDistribution(
       candidates,
@@ -386,14 +383,7 @@ export async function POST(request: Request) {
 
     const writeResult =
       apply && plan.assignments.length > 0
-        ? mongooseConnection
-          ? await applyAssignmentsInDb(plan.assignments)
-          : bulkAssignEnrollmentSubgroupsInMemory(
-              plan.assignments.map((item) => ({
-                enrollmentId: item.enrollmentId,
-                subgroup: item.nextSubgroup,
-              }))
-            )
+        ? await applyAssignmentsInDb(plan.assignments)
         : predicted;
 
     return NextResponse.json({

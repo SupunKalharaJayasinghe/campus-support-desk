@@ -5,7 +5,6 @@ import {
   buildStudentEmail,
   buildStudentId,
   getStudentIdStartSeed,
-  previewNextStudentIdentityInMemory,
   resolveStudentPrefix,
 } from "@/models/student-registration";
 import { CounterModel } from "@/models/Counter";
@@ -27,15 +26,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "intakeId is required" }, { status: 400 });
   }
 
-  try {
-    if (!mongooseConnection) {
-      const preview = previewNextStudentIdentityInMemory(intakeId);
-      return NextResponse.json({
-        studentIdPreview: preview.studentIdPreview,
-        emailPreview: preview.emailPreview,
-      });
-    }
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "MongoDB connection is required" },
+      { status: 503 }
+    );
+  }
 
+  try {
     const { prefixKey } = resolveStudentPrefix(intakeId);
     const seed = getStudentIdStartSeed();
     const counter = (await CounterModel.findOne({ key: prefixKey })

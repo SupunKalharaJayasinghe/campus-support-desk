@@ -5,7 +5,6 @@ import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
   getMongoDuplicateField,
-  resetStudentPasswordInMemory,
   sanitizeNicNumber,
 } from "@/models/student-registration";
 import { StudentModel } from "@/models/Student";
@@ -31,22 +30,10 @@ export async function POST(
 
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
-      try {
-        await resetStudentPasswordInMemory(studentRecordId);
-        return NextResponse.json({
-          ok: true,
-          message: "Password reset to NIC number",
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to reset password";
-
-        if (message === "Student not found") {
-          return NextResponse.json({ message }, { status: 404 });
-        }
-
-        return NextResponse.json({ message }, { status: 400 });
-      }
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
     }
 
     const studentRow = await StudentModel.findById(studentRecordId)

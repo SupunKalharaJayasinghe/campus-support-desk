@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { persistIntakeRecords } from "@/models/intake-record-persistence";
 import { connectMongoose } from "@/models/mongoose";
 import {
   sanitizeDateField,
   sanitizeIntakeId,
   sanitizeTermCode,
   sanitizeToggle,
+  snapshotIntakes,
   updateIntakeSchedule,
   type TermCode,
 } from "@/models/intake-store";
@@ -14,7 +16,13 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
     const targetId = sanitizeIntakeId(params.id);
     const body = (await request.json()) as Partial<{
       currentTerm: TermCode;
@@ -69,6 +77,7 @@ export async function PUT(
         { status: 404 }
       );
     }
+    await persistIntakeRecords(snapshotIntakes({ includeDeleted: true }));
 
     return NextResponse.json(intake);
   } catch {

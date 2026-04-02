@@ -9,13 +9,11 @@ import { connectMongoose } from "@/models/mongoose";
 import {
   buildStudentEmail,
   buildStudentId,
-  createStudentAndUserInMemory,
   decorateStudentDetailRecord,
   decorateStudentListRecord,
   getStudentIdStartSeed,
   getMongoDuplicateField,
   isMongoDuplicateKeyError,
-  listStudentsInMemory,
   normalizeAcademicCode,
   resolveStudentPrefix,
   sanitizeName,
@@ -252,27 +250,19 @@ function groupEnrollmentsByStudent(
 
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "MongoDB connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const search = String(searchParams.get("search") ?? "").trim();
   const status = sanitizeStatus(searchParams.get("status"));
   const sort = sanitizeSort(searchParams.get("sort"));
   const pageSize = parsePageSizeParam(searchParams.get("pageSize"), 10);
   const page = parsePageParam(searchParams.get("page"), 1);
-
-  if (!mongooseConnection) {
-    const allItems = listStudentsInMemory({ search, sort, status });
-    const total = allItems.length;
-    const pageCount = Math.max(1, Math.ceil(total / pageSize));
-    const safePage = Math.min(page, pageCount);
-    const start = (safePage - 1) * pageSize;
-
-    return NextResponse.json({
-      items: allItems.slice(start, start + pageSize),
-      total,
-      page: safePage,
-      pageSize,
-    });
-  }
 
   const query: Record<string, unknown> = {};
   if (status) {
@@ -354,6 +344,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;
@@ -378,25 +375,6 @@ export async function POST(request: Request) {
         { message: error instanceof Error ? error.message : "Invalid student data" },
         { status: 400 }
       );
-    }
-
-    if (!mongooseConnection) {
-      try {
-        const created = await createStudentAndUserInMemory({ profile, enrollment });
-        if (!created) {
-          throw new Error("Failed to map created student");
-        }
-
-        return NextResponse.json(created, { status: 201 });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to register student";
-        if (message === "NIC number already exists") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        throw error;
-      }
     }
 
     const maxAttempts = 6;

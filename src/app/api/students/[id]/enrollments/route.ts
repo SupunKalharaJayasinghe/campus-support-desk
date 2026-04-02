@@ -4,10 +4,8 @@ import "@/models/Student";
 import { connectMongoose } from "@/models/mongoose";
 import {
   DUPLICATE_ENROLLMENT_MESSAGE,
-  addEnrollmentToStudentInMemory,
   decorateEnrollmentRecord,
   isMongoDuplicateKeyError,
-  listStudentEnrollmentsInMemory,
   normalizeAcademicCode,
   sanitizeStudentStatus,
   sanitizeStudentStream,
@@ -113,17 +111,16 @@ export async function GET(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const studentRecordId = String(params.id ?? "").trim();
     if (!studentRecordId) {
       return NextResponse.json({ message: "Student id is required" }, { status: 400 });
-    }
-
-    if (!mongooseConnection) {
-      return NextResponse.json({
-        items: listStudentEnrollmentsInMemory(studentRecordId).map((item) =>
-          toApiEnrollmentResponseItem(item)
-        ),
-      });
     }
 
     const student = await StudentModel.findById(studentRecordId).exec();
@@ -162,6 +159,13 @@ export async function POST(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const studentRecordId = String(params.id ?? "").trim();
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
@@ -189,24 +193,6 @@ export async function POST(
         { message: error instanceof Error ? error.message : "Invalid enrollment data" },
         { status: 400 }
       );
-    }
-
-    if (!mongooseConnection) {
-      try {
-        const created = addEnrollmentToStudentInMemory(studentRecordId, enrollment);
-        return NextResponse.json({ enrollment: created }, { status: 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to create enrollment";
-        if (message === DUPLICATE_ENROLLMENT_MESSAGE) {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        if (message === "Student not found") {
-          return NextResponse.json({ message }, { status: 404 });
-        }
-
-        return NextResponse.json({ message }, { status: 400 });
-      }
     }
 
     const student = await StudentModel.findById(studentRecordId).exec();

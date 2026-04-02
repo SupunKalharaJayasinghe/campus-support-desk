@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import "@/models/Faculty";
+import { FacultyModel } from "@/models/Faculty";
+import { syncAcademicReferenceCaches } from "@/models/academic-reference-cache";
+import { connectMongoose } from "@/models/mongoose";
 import {
-  deleteFaculty,
+  findFaculty,
   sanitizeFacultyCode,
   sanitizeFacultyStatus,
   type FacultyStatus,
-  updateFaculty,
 } from "@/models/faculty-store";
 
 export async function PUT(
@@ -12,6 +15,14 @@ export async function PUT(
   { params }: { params: { code: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const targetCode = sanitizeFacultyCode(params.code);
     const body = (await request.json()) as Partial<{
       name: string;
@@ -34,19 +45,29 @@ export async function PUT(
       );
     }
 
-    const faculty = updateFaculty(targetCode, {
-      name,
-      status,
-    });
+    const updated = await FacultyModel.findOneAndUpdate(
+      { code: targetCode, isDeleted: { $ne: true } },
+      {
+        $set: {
+          name,
+          status,
+        },
+      },
+      { new: true }
+    )
+      .lean()
+      .exec()
+      .catch(() => null);
 
-    if (!faculty) {
+    if (!updated) {
       return NextResponse.json(
         { message: "Faculty not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(faculty);
+    await syncAcademicReferenceCaches({ force: true }).catch(() => null);
+    return NextResponse.json(findFaculty(targetCode));
   } catch {
     return NextResponse.json(
       { message: "Failed to update faculty." },
@@ -60,8 +81,27 @@ export async function DELETE(
   { params }: { params: { code: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const targetCode = sanitizeFacultyCode(params.code);
-    const deleted = deleteFaculty(targetCode);
+    const deleted = await FacultyModel.findOneAndUpdate(
+      { code: targetCode, isDeleted: { $ne: true } },
+      {
+        $set: {
+          isDeleted: true,
+        },
+      },
+      { new: true }
+    )
+      .lean()
+      .exec()
+      .catch(() => null);
 
     if (!deleted) {
       return NextResponse.json(
@@ -70,6 +110,7 @@ export async function DELETE(
       );
     }
 
+    await syncAcademicReferenceCaches({ force: true }).catch(() => null);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(

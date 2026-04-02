@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import "@/models/Intake";
+import { persistIntakeRecords } from "@/models/intake-record-persistence";
 import { connectMongoose } from "@/models/mongoose";
 import {
   createIntake,
@@ -8,6 +9,7 @@ import {
   isValidDegreeForFaculty,
   isValidFacultyCode,
   listIntakes,
+  snapshotIntakes,
   sanitizeIntakeMonth,
   sanitizeIntakeStatus,
   sanitizeIntakeYear,
@@ -130,7 +132,14 @@ function toApiIntake(intake: IntakeRecord) {
 }
 
 export async function GET(request: Request) {
-  await connectMongoose().catch(() => null);
+  const mongooseConnection = await connectMongoose().catch(() => null);
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "MongoDB connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") ?? "";
   const status = sanitizeStatus(searchParams.get("status"));
@@ -173,7 +182,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const body = (await request.json()) as Partial<{
       name: string;
       stream: string;
@@ -286,6 +302,7 @@ export async function POST(request: Request) {
       status,
       termSchedules,
     });
+    await persistIntakeRecords(snapshotIntakes({ includeDeleted: true }));
 
     return NextResponse.json(toApiIntake(intake), { status: 201 });
   } catch {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { connectMongoose } from "@/models/mongoose";
 import {
   listDegreePrograms,
   type DegreeProgramStatus,
@@ -24,6 +25,14 @@ function normalizeCodeList(value: string | null | undefined) {
 }
 
 export async function GET(request: Request) {
+  const mongooseConnection = await connectMongoose().catch(() => null);
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "MongoDB connection is required" },
+      { status: 503 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const singleFacultyCode = normalizeCode(
     searchParams.get("facultyId") ??

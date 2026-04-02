@@ -5,13 +5,10 @@ import "@/models/Student";
 import { connectMongoose } from "@/models/mongoose";
 import {
   decorateEnrollmentRecord,
-  deleteEnrollmentInMemory,
-  findEnrollmentInMemoryById,
   isMongoDuplicateKeyError,
   sanitizeStudentStatus,
   sanitizeStudentStream,
   sanitizeSubgroup,
-  updateEnrollmentInMemory,
   validateStudentRelations,
   type EnrollmentPersistedRecord,
 } from "@/models/student-registration";
@@ -143,6 +140,14 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
+    }
+
     const enrollmentId = String(params.id ?? "").trim();
     if (!enrollmentId) {
       return NextResponse.json({ message: "Enrollment id is required" }, { status: 400 });
@@ -156,56 +161,6 @@ export async function PUT(
     const incomingStream = sanitizeStudentStream(body.stream);
     const hasSubgroup = Object.prototype.hasOwnProperty.call(body, "subgroup");
     const incomingSubgroup = sanitizeSubgroup(body.subgroup);
-
-    const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      const existing = findEnrollmentInMemoryById(enrollmentId);
-      if (!existing) {
-        return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-      }
-
-      const nextIntakeId = incomingIntakeId || existing.intakeId;
-      const nextStream = incomingStream ?? existing.stream;
-      const nextStatus = sanitizeStudentStatus(body.status ?? existing.status);
-      const nextSubgroup = hasSubgroup ? incomingSubgroup : existing.subgroup || null;
-
-      try {
-        validateStudentRelations({
-          facultyId: existing.facultyId,
-          degreeProgramId: existing.degreeProgramId,
-          intakeId: nextIntakeId,
-        });
-      } catch (error) {
-        return NextResponse.json(
-          { message: error instanceof Error ? error.message : "Invalid enrollment data" },
-          { status: 400 }
-        );
-      }
-
-      try {
-        const updated = updateEnrollmentInMemory(enrollmentId, {
-          intakeId: nextIntakeId,
-          stream: nextStream,
-          subgroup: nextSubgroup,
-          status: nextStatus,
-        });
-        if (!updated) {
-          return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-        }
-
-        return NextResponse.json({
-          enrollment: toApiEnrollmentResponseItem(updated),
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to update enrollment";
-        if (message === "Student already enrolled in this intake") {
-          return NextResponse.json({ message }, { status: 409 });
-        }
-
-        return NextResponse.json({ message }, { status: 400 });
-      }
-    }
 
     const current = await EnrollmentModel.findById(enrollmentId).exec();
     if (!current) {
@@ -300,12 +255,10 @@ export async function DELETE(
 
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
-      const deleted = deleteEnrollmentInMemory(enrollmentId);
-      if (!deleted) {
-        return NextResponse.json({ message: "Enrollment not found" }, { status: 404 });
-      }
-
-      return NextResponse.json({ ok: true });
+      return NextResponse.json(
+        { message: "MongoDB connection is required" },
+        { status: 503 }
+      );
     }
 
     const current = await EnrollmentModel.findById(enrollmentId).exec();
