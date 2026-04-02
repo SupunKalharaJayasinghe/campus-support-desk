@@ -517,7 +517,7 @@ export default function CommunityPostComposer({
                     : undefined,
             urgentPrepayId:
                 isUrgent && urgentPaymentMethod === "points"
-                    ? urgentPrepayId
+                    ? urgentPrepayIdRef.current
                     : null,
         };
 
@@ -786,7 +786,9 @@ export default function CommunityPostComposer({
         if (isSubmitting) return;
         if (!isCommunityPostComposerValid({ title, description, tags, attachments })) return;
         if (isUrgent && urgentPaymentMethod === "points" && !pointsFeeReserved) {
-            if (communityPoints !== null && communityPoints < urgentCfg.feePoints) {
+            // For existing drafts, user may have already paid (prepay exists) even if current balance is 0.
+            // Don't block here; the server will validate/consume the prepay on publish.
+            if (!draftToEdit?.id && communityPoints !== null && communityPoints < urgentCfg.feePoints) {
                 setSubmitError(
                     "Not enough points for urgent — pay with card or use Pay after you have enough points."
                 );
@@ -858,7 +860,10 @@ export default function CommunityPostComposer({
                 throw new Error(data?.error || "Payment failed.");
             }
             if (data?.prepayId) {
-                setUrgentPrepayId(String(data.prepayId));
+                const pid = String(data.prepayId);
+                // Ensure the prepay id is immediately available for draft save in this same tick.
+                urgentPrepayIdRef.current = pid;
+                setUrgentPrepayId(pid);
             }
             if (typeof data?.newPoints === "number" && Number.isFinite(data.newPoints)) {
                 setCommunityPoints(data.newPoints);
@@ -1004,7 +1009,9 @@ export default function CommunityPostComposer({
                             ? urgentCardLast4Resolved
                             : null,
                     urgentPrepayId:
-                        isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
+                        isUrgent && urgentPaymentMethod === "points"
+                            ? urgentPrepayId || (draftToEdit?.urgentPrepayId ?? null)
+                            : null,
                     urgentCardPaymentRecordId:
                         isUrgent && urgentPaymentMethod === "card" && urgentCardPaymentRecordIdOut
                             ? urgentCardPaymentRecordIdOut
