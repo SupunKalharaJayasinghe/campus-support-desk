@@ -249,7 +249,7 @@ export async function GET(request: Request) {
     sort,
   } satisfies Parameters<typeof filterAndSortOfferings>[1];
 
-  let dbRows: ModuleOfferingRecord[] = [];
+  let sourceRows: ModuleOfferingRecord[] = [];
 
   if (mongooseConnection) {
     const query: Record<string, unknown> = {};
@@ -265,20 +265,20 @@ export async function GET(request: Request) {
       .exec()
       .catch(() => [])) as unknown[];
 
-    dbRows = rows
+    sourceRows = rows
       .map((row) => normalizeDbOffering(row))
       .filter((row): row is ModuleOfferingRecord => Boolean(row));
+  } else {
+    sourceRows = listModuleOfferings({
+      termCode: termCode ?? undefined,
+      status,
+      search,
+      sort,
+    });
   }
 
-  const storeRows = listModuleOfferings({
-    termCode: termCode ?? undefined,
-    status,
-    search,
-    sort,
-  });
-
   const allItems = filterAndSortOfferings(
-    mergeOfferingsByKey([...dbRows, ...storeRows]),
+    mergeOfferingsByKey(sourceRows),
     filterOptions
   );
 
@@ -354,7 +354,9 @@ export async function POST(request: Request) {
     );
     const assignedLabAssistantIds = sanitizeIdList(body.assignedLabAssistantIds);
 
-    const mongooseConnection = await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose({
+      forceAcademicCacheSync: true,
+    }).catch(() => null);
 
     await validateLecturerAssignments({
       ids: assignedLecturerIds,
@@ -487,6 +489,12 @@ export async function POST(request: Request) {
         const normalized = normalizeDbOffering(dbCreated.toObject());
         if (normalized) {
           responseOffering = normalized;
+        }
+
+        // MongoDB is authoritative when connected; prevent stale duplicate rows in memory.
+        if (createdInStoreId) {
+          deleteModuleOffering(createdInStoreId);
+          createdInStoreId = null;
         }
       } catch (error) {
         if (createdInStoreId) {

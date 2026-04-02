@@ -103,17 +103,58 @@ const globalForModuleStore = globalThis as typeof globalThis & {
   __moduleStore?: ModuleRecord[];
 };
 
+function toIsoDate(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString();
+}
+
+function normalizeStoredModuleRecord(input: ModuleRecord): ModuleRecord {
+  return {
+    id: String(input.id ?? "").trim(),
+    code: sanitizeCode(input.code),
+    name: String(input.name ?? "").trim(),
+    credits: sanitizeCredits(input.credits),
+    facultyCode: sanitizeFacultyCode(input.facultyCode),
+    applicableTerms: sanitizeApplicableTerms(input.applicableTerms),
+    applicableDegrees: sanitizeApplicableDegrees(input.applicableDegrees),
+    defaultSyllabusVersion: sanitizeDefaultSyllabusVersion(
+      input.defaultSyllabusVersion
+    ),
+    outlineTemplate: sanitizeOutlineTemplate(input.outlineTemplate),
+    createdAt: toIsoDate(input.createdAt),
+    updatedAt: toIsoDate(input.updatedAt),
+    isDeleted: input.isDeleted === true,
+  };
+}
+
 function moduleStore() {
   if (!globalForModuleStore.__moduleStore) {
-    globalForModuleStore.__moduleStore = INITIAL_MODULES.map((module) => ({
-      ...module,
-      applicableTerms: [...module.applicableTerms],
-      applicableDegrees: [...module.applicableDegrees],
-      outlineTemplate: module.outlineTemplate.map((outline) => ({ ...outline })),
-    }));
+    globalForModuleStore.__moduleStore = INITIAL_MODULES.map((module) =>
+      normalizeStoredModuleRecord({
+        ...module,
+        applicableTerms: [...module.applicableTerms],
+        applicableDegrees: [...module.applicableDegrees],
+        outlineTemplate: module.outlineTemplate.map((outline) => ({ ...outline })),
+      })
+    );
   }
 
   return globalForModuleStore.__moduleStore;
+}
+
+export function replaceModuleStore(records: ModuleRecord[]) {
+  globalForModuleStore.__moduleStore = records
+    .map((record) => normalizeStoredModuleRecord(record))
+    .filter((record) => Boolean(record.id && record.code && record.name));
 }
 
 function sanitizeCode(value: unknown) {

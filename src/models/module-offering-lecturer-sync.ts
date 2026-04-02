@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
+import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import {
   listModuleOfferings,
   updateModuleOffering,
 } from "@/models/module-offering-store";
+import { findModuleByCode, findModuleById } from "@/models/module-store";
 import {
   normalizeAcademicCode,
   normalizeModuleCode,
@@ -35,6 +37,10 @@ function normalizeCodeList(values: string[]) {
   );
 }
 
+function mergeSanitizedIdLists(...values: unknown[]) {
+  return sanitizeIdList(values.flatMap((value) => (Array.isArray(value) ? value : [])));
+}
+
 function normalizeModuleCandidates(values: string[]) {
   const set = new Set<string>();
   values.forEach((value) => {
@@ -50,6 +56,82 @@ function normalizeModuleCandidates(values: string[]) {
     }
   });
   return Array.from(set);
+}
+
+function addModuleCandidate(set: Set<string>, value: unknown) {
+  const raw = sanitizeId(value);
+  if (!raw) {
+    return;
+  }
+
+  set.add(raw);
+  set.add(raw.toUpperCase());
+
+  const normalizedCode = normalizeModuleCode(raw);
+  if (normalizedCode) {
+    set.add(normalizedCode);
+  }
+}
+
+async function resolveModuleCandidates(
+  values: string[],
+  mongooseConnection?: typeof mongoose | null
+) {
+  const candidates = new Set<string>();
+  const cleanValues = values.map((value) => sanitizeId(value)).filter(Boolean);
+
+  cleanValues.forEach((value) => {
+    normalizeModuleCandidates([value]).forEach((item) => candidates.add(item));
+
+    const inMemoryRecord = findModuleById(value) ?? findModuleByCode(value);
+    if (inMemoryRecord) {
+      addModuleCandidate(candidates, inMemoryRecord.id);
+      addModuleCandidate(candidates, inMemoryRecord.code);
+    }
+  });
+
+  if (!mongooseConnection || cleanValues.length === 0) {
+    return Array.from(candidates);
+  }
+
+  const moduleObjectIds = Array.from(
+    new Set(
+      cleanValues
+        .filter((value) => mongoose.Types.ObjectId.isValid(value))
+        .map((value) => new mongoose.Types.ObjectId(value).toHexString())
+    )
+  ).map((value) => new mongoose.Types.ObjectId(value));
+
+  const moduleCodes = Array.from(
+    new Set(cleanValues.map((value) => normalizeModuleCode(value)).filter(Boolean))
+  );
+
+  const queryOr: Array<Record<string, unknown>> = [];
+  if (moduleObjectIds.length > 0) {
+    queryOr.push({ _id: { $in: moduleObjectIds } });
+  }
+  if (moduleCodes.length > 0) {
+    queryOr.push({ code: { $in: moduleCodes } });
+  }
+
+  if (queryOr.length === 0) {
+    return Array.from(candidates);
+  }
+
+  const rows = (await ModuleModel.find(
+    { $or: queryOr },
+    { code: 1 }
+  )
+    .lean()
+    .exec()
+    .catch(() => [])) as Array<{ _id?: unknown; code?: unknown }>;
+
+  rows.forEach((row) => {
+    addModuleCandidate(candidates, row._id);
+    addModuleCandidate(candidates, row.code);
+  });
+
+  return Array.from(candidates);
 }
 
 function normalizeAssigneeSnapshotMap(value: unknown) {
@@ -113,8 +195,9 @@ async function syncInMemoryOfferings(
 
   const offerings = listModuleOfferings();
   offerings.forEach((offering) => {
-    const currentIds = sanitizeIdList(
-      offering.assignedLecturerIds ?? offering.assignedLecturers
+    const currentIds = mergeSanitizedIdLists(
+      offering.assignedLecturerIds,
+      offering.assignedLecturers
     );
     const currentlyAssigned = currentIds.includes(input.lecturerId);
     const shouldAssign = shouldAssignLecturerToOffering(offering, input);
@@ -162,6 +245,10 @@ async function syncMongoOfferings(
 
   const scopeQueries: Record<string, unknown>[] = [
     { assignedLecturerIds: input.lecturerId },
+    { assignedLecturers: input.lecturerId },
+    { "assignedLecturers.lecturerId": input.lecturerId },
+    { "assignedLecturers.id": input.lecturerId },
+    { "assignedLecturers._id": input.lecturerId },
   ];
 
   if (input.status === "ACTIVE" && moduleCandidates.length > 0) {
@@ -178,8 +265,9 @@ async function syncMongoOfferings(
   }).exec();
 
   for (const row of rows) {
-    const currentIds = sanitizeIdList(
-      row.assignedLecturerIds ?? row.assignedLecturers
+    const currentIds = mergeSanitizedIdLists(
+      row.assignedLecturerIds,
+      row.assignedLecturers
     );
     const currentlyAssigned = currentIds.includes(input.lecturerId);
     const shouldAssign = shouldAssignLecturerToOffering(
@@ -250,6 +338,11 @@ export async function syncLecturerAssignmentsAcrossModuleOfferings(
     } satisfies SyncLecturerAssignmentsResult;
   }
 
+  const resolvedModuleCandidates = await resolveModuleCandidates(
+    input.moduleIds,
+    options?.mongooseConnection
+  );
+
   const cleanInput: SyncLecturerAssignmentsInput = {
     lecturerId,
     fullName: String(input.fullName ?? "").trim(),
@@ -257,7 +350,7 @@ export async function syncLecturerAssignmentsAcrossModuleOfferings(
     status: input.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
     facultyIds: normalizeCodeList(input.facultyIds),
     degreeProgramIds: normalizeCodeList(input.degreeProgramIds),
-    moduleIds: normalizeModuleCandidates(input.moduleIds),
+    moduleIds: resolvedModuleCandidates,
   };
 
   const inMemory = await syncInMemoryOfferings(cleanInput);

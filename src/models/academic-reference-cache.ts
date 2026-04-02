@@ -2,12 +2,18 @@ import mongoose from "mongoose";
 import { DegreeProgramModel } from "@/models/DegreeProgram";
 import { FacultyModel } from "@/models/Faculty";
 import { IntakeRecordModel } from "@/models/IntakeRecord";
+import { ModuleModel } from "@/models/Module";
 import {
   replaceDegreeProgramStore,
   type DegreeProgramRecord,
 } from "@/models/degree-program-store";
 import { replaceFacultyStore, type FacultyRecord } from "@/models/faculty-store";
 import { replaceIntakeStore, type IntakeRecord } from "@/models/intake-store";
+import {
+  replaceModuleStore,
+  type ModuleOutlineType,
+  type ModuleRecord,
+} from "@/models/module-store";
 
 const globalForAcademicCache = globalThis as typeof globalThis & {
   __academicReferenceLastSyncedAt?: number;
@@ -20,6 +26,25 @@ const DEGREE_FIELDS =
   "code name facultyCode award credits durationYears status isDeleted createdAt updatedAt";
 const INTAKE_FIELDS =
   "id name facultyCode degreeCode intakeYear intakeMonth stream status currentTerm autoJumpEnabled lockPastTerms defaultWeeksPerTerm defaultNotifyBeforeDays autoGenerateFutureTerms termSchedules notifications isDeleted createdAt updatedAt";
+const MODULE_FIELDS =
+  "code name credits facultyCode applicableTerms applicableDegrees defaultSyllabusVersion outlineTemplate isDeleted createdAt updatedAt";
+const MODULE_TERM_CODES = new Set([
+  "Y1S1",
+  "Y1S2",
+  "Y2S1",
+  "Y2S2",
+  "Y3S1",
+  "Y3S2",
+  "Y4S1",
+  "Y4S2",
+]);
+const MODULE_OUTLINE_TYPES = new Set<ModuleOutlineType>([
+  "LECTURE",
+  "MID",
+  "QUIZ",
+  "LAB",
+  "OTHER",
+]);
 
 function toIsoDate(value: unknown) {
   const raw = String(value ?? "").trim();
@@ -41,6 +66,95 @@ function normalizeCode(value: unknown) {
     .toUpperCase()
     .replace(/[^A-Z]/g, "")
     .slice(0, 6);
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+}
+
+function toModuleRecord(row: Record<string, unknown>): ModuleRecord | null {
+  const id = String(row._id ?? row.id ?? "").trim();
+  const code = normalizeModuleCode(row.code);
+  const name = String(row.name ?? "").trim();
+  const facultyCode = normalizeCode(row.facultyCode);
+  const credits = Number(row.credits);
+
+  if (!id || !code || !name || !facultyCode || !Number.isFinite(credits) || credits <= 0) {
+    return null;
+  }
+
+  const applicableTerms = Array.isArray(row.applicableTerms)
+    ? row.applicableTerms
+        .map((item) => String(item ?? "").trim().toUpperCase())
+        .filter(
+          (item): item is ModuleRecord["applicableTerms"][number] =>
+            MODULE_TERM_CODES.has(item)
+        )
+    : [];
+
+  const applicableDegrees = Array.isArray(row.applicableDegrees)
+    ? Array.from(
+        new Set(
+          row.applicableDegrees.map((item) => normalizeCode(item)).filter(Boolean)
+        )
+      )
+    : [];
+
+  const defaultSyllabusVersion =
+    String(row.defaultSyllabusVersion ?? "").trim().toUpperCase() === "OLD"
+      ? "OLD"
+      : "NEW";
+
+  const outlineTemplate = Array.isArray(row.outlineTemplate)
+    ? row.outlineTemplate
+        .map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) {
+            return null;
+          }
+          const outline = item as Record<string, unknown>;
+          const weekNo = Number(outline.weekNo);
+          const title = String(outline.title ?? "").trim();
+          const rawType = String(outline.type ?? "").trim().toUpperCase();
+          if (!Number.isFinite(weekNo) || weekNo < 1 || !title) {
+            return null;
+          }
+
+          const normalizedType = MODULE_OUTLINE_TYPES.has(rawType as ModuleOutlineType)
+            ? (rawType as ModuleOutlineType)
+            : undefined;
+
+          return {
+            weekNo: Math.max(1, Math.min(60, Math.floor(weekNo))),
+            title,
+            ...(normalizedType ? { type: normalizedType } : {}),
+          };
+        })
+        .filter((item): item is ModuleRecord["outlineTemplate"][number] => Boolean(item))
+    : [];
+
+  const byWeek = new Map<number, ModuleRecord["outlineTemplate"][number]>();
+  outlineTemplate.forEach((item) => {
+    byWeek.set(item.weekNo, item);
+  });
+
+  return {
+    id,
+    code,
+    name,
+    credits: Math.max(1, Math.floor(credits)),
+    facultyCode,
+    applicableTerms,
+    applicableDegrees,
+    defaultSyllabusVersion,
+    outlineTemplate: Array.from(byWeek.values()).sort((left, right) => left.weekNo - right.weekNo),
+    createdAt: toIsoDate(row.createdAt),
+    updatedAt: toIsoDate(row.updatedAt),
+    isDeleted: row.isDeleted === true,
+  };
 }
 
 function toFacultyRecord(row: Record<string, unknown>): FacultyRecord | null {
@@ -242,7 +356,7 @@ export async function syncAcademicReferenceCaches(options?: {
   }
 
   const syncPromise = (async () => {
-    const [facultyRows, degreeRows, intakeRows] = await Promise.all([
+    const [facultyRows, degreeRows, intakeRows, moduleRows] = await Promise.all([
       FacultyModel.find({}, FACULTY_FIELDS)
         .lean()
         .exec()
@@ -252,6 +366,10 @@ export async function syncAcademicReferenceCaches(options?: {
         .exec()
         .catch(() => [] as unknown[]),
       IntakeRecordModel.find({}, INTAKE_FIELDS)
+        .lean()
+        .exec()
+        .catch(() => [] as unknown[]),
+      ModuleModel.find({}, MODULE_FIELDS)
         .lean()
         .exec()
         .catch(() => [] as unknown[]),
@@ -266,10 +384,14 @@ export async function syncAcademicReferenceCaches(options?: {
     const intakes = intakeRows
       .map((row) => toIntakeRecord((row ?? {}) as Record<string, unknown>))
       .filter((item): item is IntakeRecord => Boolean(item));
+    const modules = moduleRows
+      .map((row) => toModuleRecord((row ?? {}) as Record<string, unknown>))
+      .filter((item): item is ModuleRecord => Boolean(item));
 
     replaceFacultyStore(faculties);
     replaceDegreeProgramStore(degrees);
     replaceIntakeStore(intakes);
+    replaceModuleStore(modules);
     globalForAcademicCache.__academicReferenceLastSyncedAt = Date.now();
     return true;
   })();

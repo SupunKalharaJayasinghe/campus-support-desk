@@ -27,7 +27,7 @@ function primaryModuleToken(state?: OfferingLecturerLinkState | null) {
     return "";
   }
 
-  return normalizeModuleCode(state.moduleCode) || sanitizeId(state.moduleId);
+  return sanitizeId(state.moduleId) || normalizeModuleCode(state.moduleCode);
 }
 
 function moduleTokenCandidates(state?: OfferingLecturerLinkState | null) {
@@ -50,6 +50,10 @@ function moduleTokenCandidates(state?: OfferingLecturerLinkState | null) {
 
 function normalizeLecturerIds(state?: OfferingLecturerLinkState | null) {
   return new Set(sanitizeIdList(state?.lecturerIds));
+}
+
+function mergeSanitizedIdLists(...values: unknown[]) {
+  return sanitizeIdList(values.flatMap((value) => (Array.isArray(value) ? value : [])));
 }
 
 function removeModuleTokens(moduleIds: string[], candidates: Set<string>) {
@@ -117,7 +121,11 @@ async function hasInMemoryAssignmentForModule(
     if (excludeId && offering.id === excludeId) {
       return false;
     }
-    if (!sanitizeIdList(offering.assignedLecturerIds).includes(lecturerId)) {
+    const assignedIds = mergeSanitizedIdLists(
+      offering.assignedLecturerIds,
+      offering.assignedLecturers
+    );
+    if (!assignedIds.includes(lecturerId)) {
       return false;
     }
 
@@ -138,11 +146,24 @@ async function hasMongoAssignmentForModule(
     return false;
   }
 
+  const moduleCandidateValues = Array.from(moduleCandidates);
   const query: Record<string, unknown> = {
-    assignedLecturerIds: lecturerId,
-    $or: [
-      { moduleId: { $in: Array.from(moduleCandidates) } },
-      { moduleCode: { $in: Array.from(moduleCandidates) } },
+    $and: [
+      {
+        $or: [
+          { assignedLecturerIds: lecturerId },
+          { assignedLecturers: lecturerId },
+          { "assignedLecturers.lecturerId": lecturerId },
+          { "assignedLecturers.id": lecturerId },
+          { "assignedLecturers._id": lecturerId },
+        ],
+      },
+      {
+        $or: [
+          { moduleId: { $in: moduleCandidateValues } },
+          { moduleCode: { $in: moduleCandidateValues } },
+        ],
+      },
     ],
   };
 

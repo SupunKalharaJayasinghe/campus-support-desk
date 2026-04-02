@@ -114,7 +114,9 @@ export async function PUT(
     const hasLecturerPayload =
       body.assignedLecturerIds !== undefined || body.assignedLecturers !== undefined;
     const hasLabPayload = body.assignedLabAssistantIds !== undefined;
-    const mongooseConnection = await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose({
+      forceAcademicCacheSync: true,
+    }).catch(() => null);
 
     if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
       const row = await ModuleOfferingModel.findById(offeringId).exec();
