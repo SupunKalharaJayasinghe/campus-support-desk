@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLecturerName,
   sanitizeLecturerNicStaffId,
+  sanitizeLecturerOptionalEmail,
   sanitizeLecturerPhone,
   sanitizeLecturerStatus,
   sanitizeModuleIdList,
@@ -28,6 +29,7 @@ import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-of
 
 interface LecturerWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -44,6 +46,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInpu
 
   return {
     fullName,
+    optionalEmail: sanitizeLecturerOptionalEmail(body.optionalEmail),
     phone: sanitizeLecturerPhone(body.phone),
     nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
     status: sanitizeLecturerStatus(body.status),
@@ -180,6 +183,7 @@ export async function PUT(
     }
 
     row.fullName = input.fullName;
+    row.optionalEmail = input.optionalEmail;
     row.phone = input.phone;
     row.nicStaffId = input.nicStaffId;
     row.status = input.status;

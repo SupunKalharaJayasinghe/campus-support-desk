@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLabAssistantName,
   sanitizeLabAssistantNicStaffId,
+  sanitizeLabAssistantOptionalEmail,
   sanitizeLabAssistantPhone,
   sanitizeLabAssistantStatus,
   sanitizeModuleIdList,
@@ -26,6 +27,7 @@ import { UserModel } from "@/models/User";
 
 interface LabAssistantWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LabAssistantStatus;
@@ -80,6 +82,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LabAssistantWrite
 
   return {
     fullName,
+    optionalEmail: sanitizeLabAssistantOptionalEmail(body.optionalEmail),
     phone: sanitizeLabAssistantPhone(body.phone),
     nicStaffId: sanitizeLabAssistantNicStaffId(body.nicStaffId),
     status: sanitizeLabAssistantStatus(body.status),
@@ -165,6 +168,7 @@ export async function GET(request: Request) {
     query.$or = [
       { fullName: searchRegex },
       { email: searchRegex },
+      { optionalEmail: searchRegex },
       { phone: searchRegex },
       { nicStaffId: searchRegex },
     ];
@@ -264,6 +268,7 @@ export async function POST(request: Request) {
         const created = await LabAssistantModel.create({
           fullName: input.fullName,
           email: generatedEmail,
+          optionalEmail: input.optionalEmail,
           phone: input.phone,
           nicStaffId: input.nicStaffId,
           status: input.status,

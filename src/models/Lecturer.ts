@@ -19,6 +19,12 @@ const LecturerSchema = new Schema(
       trim: true,
       default: "",
     },
+    optionalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
     nicStaffId: {
       type: String,
       trim: true,

@@ -16,6 +16,7 @@ interface LecturerRecord {
   id: string;
   fullName: string;
   email: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string;
   status: LecturerStatus;
@@ -68,6 +69,14 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function sanitizeOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
 }
 
 function normalizeAcademicCode(value: unknown) {
@@ -139,6 +148,7 @@ function parseLecturer(payload: unknown): LecturerRecord | null {
     id,
     fullName,
     email,
+    optionalEmail: sanitizeOptionalEmail(row.optionalEmail),
     phone: collapseSpaces(row.phone),
     nicStaffId: String(row.nicStaffId ?? "").trim(),
     status: sanitizeStatus(row.status),
@@ -431,6 +441,11 @@ export default function LecturerProfilePage() {
                 </div>
               </div>
             </div>
+            {lecturer.optionalEmail ? (
+              <p className="mt-2 text-sm text-text/75">
+                Optional Email: {lecturer.optionalEmail}
+              </p>
+            ) : null}
             <p className="mt-4 text-xs text-text/60">Updated {formatDate(lecturer.updatedAt)}</p>
           </Card>
 

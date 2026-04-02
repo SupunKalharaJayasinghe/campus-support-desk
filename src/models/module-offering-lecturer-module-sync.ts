@@ -171,6 +171,7 @@ async function updateInMemoryLecturerModuleIds(lecturerId: string, nextModuleIds
   updateLecturerInMemory({
     id: row.id,
     fullName: row.fullName,
+    optionalEmail: row.optionalEmail,
     phone: row.phone,
     nicStaffId: row.nicStaffId,
     status: row.status,

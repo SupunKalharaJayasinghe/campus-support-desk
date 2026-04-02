@@ -9,6 +9,7 @@ export interface LabAssistantPersistedRecord {
   id: string;
   fullName: string;
   email: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LabAssistantStatus;
@@ -22,6 +23,7 @@ export interface LabAssistantPersistedRecord {
 
 interface LabAssistantCreateInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LabAssistantStatus;
@@ -39,6 +41,7 @@ const INITIAL_LAB_ASSISTANTS: LabAssistantPersistedRecord[] = [
     id: "lab-nperera",
     fullName: "Nuwan Perera",
     email: "nuwan.perera@sllit.lk",
+    optionalEmail: "",
     phone: "0778899001",
     nicStaffId: "LA1001",
     status: "ACTIVE",
@@ -53,6 +56,7 @@ const INITIAL_LAB_ASSISTANTS: LabAssistantPersistedRecord[] = [
     id: "lab-spinto",
     fullName: "Sachi Pinto",
     email: "sachi.pinto@sllit.lk",
+    optionalEmail: "",
     phone: "0765522003",
     nicStaffId: "LA1002",
     status: "ACTIVE",
@@ -67,6 +71,7 @@ const INITIAL_LAB_ASSISTANTS: LabAssistantPersistedRecord[] = [
     id: "lab-tdias",
     fullName: "Thilini Dias",
     email: "thilini.dias@sllit.lk",
+    optionalEmail: "",
     phone: "0715588990",
     nicStaffId: "LA1003",
     status: "INACTIVE",
@@ -123,6 +128,14 @@ export function sanitizeLabAssistantName(value: unknown) {
 
 export function sanitizeLabAssistantPhone(value: unknown) {
   return collapseSpaces(value).slice(0, 32);
+}
+
+export function sanitizeLabAssistantOptionalEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .slice(0, 254);
 }
 
 export function sanitizeLabAssistantNicStaffId(value: unknown) {
@@ -315,6 +328,7 @@ export function listLabAssistantsInMemory(options?: {
     return [
       item.fullName,
       item.email,
+      item.optionalEmail,
       item.phone,
       item.nicStaffId ?? "",
       item.facultyIds.join(" "),
@@ -379,6 +393,7 @@ function toPersistedRecord(input: LabAssistantCreateInput): LabAssistantPersiste
     id: `lab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     fullName: input.fullName,
     email: reserveUniqueLabAssistantEmailInMemory(input.fullName),
+    optionalEmail: sanitizeLabAssistantOptionalEmail(input.optionalEmail),
     phone: input.phone,
     nicStaffId: input.nicStaffId,
     status: input.status,
@@ -430,6 +445,7 @@ export function updateLabAssistantInMemory(input: LabAssistantUpdateInput) {
   const updated: LabAssistantPersistedRecord = {
     ...current,
     fullName: input.fullName,
+    optionalEmail: sanitizeLabAssistantOptionalEmail(input.optionalEmail),
     phone: input.phone,
     nicStaffId: input.nicStaffId,
     status: input.status,
@@ -474,6 +490,7 @@ export function toLabAssistantPersistedRecordFromUnknown(
     id,
     fullName,
     email,
+    optionalEmail: sanitizeLabAssistantOptionalEmail(row.optionalEmail),
     phone: sanitizeLabAssistantPhone(row.phone),
     nicStaffId: sanitizeLabAssistantNicStaffId(row.nicStaffId),
     status: sanitizeLabAssistantStatus(row.status),

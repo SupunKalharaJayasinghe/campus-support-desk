@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLabAssistantName,
   sanitizeLabAssistantNicStaffId,
+  sanitizeLabAssistantOptionalEmail,
   sanitizeLabAssistantPhone,
   sanitizeLabAssistantStatus,
   sanitizeModuleIdList,
@@ -27,6 +28,7 @@ import { UserModel } from "@/models/User";
 
 interface LabAssistantWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LabAssistantStatus;
@@ -43,6 +45,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LabAssistantWrite
 
   return {
     fullName,
+    optionalEmail: sanitizeLabAssistantOptionalEmail(body.optionalEmail),
     phone: sanitizeLabAssistantPhone(body.phone),
     nicStaffId: sanitizeLabAssistantNicStaffId(body.nicStaffId),
     status: sanitizeLabAssistantStatus(body.status),
@@ -166,6 +169,7 @@ export async function PUT(
     }
 
     row.fullName = input.fullName;
+    row.optionalEmail = input.optionalEmail;
     row.phone = input.phone;
     row.nicStaffId = input.nicStaffId;
     row.status = input.status;

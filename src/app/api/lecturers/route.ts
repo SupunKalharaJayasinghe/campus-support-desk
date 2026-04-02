@@ -10,6 +10,7 @@ import {
   sanitizeAcademicCodeList,
   sanitizeLecturerName,
   sanitizeLecturerNicStaffId,
+  sanitizeLecturerOptionalEmail,
   sanitizeLecturerPhone,
   sanitizeLecturerStatus,
   sanitizeModuleIdList,
@@ -27,6 +28,7 @@ import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-of
 
 interface LecturerWriteInput {
   fullName: string;
+  optionalEmail: string;
   phone: string;
   nicStaffId: string | null;
   status: LecturerStatus;
@@ -82,6 +84,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): LecturerWriteInpu
 
   return {
     fullName,
+    optionalEmail: sanitizeLecturerOptionalEmail(body.optionalEmail),
     phone: sanitizeLecturerPhone(body.phone),
     nicStaffId: sanitizeLecturerNicStaffId(body.nicStaffId),
     status: sanitizeLecturerStatus(body.status),
@@ -165,6 +168,7 @@ export async function GET(request: Request) {
     query.$or = [
       { fullName: searchRegex },
       { email: searchRegex },
+      { optionalEmail: searchRegex },
       { phone: searchRegex },
       { nicStaffId: searchRegex },
     ];
@@ -278,6 +282,7 @@ export async function POST(request: Request) {
         const created = await LecturerModel.create({
           fullName: input.fullName,
           email: generatedEmail,
+          optionalEmail: input.optionalEmail,
           phone: input.phone,
           nicStaffId: input.nicStaffId,
           status: input.status,
