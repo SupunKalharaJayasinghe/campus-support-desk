@@ -196,8 +196,11 @@ export async function GET(request: Request) {
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
+        {
+          success: false,
+          error: "Gamification ledger management is unavailable in demo mode",
+        },
+        { status: 501 }
       );
     }
 
@@ -330,8 +333,11 @@ export async function POST(request: Request) {
     const mongooseConnection = await connectMongoose().catch(() => null);
     if (!mongooseConnection) {
       return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
+        {
+          success: false,
+          error: "Gamification ledger management is unavailable in demo mode",
+        },
+        { status: 501 }
       );
     }
 

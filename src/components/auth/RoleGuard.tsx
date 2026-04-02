@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   HOME_BY_ROLE,
@@ -11,6 +11,10 @@ import {
 } from "@/models/rbac";
 import type { AppRole } from "@/models/rbac";
 
+const subscribeNoop = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export default function RoleGuard({
   allowedRole,
   children,
@@ -20,11 +24,17 @@ export default function RoleGuard({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const isHydrated = useSyncExternalStore(
+    subscribeNoop,
+    getClientSnapshot,
+    getServerSnapshot
+  );
   const isDemoMode = isDemoModeEnabled();
 
-  const currentRole = isDemoMode ? null : readStoredRole();
-  const currentUser = isDemoMode ? null : readStoredUser();
-  const expectedRole = isDemoMode ? null : getExpectedRoleForPath(pathname);
+  const currentRole = !isHydrated || isDemoMode ? null : readStoredRole();
+  const currentUser = !isHydrated || isDemoMode ? null : readStoredUser();
+  const expectedRole =
+    !isHydrated || isDemoMode ? null : getExpectedRoleForPath(pathname);
 
   const roleAllowed = (allowed: AppRole | AppRole[] | null | undefined) => {
     if (!allowed || !currentRole) {
@@ -36,7 +46,7 @@ export default function RoleGuard({
 
   let redirectTarget: string | null = null;
 
-  if (!isDemoMode) {
+  if (isHydrated && !isDemoMode) {
     if (!currentRole || !currentUser) {
       redirectTarget = "/login";
     } else if (currentUser.mustChangePassword) {
@@ -53,7 +63,7 @@ export default function RoleGuard({
     router.replace(redirectTarget);
   }, [redirectTarget, router]);
 
-  const isReady = isDemoMode || !redirectTarget;
+  const isReady = isHydrated && (isDemoMode || !redirectTarget);
 
   if (!isReady) {
     return (

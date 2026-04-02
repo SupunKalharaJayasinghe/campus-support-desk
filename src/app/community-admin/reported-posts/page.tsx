@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -36,7 +36,7 @@ function isLikelyMongoObjectId(value: string) {
   return /^[a-f\d]{24}$/i.test(value.trim());
 }
 
-export default function CommunityAdminReportedPostsPage() {
+function CommunityAdminReportedPostsPageContent() {
   const router = useRouter();
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -960,5 +960,27 @@ export default function CommunityAdminReportedPostsPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function CommunityAdminReportedPostsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 pb-6 md:space-y-8">
+          <Card
+            title="Report queue"
+            description="Loading moderation workspace..."
+            className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
+          >
+            <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
+              Loading reports...
+            </p>
+          </Card>
+        </div>
+      }
+    >
+      <CommunityAdminReportedPostsPageContent />
+    </Suspense>
   );
 }

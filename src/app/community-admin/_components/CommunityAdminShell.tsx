@@ -239,9 +239,9 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
           </Card>
           <div className="mt-3 shrink-0 border-t border-border/70 pt-3 md:mt-auto">
             <Button
-              className="h-10 w-full gap-2 focus-visible:ring-red-500"
+              className="h-10 w-full gap-2 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus-visible:ring-red-500"
               type="button"
-              variant="danger"
+              variant="secondary"
               onClick={handleLogout}
             >
               <LogOut size={16} aria-hidden />

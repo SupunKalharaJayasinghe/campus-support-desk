@@ -6,6 +6,10 @@ import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
 import {
+  buildDemoGamificationResyncResult,
+  buildDemoGamificationSnapshot,
+} from "@/lib/demo-student-analytics";
+import {
   createGradeInMemory,
   findGradeInMemoryByStudentOffering,
   listGradesInMemory,
@@ -20,7 +24,7 @@ import {
   isMongoDuplicateKeyError,
   listEnrollmentRecordsInMemory,
 } from "@/lib/student-registration";
-import { awardPointsForGrade } from "@/lib/points-engine";
+import { recalculateStudentPoints } from "@/lib/points-engine";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { GradeModel } from "@/models/Grade";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -469,6 +473,7 @@ export async function POST(request: Request) {
     }
 
     if (!mongooseConnection) {
+      const beforeSnapshot = buildDemoGamificationSnapshot(studentId);
       const student = findStudentInMemoryById(studentId);
       if (!student) {
         return NextResponse.json(
@@ -521,11 +526,21 @@ export async function POST(request: Request) {
         gradedAt: new Date().toISOString(),
         remarks,
       });
+      const afterSnapshot = buildDemoGamificationSnapshot(studentId);
+      const xpAwarded = buildDemoGamificationResyncResult(
+        studentId,
+        beforeSnapshot,
+        afterSnapshot
+      );
 
       return NextResponse.json(
         {
           success: true,
           data: toApiGrade(created),
+          ...(xpAwarded.totalPointsAwarded !== 0 ||
+          xpAwarded.milestonesUnlocked.length > 0
+            ? { xpAwarded }
+            : {}),
         },
         { status: 201 }
       );
@@ -650,9 +665,9 @@ export async function POST(request: Request) {
       );
     }
 
-    let xpAwarded: Awaited<ReturnType<typeof awardPointsForGrade>> | null = null;
+    let xpAwarded: Awaited<ReturnType<typeof recalculateStudentPoints>> | null = null;
     try {
-      const awardResult = await awardPointsForGrade(createdId);
+      const awardResult = await recalculateStudentPoints(studentId);
       if (
         awardResult.pointsAwarded.length > 0 ||
         awardResult.milestonesUnlocked.length > 0 ||
@@ -662,13 +677,14 @@ export async function POST(request: Request) {
       }
 
       if (!awardResult.success && awardResult.errors.length > 0) {
-        console.error("Failed to auto-award points for created grade", {
+        console.error("Failed to re-sync gamification after creating grade", {
+          studentId,
           gradeId: createdId,
           errors: awardResult.errors,
         });
       }
     } catch (error) {
-      console.error("Failed to auto-award points for created grade", error);
+      console.error("Failed to re-sync gamification after creating grade", error);
     }
 
     return NextResponse.json(

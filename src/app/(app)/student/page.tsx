@@ -1,53 +1,307 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  MessageSquare,
+  RefreshCw,
+  Sparkles,
+  Trophy,
+} from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
+import { authHeaders, updateStoredUser } from "@/models/rbac";
 import {
-  listLatestAnnouncements,
-  type AnnouncementRecord,
-} from "@/models/announcement-center";
-import { listNotificationsForUser } from "@/models/notification-center";
-import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
-import type {
-  ConsultationBooking,
-  PostItem,
-  StudentProfile,
-} from "@/models/portal-types";
-import { authHeaders, readStoredUser, updateStoredUser } from "@/models/rbac";
+  getStudentPortalSessionUser,
+  resolveCurrentStudentRecord,
+} from "@/lib/student-session";
 
-interface StudentSummary {
-  notifications: number;
-  bookings: number;
-  posts: number;
-  points: number;
+interface DashboardPerformanceData {
+  student: {
+    name: string;
+    registrationNumber: string;
+  };
+  overview: {
+    cumulativeGPA: number;
+    progressPercentage: number;
+    classification: string;
+    totalCreditsCompleted: number;
+  };
+  atRiskModules: {
+    totalAtRisk: number;
+    hasAnyRisk: boolean;
+  };
+  riskReport: {
+    summary: string;
+  };
 }
 
-interface StudentGamificationPayload {
-  profile?: StudentProfile;
+interface DashboardPointsData {
+  totalXP: number;
+  activityCount: number;
+  recentActivity: Array<{
+    reason: string;
+    xpPoints: number;
+    createdAt: string;
+  }>;
 }
 
-function formatDateTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
+interface DashboardQuizData {
+  summary: {
+    totalAvailable: number;
+    totalInProgress: number;
+    totalCompleted: number;
+    averageScore: number;
+  };
+}
+
+interface DashboardTrophyData {
+  trophies: {
+    totalEarned: number;
+    recentlyEarned: Array<{
+      trophyName: string;
+      earnedAt: string;
+    }>;
+  };
+}
+
+interface DashboardCommunityPost {
+  _id?: string;
+  title?: string;
+  createdAt?: string;
+}
+
+interface DashboardState {
+  studentName: string;
+  registrationNumber: string;
+  performance: DashboardPerformanceData | null;
+  points: DashboardPointsData | null;
+  quizzes: DashboardQuizData | null;
+  trophies: DashboardTrophyData | null;
+  communityPosts: DashboardCommunityPost[] | null;
+}
+
+interface DashboardAlert {
+  id: string;
+  title: string;
+  message: string;
+  time?: string;
+  tone: "neutral" | "warning" | "success";
+}
+
+function collapseSpaces(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function formatRelativeTime(date: string | null | undefined) {
+  if (!date) {
+    return "Recently";
   }
-  return parsed.toLocaleString();
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Recently";
+  }
+
+  const diffMs = Date.now() - parsed.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+}
+
+async function readJson<T>(response: Response) {
+  return (await response.json().catch(() => null)) as T | null;
+}
+
+async function fetchOptionalApiData<T>(url: string) {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    const payload = await readJson<{ success?: boolean; data?: T }>(response);
+    if (!response.ok || !payload?.success || !payload.data) {
+      return null;
+    }
+    return payload.data;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOptionalPosts(userId: string) {
+  const trimmedUserId = collapseSpaces(userId);
+  if (!trimmedUserId || !/^[a-f\d]{24}$/i.test(trimmedUserId)) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/community-user-posts?userId=${encodeURIComponent(trimmedUserId)}`,
+      {
+        cache: "no-store",
+      }
+    );
+    const payload = await readJson<DashboardCommunityPost[]>(response);
+    if (!response.ok || !Array.isArray(payload)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function buildAlerts(data: DashboardState | null): DashboardAlert[] {
+  if (!data) {
+    return [];
+  }
+
+  const alerts: DashboardAlert[] = [];
+
+  if (data.performance?.atRiskModules.hasAnyRisk) {
+    alerts.push({
+      id: "risk",
+      title: "Academic attention needed",
+      message:
+        data.performance.atRiskModules.totalAtRisk === 1
+          ? "You have 1 module that needs attention."
+          : `You have ${data.performance.atRiskModules.totalAtRisk} modules that need attention.`,
+      tone: "warning",
+    });
+  }
+
+  if ((data.quizzes?.summary.totalInProgress ?? 0) > 0) {
+    alerts.push({
+      id: "quiz-in-progress",
+      title: "Quiz in progress",
+      message:
+        data.quizzes?.summary.totalInProgress === 1
+          ? "You have 1 quiz ready to resume."
+          : `You have ${data.quizzes?.summary.totalInProgress ?? 0} quizzes ready to resume.`,
+      tone: "warning",
+    });
+  }
+
+  if ((data.quizzes?.summary.totalAvailable ?? 0) > 0) {
+    alerts.push({
+      id: "quiz-available",
+      title: "New quiz opportunities",
+      message:
+        data.quizzes?.summary.totalAvailable === 1
+          ? "1 quiz is currently available."
+          : `${data.quizzes?.summary.totalAvailable ?? 0} quizzes are currently available.`,
+      tone: "neutral",
+    });
+  }
+
+  const recentTrophy = data.trophies?.trophies.recentlyEarned[0];
+  if (recentTrophy) {
+    alerts.push({
+      id: "recent-trophy",
+      title: "New trophy earned",
+      message: recentTrophy.trophyName,
+      time: formatRelativeTime(recentTrophy.earnedAt),
+      tone: "success",
+    });
+  }
+
+  const recentXp = data.points?.recentActivity[0];
+  if (recentXp) {
+    alerts.push({
+      id: "recent-xp",
+      title: "Latest XP activity",
+      message: `${recentXp.reason} (${recentXp.xpPoints > 0 ? "+" : ""}${recentXp.xpPoints} XP)`,
+      time: formatRelativeTime(recentXp.createdAt),
+      tone: "neutral",
+    });
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: "healthy",
+      title: "All clear",
+      message: "No urgent academic or activity alerts right now.",
+      tone: "success",
+    });
+  }
+
+  return alerts.slice(0, 4);
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-52" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Card key={index}>
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="mt-2 h-8 w-20" />
+            <Skeleton className="mt-2 h-4 w-32" />
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
+        <Card>
+          <Skeleton className="h-40 w-full rounded-3xl" />
+        </Card>
+        <Card>
+          <Skeleton className="h-40 w-full rounded-3xl" />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-4">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+            <BookOpen size={22} />
+          </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+              Student Portal / Dashboard
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+              Student profile not found
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+              Please make sure you&apos;re logged in with a valid student account, or contact your
+              administrator.
+            </p>
+          </div>
+        </div>
+        <Button onClick={onRetry} variant="secondary">
+          Retry
+        </Button>
+      </div>
+    </Card>
+  );
 }
 
 export default function StudentDashboardPage() {
-  const user = useCallback(() => readStoredUser(), []);
   const [loading, setLoading] = useState(true);
-  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
-  const [summary, setSummary] = useState<StudentSummary>({
-    notifications: 0,
-    bookings: 0,
-    posts: 0,
-    points: 0,
-  });
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
+  const [dashboard, setDashboard] = useState<DashboardState | null>(null);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -56,47 +310,9 @@ export default function StudentDashboardPage() {
   const [securitySuccess, setSecuritySuccess] = useState("");
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
-  const loadAnnouncements = useCallback(async () => {
-    const currentUser = user();
-    const userId = String(currentUser?.id ?? "").trim();
-
-    const [rows, notifications, bookings, posts, gamification] = await Promise.all([
-      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
-      listNotificationsForUser(currentUser, "STUDENT").catch(() => []),
-      loadPortalData<ConsultationBooking[]>(PORTAL_DATA_KEYS.consultationBookings, []),
-      loadPortalData<PostItem[]>(PORTAL_DATA_KEYS.discussionPosts, []),
-      loadPortalData<StudentGamificationPayload>(
-        PORTAL_DATA_KEYS.studentGamification,
-        {}
-      ),
-    ]);
-
-    const bookingCount = userId
-      ? bookings.filter((item) => String(item.studentUserId ?? "").trim() === userId)
-          .length
-      : bookings.length;
-
-    const postCount = userId
-      ? posts.filter((item) => String(item.ownerId ?? "").trim() === userId).length
-      : posts.length;
-
-    setAnnouncements(rows);
-    setSummary({
-      notifications: notifications.length,
-      bookings: bookingCount,
-      posts: postCount,
-      points: Number(gamification.profile?.points ?? 0),
-    });
-  }, [user]);
-
   useEffect(() => {
-    const timer = window.setTimeout(() => setLoading(false), 500);
-    return () => window.clearTimeout(timer);
+    void loadDashboard();
   }, []);
-
-  useEffect(() => {
-    void loadAnnouncements();
-  }, [loadAnnouncements]);
 
   useEffect(() => {
     if (!isSecurityModalOpen) {
@@ -109,6 +325,21 @@ export default function StudentDashboardPage() {
       document.body.style.overflow = previousOverflow;
     };
   }, [isSecurityModalOpen]);
+
+  const alerts = useMemo(() => buildAlerts(dashboard), [dashboard]);
+  const unavailableSources = useMemo(() => {
+    if (!dashboard) {
+      return [];
+    }
+
+    const missing: string[] = [];
+    if (!dashboard.performance) missing.push("performance");
+    if (!dashboard.points) missing.push("points");
+    if (!dashboard.quizzes) missing.push("quizzes");
+    if (!dashboard.trophies) missing.push("trophies");
+    if (dashboard.communityPosts === null) missing.push("community posts");
+    return missing;
+  }, [dashboard]);
 
   const closeSecurityModal = () => {
     if (isUpdatingPassword) {
@@ -124,7 +355,6 @@ export default function StudentDashboardPage() {
   };
 
   const validateSecurityForm = () => {
-    // Frontend validation: enforce mandatory fields before calling change-password API.
     if (!currentPassword) {
       return "Current password is required";
     }
@@ -139,6 +369,68 @@ export default function StudentDashboardPage() {
 
     return "";
   };
+
+  async function loadDashboard(showRefresh = false) {
+    if (showRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setError("");
+    setProfileMissing(false);
+
+    try {
+      const sessionUser = getStudentPortalSessionUser();
+      if (!sessionUser) {
+        throw new Error("No student session found. Please sign in again.");
+      }
+
+      const student = await resolveCurrentStudentRecord(sessionUser);
+      if (!student) {
+        setDashboard(null);
+        setProfileMissing(true);
+        return;
+      }
+
+      const [performance, points, quizzes, trophies, communityPosts] = await Promise.all([
+        fetchOptionalApiData<DashboardPerformanceData>(
+          `/api/performance/${encodeURIComponent(student.id)}`
+        ),
+        fetchOptionalApiData<DashboardPointsData>(
+          `/api/gamification/points/${encodeURIComponent(student.id)}`
+        ),
+        fetchOptionalApiData<DashboardQuizData>(
+          `/api/quizzes/student/${encodeURIComponent(student.id)}?status=all`
+        ),
+        fetchOptionalApiData<DashboardTrophyData>(
+          `/api/gamification/trophies/${encodeURIComponent(student.id)}`
+        ),
+        fetchOptionalPosts(sessionUser.id),
+      ]);
+
+      setDashboard({
+        studentName: student.fullName,
+        registrationNumber: student.studentId,
+        performance,
+        points,
+        quizzes,
+        trophies,
+        communityPosts,
+      });
+    } catch (loadError) {
+      setProfileMissing(false);
+      setDashboard(null);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load your dashboard."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
 
   const updatePassword = async () => {
     if (isUpdatingPassword) {
@@ -180,85 +472,225 @@ export default function StudentDashboardPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error) {
+    } catch (updateError) {
       setSecurityError(
-        error instanceof Error ? error.message : "Failed to update password"
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to update password"
       );
     } finally {
       setIsUpdatingPassword(false);
     }
   };
 
+  const metricCards = [
+    {
+      label: "Current GPA",
+      value:
+        dashboard?.performance !== null && dashboard?.performance !== undefined
+          ? dashboard.performance.overview.cumulativeGPA.toFixed(2)
+          : "—",
+      hint: dashboard?.performance?.overview.classification ?? "Performance data unavailable",
+      icon: BarChart3,
+    },
+    {
+      label: "Study Progress",
+      value:
+        dashboard?.performance !== null && dashboard?.performance !== undefined
+          ? `${dashboard.performance.overview.progressPercentage.toFixed(1)}%`
+          : "—",
+      hint:
+        dashboard?.performance !== null && dashboard?.performance !== undefined
+          ? `${dashboard.performance.overview.totalCreditsCompleted} credits completed`
+          : "Progress data unavailable",
+      icon: BookOpen,
+    },
+    {
+      label: "Available Quizzes",
+      value:
+        dashboard?.quizzes !== null && dashboard?.quizzes !== undefined
+          ? String(dashboard.quizzes.summary.totalAvailable)
+          : "—",
+      hint:
+        dashboard?.quizzes !== null && dashboard?.quizzes !== undefined
+          ? `${dashboard.quizzes.summary.totalInProgress} in progress`
+          : "Quiz data unavailable",
+      icon: AlertTriangle,
+    },
+    {
+      label: "Total XP",
+      value:
+        dashboard?.points !== null && dashboard?.points !== undefined
+          ? String(dashboard.points.totalXP)
+          : "—",
+      hint:
+        dashboard?.points !== null && dashboard?.points !== undefined
+          ? `${dashboard.points.activityCount} activity records`
+          : "XP data unavailable",
+      icon: Sparkles,
+    },
+  ];
+
   if (loading) {
+    return <LoadingSkeleton />;
+  }
+
+  if (profileMissing) {
+    return <StudentProfileEmptyState onRetry={() => void loadDashboard()} />;
+  }
+
+  if (error) {
     return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-44" />
-          <Skeleton className="h-4 w-72" />
+      <Card className="border-red-200 bg-red-50">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-700">
+              Student Portal / Dashboard
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-red-900">
+              Failed to load dashboard
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-red-900/80">{error}</p>
+          </div>
+          <Button onClick={() => void loadDashboard()} variant="secondary">
+            Retry
+          </Button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Card key={index}>
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="mt-2 h-8 w-16" />
-            </Card>
-          ))}
-        </div>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold text-heading">Student Dashboard</h1>
-        <p className="mt-2 text-sm text-text/75">Your academic support overview for this week.</p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold text-heading">Student Dashboard</h1>
+          <p className="mt-2 text-sm text-text/75">
+            Live academic and engagement snapshot for{" "}
+            <span className="font-medium text-heading">
+              {dashboard?.studentName || "your account"}
+            </span>
+            {dashboard?.registrationNumber
+              ? ` • ${dashboard.registrationNumber}`
+              : ""}
+            .
+          </p>
+        </div>
+        <Button
+          className="gap-2"
+          disabled={refreshing}
+          onClick={() => void loadDashboard(true)}
+          variant="secondary"
+        >
+          <RefreshCw className={cn(refreshing && "animate-spin")} size={16} />
+          Refresh
+        </Button>
       </div>
 
+      {unavailableSources.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Some dashboard panels are temporarily unavailable: {unavailableSources.join(", ")}.
+        </div>
+      ) : null}
+
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <Card accent>
-          <p className="text-sm text-text/72">Notifications</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{summary.notifications}</p>
-        </Card>
-        <Card accent>
-          <p className="text-sm text-text/72">Bookings</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{summary.bookings}</p>
-        </Card>
-        <Card accent>
-          <p className="text-sm text-text/72">Posts</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{summary.posts}</p>
-        </Card>
-        <Card accent>
-          <p className="text-sm text-text/72">Points</p>
-          <p className="mt-2 text-3xl font-semibold text-heading">{summary.points}</p>
-        </Card>
+        {metricCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card accent key={card.label}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-text/72">{card.label}</p>
+                  <p className="mt-2 text-3xl font-semibold text-heading">{card.value}</p>
+                  <p className="mt-2 text-sm text-text/65">{card.hint}</p>
+                </div>
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
+                  <Icon size={18} />
+                </span>
+              </div>
+            </Card>
+          );
+        })}
       </section>
 
-      <Card title="Latest Announcements">
-        {announcements.length === 0 ? (
-          <p className="text-sm text-text/70">No announcements available yet.</p>
-        ) : (
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]">
+        <Card title="Recent Alerts">
           <ul className="space-y-3">
-            {announcements.map((item) => (
-              <li className="rounded-2xl bg-tint p-3.5" key={item.id}>
-                <p className="text-sm font-medium text-text">{item.title}</p>
-                <p className="mt-1 text-xs text-text/72">{item.message}</p>
-                <p className="mt-2 text-[11px] text-text/65">
-                  {formatDateTime(item.createdAt)}
-                </p>
+            {alerts.map((item) => (
+              <li
+                className={cn(
+                  "rounded-2xl border px-4 py-3",
+                  item.tone === "warning"
+                    ? "border-amber-200 bg-amber-50"
+                    : item.tone === "success"
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-slate-200 bg-slate-50"
+                )}
+                key={item.id}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-text">{item.title}</p>
+                    <p className="mt-1 text-sm text-text/72">{item.message}</p>
+                  </div>
+                  {item.time ? (
+                    <p className="text-xs text-text/60">{item.time}</p>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
-        )}
-        <div className="mt-4">
-          <Link
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-            href="/announcements"
-          >
-            View All
-          </Link>
-        </div>
-      </Card>
+        </Card>
+
+        <Card title="Activity Snapshot">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
+                  <MessageSquare size={18} />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-heading">Community Posts</p>
+                  <p className="text-xs text-text/65">Posts linked to your user account</p>
+                </div>
+              </div>
+              <p className="text-xl font-semibold text-heading">
+                {dashboard?.communityPosts ? dashboard.communityPosts.length : "—"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
+                  <BookOpen size={18} />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-heading">Completed Quizzes</p>
+                  <p className="text-xs text-text/65">Best-attempt record count</p>
+                </div>
+              </div>
+              <p className="text-xl font-semibold text-heading">
+                {dashboard?.quizzes ? dashboard.quizzes.summary.totalCompleted : "—"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
+                  <Trophy size={18} />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-heading">Trophies Earned</p>
+                  <p className="text-xs text-text/65">Unlocked achievement count</p>
+                </div>
+              </div>
+              <p className="text-xl font-semibold text-heading">
+                {dashboard?.trophies ? dashboard.trophies.trophies.totalEarned : "—"}
+              </p>
+            </div>
+          </div>
+        </Card>
+      </section>
 
       <Card title="Security Settings">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -374,4 +806,3 @@ export default function StudentDashboardPage() {
     </div>
   );
 }
-

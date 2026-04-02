@@ -1,11 +1,16 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
+import "@/models/Enrollment";
 import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
+import {
+  buildDemoPerformancePayload,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { connectMongoose } from "@/lib/mongoose";
-import { findModuleById } from "@/lib/module-store";
+import { findModuleByCode, findModuleById } from "@/lib/module-store";
 import {
   calculateCumulativeGPA,
   getGPAClassification,
@@ -17,8 +22,11 @@ import {
   type AcademicStanding,
   type FullRiskReport,
 } from "@/lib/risk-detection-utils";
+import { findDegreeProgram } from "@/models/degree-program-store";
+import { EnrollmentModel } from "@/models/Enrollment";
 import type { IGrade } from "@/models/Grade";
 import { GradeModel } from "@/models/Grade";
+import { ModuleModel } from "@/models/Module";
 import { StudentModel } from "@/models/Student";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -31,6 +39,13 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
 }
 
 function toIsoDate(value: unknown) {
@@ -110,7 +125,120 @@ function buildStudentName(student: unknown) {
   return [firstName, lastName].filter(Boolean).join(" ").trim();
 }
 
-function enrichGradeRow(row: unknown) {
+function resolveDegreeProgramIdFromGrades(rows: unknown[]) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const grade = asObject(rows[index]);
+    const offering = asObject(grade?.moduleOfferingId);
+    const degreeProgramId = collapseSpaces(offering?.degreeProgramId);
+    if (degreeProgramId) {
+      return degreeProgramId;
+    }
+  }
+
+  return "";
+}
+
+async function getTotalRequiredCredits(studentId: string, gradeRows: unknown[]) {
+  const enrollment = await EnrollmentModel.findOne({ studentId })
+    .sort({ updatedAt: -1 })
+    .select("degreeProgramId")
+    .lean()
+    .exec()
+    .catch(() => null);
+  const enrollmentRow = asObject(enrollment);
+  const degreeProgramId =
+    collapseSpaces(enrollmentRow?.degreeProgramId) || resolveDegreeProgramIdFromGrades(gradeRows);
+  if (!degreeProgramId) {
+    return 0;
+  }
+
+  return Number(findDegreeProgram(degreeProgramId)?.credits ?? 0) || 0;
+}
+
+const moduleMetaCache = new Map<
+  string,
+  Promise<
+    | {
+        id: string;
+        code: string;
+        name: string;
+        credits: number;
+      }
+    | null
+  >
+>();
+
+async function resolveModuleMeta(moduleId: string, moduleCode: string) {
+  const normalizedModuleId = collapseSpaces(moduleId);
+  const normalizedModuleCode = normalizeModuleCode(moduleCode);
+  const cacheKey = `${normalizedModuleId}::${normalizedModuleCode}`;
+  const cached = moduleMetaCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = (async () => {
+    if (normalizedModuleId && mongoose.Types.ObjectId.isValid(normalizedModuleId)) {
+      const row = asObject(
+        await ModuleModel.findById(normalizedModuleId)
+          .select("code name credits")
+          .lean()
+          .exec()
+          .catch(() => null)
+      );
+      const dbCode = normalizeModuleCode(row?.code);
+      const dbName = collapseSpaces(row?.name);
+      const dbCredits = Number(row?.credits ?? 0) || 0;
+      if (dbCode || dbName || dbCredits) {
+        return {
+          id: readId(row?._id) || normalizedModuleId,
+          code: dbCode,
+          name: dbName,
+          credits: dbCredits,
+        };
+      }
+    }
+
+    if (normalizedModuleCode) {
+      const row = asObject(
+        await ModuleModel.findOne({ code: normalizedModuleCode })
+          .select("code name credits")
+          .lean()
+          .exec()
+          .catch(() => null)
+      );
+      const dbCode = normalizeModuleCode(row?.code);
+      const dbName = collapseSpaces(row?.name);
+      const dbCredits = Number(row?.credits ?? 0) || 0;
+      if (dbCode || dbName || dbCredits) {
+        return {
+          id: readId(row?._id) || normalizedModuleId,
+          code: dbCode,
+          name: dbName,
+          credits: dbCredits,
+        };
+      }
+    }
+
+    const storeModule =
+      findModuleByCode(normalizedModuleCode) ?? findModuleById(normalizedModuleId);
+    if (!storeModule) {
+      return null;
+    }
+
+    return {
+      id: collapseSpaces(storeModule.id),
+      code: collapseSpaces(storeModule.code),
+      name: collapseSpaces(storeModule.name),
+      credits: Number(storeModule.credits ?? 0) || 0,
+    };
+  })();
+
+  moduleMetaCache.set(cacheKey, pending);
+  return pending;
+}
+
+async function enrichGradeRow(row: unknown) {
   const grade = asObject(row);
   if (!grade) {
     return null;
@@ -118,7 +246,8 @@ function enrichGradeRow(row: unknown) {
 
   const offering = asObject(grade.moduleOfferingId);
   const moduleId = collapseSpaces(offering?.moduleId);
-  const moduleRecord = moduleId ? findModuleById(moduleId) : null;
+  const moduleCode = normalizeModuleCode(offering?.moduleCode);
+  const moduleRecord = await resolveModuleMeta(moduleId, moduleCode);
 
   return {
     ...grade,
@@ -128,11 +257,10 @@ function enrichGradeRow(row: unknown) {
           _id: readId(offering._id ?? offering.id) || null,
           id: readId(offering._id ?? offering.id) || null,
           moduleId,
-          moduleCode:
-            collapseSpaces(offering.moduleCode) || collapseSpaces(moduleRecord?.code),
+          moduleCode: moduleCode || collapseSpaces(moduleRecord?.code),
           moduleName:
             collapseSpaces(offering.moduleName) || collapseSpaces(moduleRecord?.name),
-          credits: Number(moduleRecord?.credits ?? 0) || undefined,
+          credits: Number(offering.credits ?? moduleRecord?.credits ?? 0) || undefined,
           module: moduleRecord ? { ...moduleRecord } : null,
         }
       : grade.moduleOfferingId,
@@ -243,19 +371,27 @@ export async function GET(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const studentId = String(params.studentId ?? "").trim();
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
       );
+    }
+
+    if (!mongooseConnection) {
+      const demoPayload = buildDemoPerformancePayload(studentId);
+      if (!demoPayload || !hasDemoStudent(studentId)) {
+        return NextResponse.json(
+          { success: false, error: "Student not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: demoPayload,
+      });
     }
 
     const student = await StudentModel.findById(studentId)
@@ -272,7 +408,8 @@ export async function GET(
     const rows = (await GradeModel.find({ studentId })
       .populate({
         path: "moduleOfferingId",
-        select: "moduleId intakeId termCode status degreeProgramId facultyId",
+        select:
+          "moduleId moduleCode moduleName intakeId termCode status degreeProgramId facultyId",
       })
       .populate({ path: "gradedBy", select: "username email role" })
       .sort({ academicYear: 1, semester: 1, createdAt: 1 })
@@ -283,13 +420,13 @@ export async function GET(
     // Utilities accept IGrade[] and are resilient to populated objects. We enrich
     // the populated grade rows once with module metadata and reuse that same set for
     // both calculations and response assembly to avoid a second query.
-    const enrichedGrades = rows
-      .map((row) => enrichGradeRow(row))
+    const enrichedGrades = (await Promise.all(rows.map((row) => enrichGradeRow(row))))
       .filter(Boolean) as Record<string, unknown>[];
     const gradeRecords = enrichedGrades as unknown as IGrade[];
+    const totalRequiredCredits = await getTotalRequiredCredits(studentId, rows);
 
     const studentRow = asObject(student);
-    const progressOverview = getProgressOverview(gradeRecords);
+    const progressOverview = getProgressOverview(gradeRecords, totalRequiredCredits);
     const cumulativeGPA = calculateCumulativeGPA(gradeRecords);
     const generatedRiskReport =
       gradeRecords.length > 0
@@ -427,6 +564,7 @@ export async function GET(
           totalProRata: progressOverview.totalProRata,
           totalRepeat: progressOverview.totalRepeat,
           totalCreditsCompleted: progressOverview.totalCreditsCompleted,
+          totalCreditsRequired: progressOverview.totalCreditsRequired,
           progressPercentage: progressOverview.progressPercentage,
           trend: progressOverview.trend,
         },

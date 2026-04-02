@@ -6,15 +6,21 @@ import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/Trophy";
+import {
+  buildDemoLeaderboardData,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { findDegreeProgram } from "@/lib/degree-program-store";
 import { findFaculty } from "@/lib/faculty-store";
 import { getCurrentLevel } from "@/lib/level-utils";
 import { connectMongoose } from "@/lib/mongoose";
 import { findIntakeById } from "@/lib/intake-store";
-import { findModuleById } from "@/lib/module-store";
+import { findModuleByCode, findModuleById } from "@/lib/module-store";
 import { EnrollmentModel } from "@/models/Enrollment";
 import { GamificationPointsModel } from "@/models/GamificationPoints";
 import { GradeModel } from "@/models/Grade";
+import { IntakeModel } from "@/models/Intake";
+import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { StudentModel } from "@/models/Student";
 import { TrophyModel } from "@/models/Trophy";
@@ -85,6 +91,7 @@ interface ScopeStudentContext {
   scopeName: string | null;
   studentIds: string[];
   enrollmentByStudent: Map<string, EnrollmentScopeRow>;
+  intakeNameById: Map<string, string>;
 }
 
 interface AggregatedXPRow {
@@ -118,6 +125,13 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 export function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
 }
 
 export function readId(value: unknown) {
@@ -256,7 +270,7 @@ export function validateScopeOptions(options: {
   degreeProgramId: string;
   intakeId: string;
   moduleOfferingId: string;
-}) {
+}, allowNonObjectIds = false) {
   if (!options.scope) {
     return "Invalid scope. Must be one of: campus, faculty, degree, intake, module";
   }
@@ -280,6 +294,7 @@ export function validateScopeOptions(options: {
   if (
     options.scope === "module" &&
     options.moduleOfferingId &&
+    !allowNonObjectIds &&
     !mongoose.Types.ObjectId.isValid(options.moduleOfferingId)
   ) {
     return "Invalid moduleOfferingId format";
@@ -313,6 +328,94 @@ function buildEnrollmentMap(rows: unknown[]) {
   return map;
 }
 
+async function loadIntakeNameMap(intakeIds: string[]) {
+  const normalizedIds = uniqueIds(intakeIds);
+  const intakeNameById = new Map<string, string>();
+
+  const rows =
+    normalizedIds.length > 0
+      ? ((await IntakeModel.find({ _id: { $in: toObjectIds(normalizedIds) } })
+          .select("name")
+          .lean()
+          .exec()
+          .catch(() => [])) as unknown[])
+      : [];
+
+  rows.forEach((row) => {
+    const item = asObject(row);
+    const intakeId = readId(item?._id);
+    const intakeName = collapseSpaces(item?.name);
+    if (intakeId && intakeName) {
+      intakeNameById.set(intakeId, intakeName);
+    }
+  });
+
+  normalizedIds.forEach((intakeId) => {
+    if (intakeNameById.has(intakeId)) {
+      return;
+    }
+
+    const fallbackName = collapseSpaces(findIntakeById(intakeId)?.name);
+    if (fallbackName) {
+      intakeNameById.set(intakeId, fallbackName);
+    }
+  });
+
+  return intakeNameById;
+}
+
+async function resolveModuleDisplayName(
+  moduleId: string,
+  moduleCode: string,
+  moduleName: string
+) {
+  const resolvedCode = normalizeModuleCode(moduleCode);
+  const resolvedName = collapseSpaces(moduleName);
+  if (resolvedCode && resolvedName) {
+    return `${resolvedCode} - ${resolvedName}`;
+  }
+
+  const normalizedModuleId = collapseSpaces(moduleId);
+
+  if (normalizedModuleId && mongoose.Types.ObjectId.isValid(normalizedModuleId)) {
+    const row = asObject(
+      await ModuleModel.findById(normalizedModuleId)
+        .select("code name")
+        .lean()
+        .exec()
+        .catch(() => null)
+    );
+    const dbCode = normalizeModuleCode(row?.code);
+    const dbName = collapseSpaces(row?.name);
+    if (dbCode && dbName) {
+      return `${dbCode} - ${dbName}`;
+    }
+  }
+
+  if (resolvedCode) {
+    const row = asObject(
+      await ModuleModel.findOne({ code: resolvedCode })
+        .select("code name")
+        .lean()
+        .exec()
+        .catch(() => null)
+    );
+    const dbCode = normalizeModuleCode(row?.code);
+    const dbName = collapseSpaces(row?.name);
+    if (dbCode && dbName) {
+      return `${dbCode} - ${dbName}`;
+    }
+  }
+
+  const storeRecord =
+    findModuleByCode(resolvedCode) ?? findModuleById(normalizedModuleId);
+  if (storeRecord) {
+    return `${collapseSpaces(storeRecord.code)} - ${collapseSpaces(storeRecord.name)}`;
+  }
+
+  return [resolvedCode, resolvedName].filter(Boolean).join(" - ") || null;
+}
+
 async function resolveScopeName(
   options: LeaderboardBuildOptions
 ): Promise<string | null> {
@@ -333,25 +436,29 @@ async function resolveScopeName(
   }
 
   if (options.scope === "intake") {
-    return findIntakeById(options.intakeId ?? "")?.name ?? options.intakeId ?? null;
+    const intakeNameById = await loadIntakeNameMap([collapseSpaces(options.intakeId)]);
+    return (
+      intakeNameById.get(collapseSpaces(options.intakeId)) ??
+      options.intakeId ??
+      null
+    );
   }
 
   if (options.scope === "module" && options.moduleOfferingId) {
     const offering = await ModuleOfferingModel.findById(options.moduleOfferingId)
-      .select("moduleId intakeId termCode")
+      .select("moduleId moduleCode moduleName intakeId termCode")
       .lean()
       .exec()
       .catch(() => null);
     const offeringRow = asObject(offering);
-    const moduleRecord = offeringRow?.moduleId
-      ? findModuleById(collapseSpaces(offeringRow.moduleId))
-      : null;
-
-    if (moduleRecord) {
-      return `${moduleRecord.code} - ${moduleRecord.name}`;
-    }
-
-    return options.moduleOfferingId;
+    return (
+      (await resolveModuleDisplayName(
+        collapseSpaces(offeringRow?.moduleId),
+        normalizeModuleCode(offeringRow?.moduleCode),
+        collapseSpaces(offeringRow?.moduleName)
+      )) ??
+      options.moduleOfferingId
+    );
   }
 
   return null;
@@ -378,11 +485,15 @@ async function loadScopeStudentContext(
             .exec()
             .catch(() => [])) as unknown[])
         : [];
+    const intakeNameById = await loadIntakeNameMap(
+      enrollmentRows.map((row) => collapseSpaces(asObject(row)?.intakeId))
+    );
 
     return {
       scopeName,
       studentIds,
       enrollmentByStudent: buildEnrollmentMap(enrollmentRows),
+      intakeNameById,
     };
   }
 
@@ -404,11 +515,15 @@ async function loadScopeStudentContext(
       .lean()
       .exec()
       .catch(() => [])) as unknown[];
+    const intakeNameById = await loadIntakeNameMap(
+      enrollmentRows.map((row) => collapseSpaces(asObject(row)?.intakeId))
+    );
 
     return {
       scopeName,
       studentIds: uniqueIds(enrollmentRows.map((row) => asObject(row)?.studentId)),
       enrollmentByStudent: buildEnrollmentMap(enrollmentRows),
+      intakeNameById,
     };
   }
 
@@ -438,17 +553,22 @@ async function loadScopeStudentContext(
           .exec()
           .catch(() => [])) as unknown[])
       : [];
+  const intakeNameById = await loadIntakeNameMap(
+    enrollmentRows.map((row) => collapseSpaces(asObject(row)?.intakeId))
+  );
 
   return {
     scopeName,
     studentIds,
     enrollmentByStudent: buildEnrollmentMap(enrollmentRows),
+    intakeNameById,
   };
 }
 
 function toStudentResponse(
   student: unknown,
-  enrollment: EnrollmentScopeRow | undefined
+  enrollment: EnrollmentScopeRow | undefined,
+  intakeNameById: Map<string, string>
 ): LeaderboardStudentInfo | null {
   const row = asObject(student);
   const id = readId(row?._id);
@@ -469,7 +589,7 @@ function toStudentResponse(
       ? findDegreeProgram(enrollment.degreeProgramId)?.name ?? enrollment.degreeProgramId
       : undefined,
     intake: enrollment?.intakeId
-      ? findIntakeById(enrollment.intakeId)?.name ?? enrollment.intakeId
+      ? intakeNameById.get(enrollment.intakeId) ?? enrollment.intakeId
       : undefined,
   };
 }
@@ -532,7 +652,24 @@ async function loadStudentTrophies(studentIds: string[]) {
       },
     },
     {
+      $addFields: {
+        trophyTierRank: {
+          $switch: {
+            branches: [
+              { case: { $eq: ["$trophyTier", "diamond"] }, then: 5 },
+              { case: { $eq: ["$trophyTier", "platinum"] }, then: 4 },
+              { case: { $eq: ["$trophyTier", "gold"] }, then: 3 },
+              { case: { $eq: ["$trophyTier", "silver"] }, then: 2 },
+              { case: { $eq: ["$trophyTier", "bronze"] }, then: 1 },
+            ],
+            default: 0,
+          },
+        },
+      },
+    },
+    {
       $sort: {
+        trophyTierRank: -1,
         earnedAt: -1,
         createdAt: -1,
       },
@@ -672,7 +809,8 @@ export async function buildLeaderboardData(
       const studentObjectId = readId(row?._id);
       const studentInfo = toStudentResponse(
         student,
-        scopeContext.enrollmentByStudent.get(studentObjectId)
+        scopeContext.enrollmentByStudent.get(studentObjectId),
+        scopeContext.intakeNameById
       );
       if (!studentInfo) {
         return null;
@@ -771,16 +909,13 @@ function buildPersonalRank(
 export async function GET(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
 
     const { searchParams } = new URL(request.url);
     const scopeOptions = parseScopeOptions(searchParams);
-    const validationError = validateScopeOptions(scopeOptions);
+    const validationError = validateScopeOptions(
+      scopeOptions,
+      !mongooseConnection
+    );
 
     if (validationError) {
       return NextResponse.json(
@@ -794,6 +929,7 @@ export async function GET(request: Request) {
     const requestingStudentId = collapseSpaces(searchParams.get("studentId"));
 
     if (
+      mongooseConnection &&
       requestingStudentId &&
       !mongoose.Types.ObjectId.isValid(requestingStudentId)
     ) {
@@ -804,9 +940,9 @@ export async function GET(request: Request) {
     }
 
     if (requestingStudentId) {
-      const studentExists = await StudentModel.exists({ _id: requestingStudentId }).catch(
-        () => null
-      );
+      const studentExists = mongooseConnection
+        ? await StudentModel.exists({ _id: requestingStudentId }).catch(() => null)
+        : hasDemoStudent(requestingStudentId);
       if (!studentExists) {
         return NextResponse.json(
           { success: false, error: "Student not found" },
@@ -815,13 +951,21 @@ export async function GET(request: Request) {
       }
     }
 
-    const leaderboardData = await buildLeaderboardData({
-      scope: scopeOptions.scope as LeaderboardScope,
-      facultyId: scopeOptions.facultyId,
-      degreeProgramId: scopeOptions.degreeProgramId,
-      intakeId: scopeOptions.intakeId,
-      moduleOfferingId: scopeOptions.moduleOfferingId,
-    });
+    const leaderboardData = mongooseConnection
+      ? await buildLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        })
+      : buildDemoLeaderboardData({
+          scope: scopeOptions.scope as LeaderboardScope,
+          facultyId: scopeOptions.facultyId,
+          degreeProgramId: scopeOptions.degreeProgramId,
+          intakeId: scopeOptions.intakeId,
+          moduleOfferingId: scopeOptions.moduleOfferingId,
+        });
 
     const totalEntries = leaderboardData.entries.length;
     const totalPages = totalEntries > 0 ? Math.ceil(totalEntries / limit) : 1;

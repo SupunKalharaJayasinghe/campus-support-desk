@@ -1,24 +1,26 @@
-function collapseWhitespace(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
+const REPETITIVE_TEXT_MIN_LENGTH = 8;
+const REPETITIVE_TEXT_MAX_UNIQUE_CHARS = 2;
 
-export function getPostTextQualityError(value: string): string | null {
-  const text = collapseWhitespace(value);
+export function getPostTextQualityError(input: string): string | null {
+  const text = input.trim();
   if (!text) {
     return null;
   }
 
-  const compact = text.replace(/\s+/g, "");
-  if (compact.length < 3) {
-    return "Please add a little more detail.";
+  if (!/[A-Za-z0-9]/.test(text)) {
+    return "Add some meaningful text instead of symbols only.";
   }
 
-  if (/^(.)\1{5,}$/u.test(compact)) {
-    return "Please avoid repeated characters only.";
+  const normalized = text.toLowerCase().replace(/\s+/g, "");
+  if (!normalized) {
+    return null;
   }
 
-  if (!/[A-Za-z0-9]/u.test(text)) {
-    return "Please enter meaningful text.";
+  if (
+    normalized.length >= REPETITIVE_TEXT_MIN_LENGTH &&
+    new Set(normalized).size <= REPETITIVE_TEXT_MAX_UNIQUE_CHARS
+  ) {
+    return "Text looks too repetitive. Add a bit more detail.";
   }
 
   return null;

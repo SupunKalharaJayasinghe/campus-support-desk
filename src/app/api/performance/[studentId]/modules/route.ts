@@ -4,6 +4,10 @@ import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
+import {
+  buildDemoPerformanceModulesPayload,
+  hasDemoStudent,
+} from "@/lib/demo-student-analytics";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleById } from "@/lib/module-store";
 import { getProRataEligibility } from "@/lib/risk-detection-utils";
@@ -163,29 +167,11 @@ export async function GET(
 ) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-      return NextResponse.json(
-        { success: false, error: "Database connection is not configured" },
-        { status: 503 }
-      );
-    }
-
     const studentId = String(params.studentId ?? "").trim();
-    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+    if (mongooseConnection && !mongoose.Types.ObjectId.isValid(studentId)) {
       return NextResponse.json(
         { success: false, error: "Invalid student ID format" },
         { status: 400 }
-      );
-    }
-
-    const student = await StudentModel.findById(studentId)
-      .lean()
-      .exec()
-      .catch(() => null);
-    if (!student) {
-      return NextResponse.json(
-        { success: false, error: "Student not found" },
-        { status: 404 }
       );
     }
 
@@ -202,6 +188,36 @@ export async function GET(
       return NextResponse.json(
         { success: false, error: "Semester must be 1 or 2" },
         { status: 400 }
+      );
+    }
+
+    if (!mongooseConnection) {
+      const demoPayload = buildDemoPerformanceModulesPayload(studentId, {
+        academicYear,
+        semester,
+        status,
+      });
+      if (!demoPayload || !hasDemoStudent(studentId)) {
+        return NextResponse.json(
+          { success: false, error: "Student not found" },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: demoPayload,
+      });
+    }
+
+    const student = await StudentModel.findById(studentId)
+      .lean()
+      .exec()
+      .catch(() => null);
+    if (!student) {
+      return NextResponse.json(
+        { success: false, error: "Student not found" },
+        { status: 404 }
       );
     }
 

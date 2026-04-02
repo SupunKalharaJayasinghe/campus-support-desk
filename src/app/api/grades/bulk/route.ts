@@ -5,13 +5,16 @@ import "@/models/Grade";
 import "@/models/ModuleOffering";
 import "@/models/Student";
 import "@/models/User";
+import {
+  buildDemoGamificationResyncResult,
+  buildDemoGamificationSnapshot,
+} from "@/lib/demo-student-analytics";
 import { findGradeInMemoryByStudentOffering, upsertGradeInMemory } from "@/lib/grade-store";
 import { calculateFullGrade } from "@/lib/grade-utils";
 import { connectMongoose } from "@/lib/mongoose";
 import { findModuleOfferingById } from "@/lib/module-offering-store";
 import {
-  awardPointsForGrade,
-  revokePointsForGrade,
+  recalculateStudentPoints,
 } from "@/lib/points-engine";
 import {
   findStudentInMemoryById,
@@ -40,6 +43,10 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function roundToTwo(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function sanitizeAcademicYear(value: unknown) {
@@ -287,6 +294,9 @@ export async function POST(request: Request) {
     }
 
     if (!mongooseConnection) {
+      const beforeSnapshots = new Map(
+        parsedRows.map((row) => [row.studentId, buildDemoGamificationSnapshot(row.studentId)])
+      );
       const missingStudentId = parsedRows.find(
         (row) => !findStudentInMemoryById(row.studentId)
       );
@@ -351,6 +361,42 @@ export async function POST(request: Request) {
         }
       });
 
+      const syncResults = Array.from(
+        new Set(parsedRows.map((row) => row.studentId))
+      ).map((studentId) =>
+        buildDemoGamificationResyncResult(
+          studentId,
+          beforeSnapshots.get(studentId) ?? null,
+          buildDemoGamificationSnapshot(studentId)
+        )
+      );
+
+      const xpAwarded =
+        syncResults.some(
+          (result) =>
+            result.totalPointsAwarded !== 0 || result.milestonesUnlocked.length > 0
+        )
+          ? {
+              processedGrades: parsedRows.length,
+              processedStudents: syncResults.length,
+              totalPointsAwarded: roundToTwo(
+                syncResults.reduce(
+                  (sum, result) => sum + Number(result.totalPointsAwarded ?? 0),
+                  0
+                )
+              ),
+              awardsCount: syncResults.reduce(
+                (sum, result) => sum + result.pointsAwarded.length,
+                0
+              ),
+              milestonesUnlocked: syncResults.flatMap(
+                (result) => result.milestonesUnlocked
+              ),
+              failed: syncResults.filter((result) => !result.success).length,
+              errors: syncResults.flatMap((result) => result.errors),
+            }
+          : null;
+
       return NextResponse.json({
         success: true,
         data: {
@@ -358,6 +404,7 @@ export async function POST(request: Request) {
           updated,
           total: parsedRows.length,
         },
+        ...(xpAwarded ? { xpAwarded } : {}),
       });
     }
 
@@ -470,6 +517,7 @@ export async function POST(request: Request) {
     let xpAwarded:
       | {
           processedGrades: number;
+          processedStudents: number;
           totalPointsAwarded: number;
           awardsCount: number;
           milestonesUnlocked: string[];
@@ -479,55 +527,18 @@ export async function POST(request: Request) {
       | null = null;
 
     try {
-      const savedRows = (await GradeModel.find({
-        moduleOfferingId: moduleOfferingObjectId,
-        studentId: { $in: studentObjectIds },
-      })
-        .select("_id")
-        .lean()
-        .exec()
-        .catch(() => [])) as unknown[];
-
-      const savedGradeIds = Array.from(
-        new Set(
-          savedRows
-            .map((row) => {
-              const doc = asObject(row);
-              return readId(doc?._id);
-            })
-            .filter(Boolean)
-        )
+      const affectedStudentIds = Array.from(
+        new Set(parsedRows.map((row) => collapseSpaces(row.studentId)).filter(Boolean))
       );
 
-      if (savedGradeIds.length > 0) {
-        const revokeResults = await Promise.allSettled(
-          savedGradeIds.map((gradeId) =>
-            revokePointsForGrade(gradeId, "Grade updated via bulk save")
-          )
-        );
-
-        revokeResults.forEach((entry, index) => {
-          if (entry.status === "rejected") {
-            console.error("Failed to revoke points during bulk grade save", {
-              gradeId: savedGradeIds[index],
-              error: entry.reason,
-            });
-            return;
-          }
-
-          if (!entry.value.success) {
-            console.error("Failed to revoke points during bulk grade save", {
-              gradeId: savedGradeIds[index],
-            });
-          }
-        });
-
+      if (affectedStudentIds.length > 0) {
         const awardResults = await Promise.allSettled(
-          savedGradeIds.map((gradeId) => awardPointsForGrade(gradeId))
+          affectedStudentIds.map((studentId) => recalculateStudentPoints(studentId))
         );
 
         const summary = {
-          processedGrades: savedGradeIds.length,
+          processedGrades: parsedRows.length,
+          processedStudents: affectedStudentIds.length,
           totalPointsAwarded: 0,
           awardsCount: 0,
           milestonesUnlocked: [] as string[],
@@ -539,10 +550,10 @@ export async function POST(request: Request) {
           if (entry.status === "rejected") {
             summary.failed += 1;
             summary.errors.push(
-              `Failed to auto-award points for grade ${savedGradeIds[index]}`
+              `Failed to re-sync gamification for student ${affectedStudentIds[index]}`
             );
-            console.error("Failed to auto-award points during bulk grade save", {
-              gradeId: savedGradeIds[index],
+            console.error("Failed to re-sync gamification during bulk grade save", {
+              studentId: affectedStudentIds[index],
               error: entry.reason,
             });
             return;
@@ -555,8 +566,8 @@ export async function POST(request: Request) {
           if (!entry.value.success && entry.value.errors.length > 0) {
             summary.failed += 1;
             summary.errors.push(...entry.value.errors);
-            console.error("Failed to auto-award points during bulk grade save", {
-              gradeId: savedGradeIds[index],
+            console.error("Failed to re-sync gamification during bulk grade save", {
+              studentId: affectedStudentIds[index],
               errors: entry.value.errors,
             });
           }
