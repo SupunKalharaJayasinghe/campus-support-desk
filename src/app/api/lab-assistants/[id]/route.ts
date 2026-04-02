@@ -16,7 +16,6 @@ import {
   sanitizeModuleIdList,
   toLabAssistantPersistedRecordFromUnknown,
   updateLabAssistantInMemory,
-  validateLabAssistantEligibility,
   type LabAssistantPersistedRecord,
   type LabAssistantStatus,
 } from "@/models/lab-assistant-store";
@@ -25,6 +24,10 @@ import { getMongoDuplicateField } from "@/models/student-registration";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
+import {
+  StaffEligibilityValidationError,
+  validateStaffEligibilityWithDb,
+} from "@/models/staff-eligibility-db";
 
 interface LabAssistantWriteInput {
   fullName: string;
@@ -119,29 +122,32 @@ export async function PUT(
       );
     }
 
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     let validated: {
       facultyIds: string[];
       degreeProgramIds: string[];
       moduleIds: string[];
     };
     try {
-      validated = validateLabAssistantEligibility({
+      validated = await validateStaffEligibilityWithDb({
         facultyIds: input.facultyIds,
         degreeProgramIds: input.degreeProgramIds,
         moduleIds: input.moduleIds,
       });
     } catch (error) {
+      if (!(error instanceof StaffEligibilityValidationError)) {
+        throw error;
+      }
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid support scope" },
         { status: 400 }
-      );
-    }
-
-    const mongooseConnection = await connectMongoose().catch(() => null);
-        if (!mongooseConnection) {
-      return NextResponse.json(
-        { message: "Database connection is required" },
-        { status: 503 }
       );
     }
 

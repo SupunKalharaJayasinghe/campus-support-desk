@@ -16,7 +16,6 @@ import {
   sanitizeModuleIdList,
   toLecturerPersistedRecordFromUnknown,
   updateLecturerInMemory,
-  validateLecturerEligibility,
   type LecturerPersistedRecord,
   type LecturerStatus,
 } from "@/models/lecturer-store";
@@ -26,6 +25,10 @@ import { LecturerModel } from "@/models/Lecturer";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
 import { syncLecturerAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lecturer-sync";
+import {
+  StaffEligibilityValidationError,
+  validateStaffEligibilityWithDb,
+} from "@/models/staff-eligibility-db";
 
 interface LecturerWriteInput {
   fullName: string;
@@ -120,29 +123,32 @@ export async function PUT(
       );
     }
 
+    const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
+
     let validated: {
       facultyIds: string[];
       degreeProgramIds: string[];
       moduleIds: string[];
     };
     try {
-      validated = validateLecturerEligibility({
+      validated = await validateStaffEligibilityWithDb({
         facultyIds: input.facultyIds,
         degreeProgramIds: input.degreeProgramIds,
         moduleIds: input.moduleIds,
       });
     } catch (error) {
+      if (!(error instanceof StaffEligibilityValidationError)) {
+        throw error;
+      }
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "Invalid teaching scope" },
         { status: 400 }
-      );
-    }
-
-    const mongooseConnection = await connectMongoose().catch(() => null);
-        if (!mongooseConnection) {
-      return NextResponse.json(
-        { message: "Database connection is required" },
-        { status: 503 }
       );
     }
 
