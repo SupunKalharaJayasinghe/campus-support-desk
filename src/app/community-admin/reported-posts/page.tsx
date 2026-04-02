@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
@@ -38,7 +38,6 @@ function isLikelyMongoObjectId(value: string) {
 
 export default function CommunityAdminReportedPostsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
@@ -94,6 +93,7 @@ export default function CommunityAdminReportedPostsPage() {
 
   useEffect(() => {
     if (reportsLoading) return;
+    const searchParams = new URLSearchParams(window.location.search);
     const openReport = searchParams.get("openReport");
     const statusParam = searchParams.get("status");
 
@@ -107,7 +107,7 @@ export default function CommunityAdminReportedPostsPage() {
     if (openReport || statusParam) {
       router.replace("/community-admin/reported-posts", { scroll: false });
     }
-  }, [reports, reportsLoading, router, searchParams]);
+  }, [reports, reportsLoading, router]);
 
   /** Open reports only — main queue (use dedicated pages for other statuses). */
   const openReportQueue = useMemo(
