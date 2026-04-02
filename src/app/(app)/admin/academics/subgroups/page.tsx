@@ -425,6 +425,17 @@ export default function SubgroupsPage() {
 
         setPreview(parsed);
         setHeadcount(parsed.totalStudents);
+        if (mode === "STUDENTS_PER_SUBGROUP") {
+          setSubgroupCountInput(String(parsed.totalSubgroups));
+        } else if (mode === "GROUP_COUNT") {
+          const maxStudentsInGroup = parsed.previewDistribution.reduce(
+            (max, item) => Math.max(max, item.count),
+            0
+          );
+          if (maxStudentsInGroup > 0) {
+            setStudentsPerSubgroupInput(String(maxStudentsInGroup));
+          }
+        }
 
         if (apply) {
           toast({
@@ -853,21 +864,6 @@ export default function SubgroupsPage() {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Subgroup Count
-            </label>
-            <Input
-              className="h-12"
-              disabled={mode !== "GROUP_COUNT"}
-              min={1}
-              onChange={(event) => setSubgroupCountInput(event.target.value)}
-              placeholder="10"
-              type="number"
-              value={subgroupCountInput}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
               Students Per Subgroup
             </label>
             <Input
@@ -878,6 +874,21 @@ export default function SubgroupsPage() {
               placeholder="60"
               type="number"
               value={studentsPerSubgroupInput}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+              Subgroup Count
+            </label>
+            <Input
+              className="h-12"
+              disabled={mode !== "GROUP_COUNT"}
+              min={1}
+              onChange={(event) => setSubgroupCountInput(event.target.value)}
+              placeholder="10"
+              type="number"
+              value={subgroupCountInput}
             />
           </div>
 
