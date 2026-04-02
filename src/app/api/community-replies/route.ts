@@ -8,6 +8,7 @@ import {
   normalizeOptionalReplyAttachmentUrl,
   normalizeReplyAttachmentName,
 } from "@/lib/community-reply-attachment";
+import { getCommunityMemberFieldsByUserRefs } from "@/lib/community-feed-member-fields";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
@@ -107,11 +108,18 @@ export async function POST(req: Request) {
       points: COMMUNITY_POINTS_PER_REPLY,
     });
 
+    const memberByAuthor = await getCommunityMemberFieldsByUserRefs([authorId]);
+    const member = memberByAuthor.get(String(authorId));
+    const snapshotName = String(reply.authorDisplayName ?? "").trim();
+    const liveName = (member?.displayName ?? "").trim();
+
     return Response.json(
       {
         ...reply.toObject(),
         likesCount: 0,
         likedByCurrentUser: false,
+        authorMemberDisplayName: liveName || snapshotName || "Community User",
+        authorMemberPoints: member != null ? member.points : 0,
       },
       { status: 201 }
     );
@@ -178,12 +186,22 @@ export async function GET(req: Request) {
       likedByViewerRaw.map((row) => String(row.replyId))
     );
 
+    const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
+      replies.map((r) => r.author)
+    );
+
     const enrichedReplies = replies.map((reply) => {
       const replyId = String(reply._id);
+      const authorKey = String(reply.author);
+      const member = memberByAuthor.get(authorKey);
+      const snapshotName = String(reply.authorDisplayName ?? "").trim();
+      const liveName = (member?.displayName ?? "").trim();
       return {
         ...reply,
         likesCount: likeCountByReplyId.get(replyId) ?? 0,
         likedByCurrentUser: likedByViewerSet.has(replyId),
+        authorMemberDisplayName: liveName || snapshotName || "Community User",
+        authorMemberPoints: member != null ? member.points : 0,
       };
     });
 

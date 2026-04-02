@@ -63,10 +63,11 @@ export async function GET() {
 
   const communityProfileUserIds = new Set<string>();
   const communityProfilePointsByUserId = new Map<string, number>();
+  const communityProfileDisplayNameByUserId = new Map<string, string>();
   const adminBonus20UsedByUserId = new Map<string, boolean>();
   if (userIds.length > 0) {
     const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
-      .select("userRef points adminBonus20Used")
+      .select("userRef points adminBonus20Used displayName")
       .lean()
       .exec();
     for (const doc of profiles) {
@@ -74,6 +75,7 @@ export async function GET() {
         userRef?: unknown;
         points?: unknown;
         adminBonus20Used?: unknown;
+        displayName?: unknown;
       };
       const ref = lean?.userRef;
       if (ref == null) continue;
@@ -81,6 +83,10 @@ export async function GET() {
       communityProfileUserIds.add(uid);
       const pts = Number(lean.points);
       communityProfilePointsByUserId.set(uid, Number.isFinite(pts) ? pts : 0);
+      communityProfileDisplayNameByUserId.set(
+        uid,
+        String(lean.displayName ?? "").trim()
+      );
       adminBonus20UsedByUserId.set(uid, lean.adminBonus20Used === true);
     }
   }
@@ -102,6 +108,8 @@ export async function GET() {
       status: accountInactive ? ("Suspended" as const) : ("Active" as const),
       hasCommunityProfile: communityProfileUserIds.has(uid),
       communityProfilePoints: communityProfilePointsByUserId.get(uid) ?? 0,
+      communityProfileDisplayName:
+        communityProfileDisplayNameByUserId.get(uid) ?? "",
       adminBonus20Used: adminBonus20UsedByUserId.get(uid) ?? false,
     };
   });

@@ -41,6 +41,8 @@ import {
 type Reply = {
     id: string;
     author: string;
+    /** Present for feed loaded from API; omitted for static demo posts. */
+    authorPoints?: number;
     content: string;
     createdAt: string;
     likes: number;
@@ -55,6 +57,8 @@ type Post = {
     content: string;
     pictureUrl?: string;
     author: string;
+    /** Present for feed loaded from API; omitted for static demo posts. */
+    authorPoints?: number;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
     likes: number;
@@ -74,6 +78,8 @@ type ApiPost = {
     category: "lost_item" | "study_material" | "academic_question";
     createdAt?: string;
     authorDisplayName?: string;
+    authorMemberDisplayName?: string;
+    authorMemberPoints?: number;
     author?: string | { username?: string; name?: string };
     likesCount?: number;
     likedByCurrentUser?: boolean;
@@ -87,6 +93,8 @@ type ApiReply = {
     _id: string;
     postId: string;
     authorDisplayName?: string;
+    authorMemberDisplayName?: string;
+    authorMemberPoints?: number;
     author?: string | { username?: string; name?: string };
     message: string;
     createdAt?: string;
@@ -119,20 +127,26 @@ const toTimeAgo = (createdAt?: string): string => {
     return `${days} day${days === 1 ? "" : "s"} ago`;
 };
 
-const mapApiReply = (reply: ApiReply): Reply => ({
-    id: reply._id,
-    author:
-        reply.authorDisplayName ||
-        (typeof reply.author === "object"
+const mapApiReply = (reply: ApiReply): Reply => {
+    const live = (reply.authorMemberDisplayName ?? "").trim();
+    const snapshot = (reply.authorDisplayName ?? "").trim();
+    const fallback =
+        typeof reply.author === "object"
             ? reply.author.name || "Current User"
-            : "Current User"),
-    content: reply.message,
-    createdAt: toTimeAgo(reply.createdAt),
-    likes: Number(reply.likesCount ?? 0),
-    likedByCurrentUser: Boolean(reply.likedByCurrentUser),
-    attachmentUrl: reply.attachmentUrl?.trim() || undefined,
-    attachmentName: reply.attachmentName?.trim() || undefined,
-});
+            : "Current User";
+    return {
+        id: reply._id,
+        author: live || snapshot || fallback,
+        authorPoints:
+            typeof reply.authorMemberPoints === "number" ? reply.authorMemberPoints : undefined,
+        content: reply.message,
+        createdAt: toTimeAgo(reply.createdAt),
+        likes: Number(reply.likesCount ?? 0),
+        likedByCurrentUser: Boolean(reply.likedByCurrentUser),
+        attachmentUrl: reply.attachmentUrl?.trim() || undefined,
+        attachmentName: reply.attachmentName?.trim() || undefined,
+    };
+};
 
 const MAX_REPLY_ATTACHMENT_FILE_BYTES = 1_850_000;
 
@@ -215,13 +229,6 @@ const INITIAL_POSTS: Post[] = [
             },
         ],
     },
-];
-
-const MOCK_MEMBERS = [
-    { id: "1", name: "Sam Jenkins", role: "Core Team" },
-    { id: "2", name: "Priya Singh", role: "Verified Mentor" },
-    { id: "3", name: "IT23123456", role: "Contributor" },
-    { id: "4", name: "Nimal Perera", role: "Contributor" },
 ];
 
 const categoryLabel: Record<(typeof CATEGORIES)[number], string> = {
@@ -319,6 +326,9 @@ export default function CommunityPage() {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMembersVisible, setIsMembersVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
+    const [communityDirectoryMembers, setCommunityDirectoryMembers] = useState<
+        { userId: string; displayName: string; points: number }[]
+    >([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -436,34 +446,42 @@ export default function CommunityPage() {
                 if (!res.ok) return;
 
                 const data = (await res.json()) as ApiPost[];
-                const mapped: Post[] = data.map((post) => ({
-                    id: post._id,
-                    title: post.title,
-                    content: post.description,
-                    pictureUrl: post.pictureUrl?.trim() || undefined,
-                    author:
-                        post.authorDisplayName ||
-                        (typeof post.author === "object"
+                const mapped: Post[] = data.map((post) => {
+                    const live = (post.authorMemberDisplayName ?? "").trim();
+                    const snapshot = (post.authorDisplayName ?? "").trim();
+                    const fallback =
+                        typeof post.author === "object"
                             ? post.author.name || "Current User"
-                            : "Current User"),
-                    category: mapCategory(post.category),
-                    createdAt: toTimeAgo(post.createdAt),
-                    likes: Number(post.likesCount ?? 0),
-                    likedByCurrentUser: Boolean(post.likedByCurrentUser),
-                    reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
-                    replies: [],
-                    isUrgent: Boolean(post.isUrgent),
-                    urgentExpiresAt:
-                        post.urgentExpiresAt != null && String(post.urgentExpiresAt).length > 0
-                            ? String(post.urgentExpiresAt)
-                            : null,
-                    urgentLevel:
-                        post.urgentLevel === "2days" ||
-                        post.urgentLevel === "5days" ||
-                        post.urgentLevel === "7days"
-                            ? post.urgentLevel
-                            : null,
-                }));
+                            : "Current User";
+                    return {
+                        id: post._id,
+                        title: post.title,
+                        content: post.description,
+                        pictureUrl: post.pictureUrl?.trim() || undefined,
+                        author: live || snapshot || fallback,
+                        authorPoints:
+                            typeof post.authorMemberPoints === "number"
+                                ? post.authorMemberPoints
+                                : undefined,
+                        category: mapCategory(post.category),
+                        createdAt: toTimeAgo(post.createdAt),
+                        likes: Number(post.likesCount ?? 0),
+                        likedByCurrentUser: Boolean(post.likedByCurrentUser),
+                        reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
+                        replies: [],
+                        isUrgent: Boolean(post.isUrgent),
+                        urgentExpiresAt:
+                            post.urgentExpiresAt != null && String(post.urgentExpiresAt).length > 0
+                                ? String(post.urgentExpiresAt)
+                                : null,
+                        urgentLevel:
+                            post.urgentLevel === "2days" ||
+                            post.urgentLevel === "5days" ||
+                            post.urgentLevel === "7days"
+                                ? post.urgentLevel
+                                : null,
+                    };
+                });
 
                 setPosts(mapped);
 
@@ -498,6 +516,53 @@ export default function CommunityPage() {
 
         fetchPosts();
     }, [currentUser?.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/community-members");
+                if (!res.ok || cancelled) return;
+                const data = (await res.json()) as {
+                    items?: Array<{
+                        userId?: string;
+                        hasCommunityProfile?: boolean;
+                        communityProfileDisplayName?: string;
+                        communityProfilePoints?: unknown;
+                        name?: string;
+                    }>;
+                };
+                const items = data.items ?? [];
+                const rows = items
+                    .filter((i) => Boolean(i.hasCommunityProfile))
+                    .map((i) => {
+                        const userId = String(i.userId ?? "").trim();
+                        const dn = String(i.communityProfileDisplayName ?? "").trim();
+                        const fallbackName = String(i.name ?? "").trim();
+                        const pts = Number(i.communityProfilePoints ?? 0);
+                        return {
+                            userId,
+                            displayName: dn || fallbackName || userId,
+                            points: Number.isFinite(pts) ? pts : 0,
+                        };
+                    })
+                    .filter((r) => r.userId.length > 0)
+                    .sort(
+                        (a, b) =>
+                            b.points - a.points ||
+                            a.displayName.localeCompare(b.displayName, undefined, {
+                                sensitivity: "base",
+                            })
+                    );
+                if (!cancelled) setCommunityDirectoryMembers(rows);
+            } catch {
+                if (!cancelled) setCommunityDirectoryMembers([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const handleLikePost = async (postId: string) => {
         if (!currentUser?.id) {
@@ -876,17 +941,29 @@ export default function CommunityPage() {
                             </button>
                             {isMembersVisible && (
                                 <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
-                                    {MOCK_MEMBERS.map((member) => (
-                                        <div key={member.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50">
-                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                                                <User size={14} />
+                                    {communityDirectoryMembers.length === 0 ? (
+                                        <p className="text-xs text-slate-500">
+                                            No community profiles yet. Students with a community profile appear here with
+                                            display name and points.
+                                        </p>
+                                    ) : (
+                                        communityDirectoryMembers.map((member) => (
+                                            <div
+                                                key={member.userId}
+                                                className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50"
+                                            >
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                                                    <User size={14} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium leading-none text-slate-800">
+                                                        {member.displayName}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500">{member.points} pts</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-medium leading-none text-slate-800">{member.name}</p>
-                                                <p className="mt-1 text-xs text-slate-500">{member.role}</p>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -978,7 +1055,12 @@ export default function CommunityPage() {
                                             </div>
                                             <div className="min-w-0">
                                                 <h3 className="line-clamp-2 text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
-                                                <p className="mt-1 text-sm text-slate-600">{post.author}</p>
+                                                <p className="mt-1 text-sm text-slate-600">
+                                                    {post.author}
+                                                    {post.authorPoints != null ? (
+                                                        <span className="text-slate-500"> · {post.authorPoints} pts</span>
+                                                    ) : null}
+                                                </p>
                                                 <p className="text-xs text-slate-500">
                                                     {post.createdAt} • {post.replies.length} replies
                                                 </p>
@@ -1031,7 +1113,15 @@ export default function CommunityPage() {
                                                     post.replies.map((reply) => (
                                                         <div key={reply.id} className="rounded-xl border border-blue-100 bg-white p-3">
                                                             <div className="flex items-center justify-between">
-                                                                <p className="text-sm font-semibold text-slate-800">{reply.author}</p>
+                                                                <p className="text-sm font-semibold text-slate-800">
+                                                                    {reply.author}
+                                                                    {reply.authorPoints != null ? (
+                                                                        <span className="font-normal text-slate-500">
+                                                                            {" "}
+                                                                            · {reply.authorPoints} pts
+                                                                        </span>
+                                                                    ) : null}
+                                                                </p>
                                                                 <p className="text-xs text-slate-500">{reply.createdAt}</p>
                                                             </div>
                                                             {(reply.content ?? "").trim() ? (

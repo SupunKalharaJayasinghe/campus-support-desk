@@ -20,6 +20,7 @@ import {
   applyCommunityProfileInc,
   COMMUNITY_POINTS_PER_POST,
 } from "@/lib/community-profile-points";
+import { getCommunityMemberFieldsByUserRefs } from "@/lib/community-feed-member-fields";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { CommunityUrgentPrepayModel } from "@/models/communityUrgentPrepay";
 import CommunityPost from "@/models/communityPost";
@@ -508,13 +509,23 @@ export async function GET(req: Request) {
       reportedByViewerRaw.map((row) => String(row.postId))
     );
 
+    const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
+      posts.map((p) => p.author)
+    );
+
     const enrichedPosts = posts.map((post) => {
       const postId = String(post._id);
+      const authorKey = String(post.author);
+      const member = memberByAuthor.get(authorKey);
+      const snapshotName = String(post.authorDisplayName ?? "").trim();
+      const liveName = (member?.displayName ?? "").trim();
       return {
         ...post,
         likesCount: likeCountByPostId.get(postId) ?? 0,
         likedByCurrentUser: likedByViewerSet.has(postId),
         reportedByCurrentUser: reportedByViewerSet.has(postId),
+        authorMemberDisplayName: liveName || snapshotName || "Community User",
+        authorMemberPoints: member != null ? member.points : 0,
       };
     });
 
