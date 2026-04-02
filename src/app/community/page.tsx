@@ -10,6 +10,7 @@ import {
     ChevronUp,
     CirclePlus,
     Clock,
+    Flame,
     FileText,
     Home,
     Menu,
@@ -27,6 +28,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
+import UrgentPostsCarousel from "@/components/community/UrgentPostsCarousel";
 import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import {
@@ -58,6 +60,9 @@ type Post = {
     likedByCurrentUser: boolean;
     reportedByCurrentUser: boolean;
     replies: Reply[];
+    isUrgent?: boolean;
+    urgentExpiresAt?: string | null;
+    urgentLevel?: "2days" | "5days" | "7days" | null;
 };
 
 type ApiPost = {
@@ -72,6 +77,9 @@ type ApiPost = {
     likesCount?: number;
     likedByCurrentUser?: boolean;
     reportedByCurrentUser?: boolean;
+    isUrgent?: boolean;
+    urgentExpiresAt?: string | null;
+    urgentLevel?: "2days" | "5days" | "7days" | null;
 };
 
 type ApiReply = {
@@ -85,6 +93,15 @@ type ApiReply = {
     likedByCurrentUser?: boolean;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
+};
+
+const isActiveUrgentPost = (post: Pick<Post, "isUrgent" | "urgentExpiresAt">): boolean => {
+    if (!post.isUrgent) return false;
+    const raw = post.urgentExpiresAt;
+    if (raw == null || String(raw).trim() === "") return true;
+    const exp = new Date(raw).getTime();
+    if (Number.isNaN(exp)) return true;
+    return exp > Date.now();
 };
 
 const toTimeAgo = (createdAt?: string): string => {
@@ -252,6 +269,7 @@ export default function CommunityPage() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMembersVisible, setIsMembersVisible] = useState(false);
+    const [isUrgentSidebarVisible, setIsUrgentSidebarVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
@@ -269,6 +287,35 @@ export default function CommunityPage() {
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
     const recentPosts = useMemo(() => posts.slice(0, 5), [posts]);
+    const urgentPostsActive = useMemo(
+        () => posts.filter(isActiveUrgentPost).slice(0, 10),
+        [posts]
+    );
+
+    const urgentCarouselPosts = useMemo(
+        () =>
+            urgentPostsActive.map((post) => {
+                const expiry =
+                    post.urgentExpiresAt && !Number.isNaN(new Date(post.urgentExpiresAt).getTime())
+                        ? `Until ${new Date(post.urgentExpiresAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                          })}`
+                        : null;
+                const stripped = post.content.trim();
+                const description =
+                    stripped.length > 110
+                        ? `${stripped.slice(0, 110).trim()}…`
+                        : stripped || "Open the post to read more.";
+                return {
+                    id: post.id,
+                    title: post.title,
+                    description,
+                    metaLine: [post.createdAt, expiry].filter(Boolean).join(" · "),
+                };
+            }),
+        [urgentPostsActive]
+    );
 
     const filteredPosts = useMemo(() => {
         const byCategory = posts.filter((post) => activeCategory === "all" || post.category === activeCategory);
@@ -353,6 +400,17 @@ export default function CommunityPage() {
                     likedByCurrentUser: Boolean(post.likedByCurrentUser),
                     reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
                     replies: [],
+                    isUrgent: Boolean(post.isUrgent),
+                    urgentExpiresAt:
+                        post.urgentExpiresAt != null && String(post.urgentExpiresAt).length > 0
+                            ? String(post.urgentExpiresAt)
+                            : null,
+                    urgentLevel:
+                        post.urgentLevel === "2days" ||
+                        post.urgentLevel === "5days" ||
+                        post.urgentLevel === "7days"
+                            ? post.urgentLevel
+                            : null,
                 }));
 
                 setPosts(mapped);
@@ -752,6 +810,43 @@ export default function CommunityPage() {
                         <div className="my-3 h-px bg-blue-100" />
 
                         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+
+                        <div className="rounded-xl border border-amber-200/80 bg-white/95 p-3">
+                            <button
+                                type="button"
+                               
+                                className="flex w-full items-center justify-between text-sm font-semibold text-slate-700"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <Flame size={16} className="text-amber-600" aria-hidden />
+                                    Urgent posts
+                                    {urgentPostsActive.length > 0 ? (
+                                        <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800">
+                                            {urgentPostsActive.length}
+                                        </span>
+                                    ) : null}
+                                </span>
+                                {isUrgentSidebarVisible ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                            {isUrgentSidebarVisible && (
+                                <div className="mt-3 pr-1">
+                                    {urgentPostsActive.length === 0 ? (
+                                        <p className="text-xs text-slate-500">No active urgent posts right now.</p>
+                                    ) : (
+                                        <UrgentPostsCarousel
+                                            posts={urgentCarouselPosts}
+                                            baseWidth={252}
+                                            autoplay
+                                            autoplayDelay={3800}
+                                            pauseOnHover
+                                            loop={urgentCarouselPosts.length > 1}
+                                            onSelectPost={handleJumpToPost}
+                                        />
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
                                 type="button"
@@ -779,6 +874,8 @@ export default function CommunityPage() {
                                 </div>
                             )}
                         </div>
+
+                        
 
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
