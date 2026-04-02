@@ -10,6 +10,7 @@ import { connectMongoose } from "@/models/mongoose";
 import {
   deleteConsultationAvailabilitySlotInMemory,
   findConsultationAvailabilitySlotInMemoryById,
+  findOverlappingConsultationAvailabilitySlotInMemory,
   isConsultationSlotTimeRangeValid,
   sanitizeConsultationLocation,
   sanitizeConsultationSessionType,
@@ -178,6 +179,40 @@ function toApiSlot(
   };
 }
 
+async function findOverlappingSlotForLecturer(input: {
+  lecturerId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  mongooseConnection: mongoose.Mongoose | null;
+  excludeId?: string;
+}) {
+  if (!input.mongooseConnection) {
+    return findOverlappingConsultationAvailabilitySlotInMemory(input);
+  }
+
+  const query: Record<string, unknown> = {
+    lecturerId: input.lecturerId,
+    date: input.date,
+    isDeleted: false,
+    startTime: { $lt: input.endTime },
+    endTime: { $gt: input.startTime },
+  };
+
+  const excludeId = String(input.excludeId ?? "").trim();
+  if (excludeId && mongoose.Types.ObjectId.isValid(excludeId)) {
+    query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+  }
+
+  const row = await ConsultationAvailabilitySlotModel.findOne(query)
+    .select({ _id: 1 })
+    .lean()
+    .exec()
+    .catch(() => null);
+
+  return row;
+}
+
 function mergeWriteInput(
   current: ConsultationAvailabilitySlotPersistedRecord,
   body: Partial<Record<string, unknown>>
@@ -290,6 +325,13 @@ export async function PUT(
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
 
+      if (current.bookingId || current.status === "BOOKED") {
+        return NextResponse.json(
+          { message: "Booked slots cannot be edited" },
+          { status: 409 }
+        );
+      }
+
       const input = mergeWriteInput(current, body);
       if (!input.date || !input.startTime || !input.endTime || !input.sessionType) {
         return NextResponse.json(
@@ -309,6 +351,21 @@ export async function PUT(
         return NextResponse.json(
           { message: "Location is required for in-person slots" },
           { status: 400 }
+        );
+      }
+
+      const overlappingSlot = await findOverlappingSlotForLecturer({
+        lecturerId,
+        date: input.date,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        mongooseConnection,
+        excludeId: slotId,
+      });
+      if (overlappingSlot) {
+        return NextResponse.json(
+          { message: "This slot overlaps an existing availability window" },
+          { status: 409 }
         );
       }
 
@@ -335,6 +392,13 @@ export async function PUT(
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
+    if (row.bookingId || row.status === "BOOKED") {
+      return NextResponse.json(
+        { message: "Booked slots cannot be edited" },
+        { status: 409 }
+      );
+    }
+
     const current = toConsultationAvailabilitySlotPersistedRecordFromUnknown(row.toObject());
     if (!current) {
       return NextResponse.json({ message: "Failed to map slot" }, { status: 500 });
@@ -359,6 +423,21 @@ export async function PUT(
       return NextResponse.json(
         { message: "Location is required for in-person slots" },
         { status: 400 }
+      );
+    }
+
+    const overlappingSlot = await findOverlappingSlotForLecturer({
+      lecturerId,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      mongooseConnection,
+      excludeId: slotId,
+    });
+    if (overlappingSlot) {
+      return NextResponse.json(
+        { message: "This slot overlaps an existing availability window" },
+        { status: 409 }
       );
     }
 
@@ -441,6 +520,13 @@ export async function DELETE(
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
 
+      if (current.bookingId || current.status === "BOOKED") {
+        return NextResponse.json(
+          { message: "Booked slots cannot be deleted" },
+          { status: 409 }
+        );
+      }
+
       deleteConsultationAvailabilitySlotInMemory(slotId);
       return NextResponse.json({ ok: true });
     }
@@ -457,6 +543,13 @@ export async function DELETE(
 
     if (String(row.lecturerId ?? "").trim() !== lecturerId) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+
+    if (row.bookingId || row.status === "BOOKED") {
+      return NextResponse.json(
+        { message: "Booked slots cannot be deleted" },
+        { status: 409 }
+      );
     }
 
     row.status = "CANCELLED";

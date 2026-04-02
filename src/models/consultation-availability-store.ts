@@ -206,6 +206,23 @@ export function isConsultationSlotTimeRangeValid(
   return Boolean(startTime && endTime) && compareConsultationSlotTimes(startTime, endTime) < 0;
 }
 
+export function doConsultationSlotsOverlap(
+  left: Pick<
+    ConsultationAvailabilitySlotPersistedRecord,
+    "date" | "startTime" | "endTime"
+  >,
+  right: Pick<
+    ConsultationAvailabilitySlotPersistedRecord,
+    "date" | "startTime" | "endTime"
+  >
+) {
+  if (left.date !== right.date) {
+    return false;
+  }
+
+  return left.startTime < right.endTime && left.endTime > right.startTime;
+}
+
 function buildSlotDateTime(date: string, time: string) {
   const parsed = new Date(`${date}T${time}:00`);
   if (Number.isNaN(parsed.getTime())) {
@@ -276,6 +293,35 @@ export function findConsultationAvailabilitySlotInMemoryById(
   );
 
   return row ? { ...row } : null;
+}
+
+export function findOverlappingConsultationAvailabilitySlotInMemory(input: {
+  lecturerId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  excludeId?: string;
+}) {
+  const lecturerId = String(input.lecturerId ?? "").trim();
+  const excludeId = String(input.excludeId ?? "").trim();
+
+  if (!lecturerId) {
+    return null;
+  }
+
+  return (
+    consultationAvailabilityStore().find((row) => {
+      if (row.isDeleted || row.lecturerId !== lecturerId) {
+        return false;
+      }
+
+      if (excludeId && row.id === excludeId) {
+        return false;
+      }
+
+      return doConsultationSlotsOverlap(row, input);
+    }) ?? null
+  );
 }
 
 export function createConsultationAvailabilitySlotInMemory(

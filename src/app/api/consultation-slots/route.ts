@@ -13,6 +13,7 @@ import { UserModel } from "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
   createConsultationAvailabilitySlotInMemory,
+  findOverlappingConsultationAvailabilitySlotInMemory,
   hasConsultationSlotEnded,
   isConsultationSlotTimeRangeValid,
   listConsultationAvailabilitySlotsInMemory,
@@ -236,6 +237,40 @@ async function resolveCurrentLecturerId(
   return lecturerId;
 }
 
+async function findOverlappingSlotForLecturer(input: {
+  lecturerId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  mongooseConnection: mongoose.Mongoose | null;
+  excludeId?: string;
+}) {
+  if (!input.mongooseConnection) {
+    return findOverlappingConsultationAvailabilitySlotInMemory(input);
+  }
+
+  const query: Record<string, unknown> = {
+    lecturerId: input.lecturerId,
+    date: input.date,
+    isDeleted: false,
+    startTime: { $lt: input.endTime },
+    endTime: { $gt: input.startTime },
+  };
+
+  const excludeId = String(input.excludeId ?? "").trim();
+  if (excludeId && mongoose.Types.ObjectId.isValid(excludeId)) {
+    query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+  }
+
+  const row = await ConsultationAvailabilitySlotModel.findOne(query)
+    .select({ _id: 1 })
+    .lean()
+    .exec()
+    .catch(() => null);
+
+  return row;
+}
+
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
   const { searchParams } = new URL(request.url);
@@ -429,6 +464,20 @@ export async function POST(request: Request) {
     const lecturer = await findLecturerMetaById(lecturerId, mongooseConnection);
     if (!lecturer) {
       return NextResponse.json({ message: "Lecturer not found" }, { status: 400 });
+    }
+
+    const overlappingSlot = await findOverlappingSlotForLecturer({
+      lecturerId,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      mongooseConnection,
+    });
+    if (overlappingSlot) {
+      return NextResponse.json(
+        { message: "This slot overlaps an existing availability window" },
+        { status: 409 }
+      );
     }
 
     if (!mongooseConnection) {

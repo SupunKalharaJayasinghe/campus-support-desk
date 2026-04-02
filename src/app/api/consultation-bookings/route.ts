@@ -6,6 +6,7 @@ import { ConsultationAvailabilitySlotModel } from "@/models/ConsultationAvailabi
 import { ConsultationBookingModel } from "@/models/ConsultationBooking";
 import { connectMongoose } from "@/models/mongoose";
 import {
+  doConsultationSlotsOverlap,
   findConsultationAvailabilitySlotInMemoryById,
   hasConsultationSlotEnded,
   toConsultationAvailabilitySlotPersistedRecordFromUnknown,
@@ -52,6 +53,61 @@ async function buildInMemoryBookingResponse(
   const student = await findStudentMetaById(row.studentId, mongooseConnection);
 
   return toApiBooking(row, slot, lecturer, student);
+}
+
+async function findStudentBookingConflict(input: {
+  studentId: string;
+  slot: {
+    id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  mongooseConnection: mongoose.Mongoose | null;
+}) {
+  if (!input.mongooseConnection) {
+    const activeBookings = listConsultationBookingsInMemory({
+      studentId: input.studentId,
+    }).filter(
+      (row) => row.status === "PENDING" || row.status === "CONFIRMED"
+    );
+
+    return (
+      activeBookings.find((booking) => {
+        const existingSlot = findConsultationAvailabilitySlotInMemoryById(booking.slotId);
+        if (!existingSlot) {
+          return false;
+        }
+
+        return doConsultationSlotsOverlap(existingSlot, input.slot);
+      }) ?? null
+    );
+  }
+
+  const rows = (await ConsultationBookingModel.find({
+    studentId: input.studentId,
+    status: { $in: ["PENDING", "CONFIRMED"] },
+  })
+    .populate({
+      path: "slotId",
+      select: "date startTime endTime isDeleted",
+    })
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
+
+  return (
+    rows.find((row) => {
+      const existingSlot = toConsultationAvailabilitySlotPersistedRecordFromUnknown(
+        asObject(row)?.slotId
+      );
+      if (!existingSlot || existingSlot.isDeleted) {
+        return false;
+      }
+
+      return doConsultationSlotsOverlap(existingSlot, input.slot);
+    }) ?? null
+  );
 }
 
 export async function GET(request: Request) {
@@ -285,6 +341,18 @@ export async function POST(request: Request) {
         );
       }
 
+      const studentConflict = await findStudentBookingConflict({
+        studentId,
+        slot,
+        mongooseConnection,
+      });
+      if (studentConflict) {
+        return NextResponse.json(
+          { message: "You already have another active booking in this time window" },
+          { status: 409 }
+        );
+      }
+
       const lecturer = await findLecturerMetaById(slot.lecturerId, mongooseConnection);
       const created = createConsultationBookingInMemory({
         slotId: slot.id,
@@ -346,6 +414,18 @@ export async function POST(request: Request) {
     if (slot.status !== "AVAILABLE" || slot.bookingId) {
       return NextResponse.json(
         { message: "This consultation slot is no longer available" },
+        { status: 409 }
+      );
+    }
+
+    const studentConflict = await findStudentBookingConflict({
+      studentId,
+      slot,
+      mongooseConnection,
+    });
+    if (studentConflict) {
+      return NextResponse.json(
+        { message: "You already have another active booking in this time window" },
         { status: 409 }
       );
     }

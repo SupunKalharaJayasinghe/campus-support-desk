@@ -1,26 +1,65 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
+import { useToast } from "@/components/ui/ToastProvider";
+import { listLecturerConsultationBookings, type ConsultationBookingApiRecord } from "@/lib/consultation-client";
 import {
   getConsultationBookingBadgeVariant,
   getConsultationBookingStatusLabel,
   isActiveConsultationBookingStatus,
 } from "@/models/consultation-booking";
-import { lecturerBookingRequests, lecturerPosts, notificationsByRole } from "@/models/mockData";
+import { lecturerPosts, notificationsByRole } from "@/models/mockData";
 
 export default function LecturerDashboardPage() {
-  const pendingRequests = lecturerBookingRequests.filter((item) => item.status === "PENDING").length;
+  const { toast } = useToast();
+  const [bookings, setBookings] = useState<ConsultationBookingApiRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const payload = await listLecturerConsultationBookings();
+        if (!cancelled) {
+          setBookings(payload.items);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast({
+            title: "Dashboard data unavailable",
+            message: error instanceof Error ? error.message : "Failed to load booking summary.",
+            variant: "error",
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
+
   const unread = notificationsByRole.LECTURER.filter((item) => item.unread).length;
   const todayKey = new Date().toISOString().slice(0, 10);
-  const upcomingSessions = [...lecturerBookingRequests]
-    .filter((item) => isActiveConsultationBookingStatus(item.status))
-    .sort((left, right) => {
-      const leftDate = `${left.date} ${left.start}`;
-      const rightDate = `${right.date} ${right.start}`;
-      return leftDate.localeCompare(rightDate);
-    });
-  const todaysSessions = upcomingSessions.filter((item) => item.date === todayKey);
+  const pendingRequests = bookings.filter((item) => item.status === "PENDING").length;
+  const upcomingSessions = useMemo(
+    () =>
+      [...bookings]
+        .filter((item) => isActiveConsultationBookingStatus(item.status) && item.slot)
+        .sort((left, right) =>
+          `${left.slot?.date ?? ""} ${left.slot?.startTime ?? ""}`.localeCompare(
+            `${right.slot?.date ?? ""} ${right.slot?.startTime ?? ""}`
+          )
+        ),
+    [bookings]
+  );
+  const todaysSessions = upcomingSessions.filter((item) => item.slot?.date === todayKey);
   const scheduleItems = todaysSessions.length > 0 ? todaysSessions : upcomingSessions.slice(0, 3);
   const recentActivity = notificationsByRole.LECTURER.slice(0, 3);
 
@@ -35,10 +74,10 @@ export default function LecturerDashboardPage() {
         <Card accent>
           <div className="flex items-center justify-between">
             <p className="text-sm text-text/72">Pending bookings</p>
-            <Badge variant="warning">Needs review</Badge>
+            <Badge variant="warning">Live</Badge>
           </div>
           <p className="mt-2 text-3xl font-semibold text-heading">{pendingRequests}</p>
-          <p className="mt-1 text-xs text-text/60">Action required</p>
+          <p className="mt-1 text-xs text-text/60">From consultation booking API</p>
         </Card>
         <Card accent>
           <div className="flex items-center justify-between">
@@ -61,9 +100,11 @@ export default function LecturerDashboardPage() {
       <section className="grid gap-5 lg:grid-cols-2">
         <Card
           title="Today's Schedule"
-          description={todaysSessions.length > 0 ? "Sessions planned for today" : "No sessions today"}
+          description={todaysSessions.length > 0 ? "Sessions planned for today" : "Upcoming consultation sessions"}
         >
-          {scheduleItems.length === 0 ? (
+          {loading ? (
+            <p className="text-sm text-text/70">Loading schedule...</p>
+          ) : scheduleItems.length === 0 ? (
             <p className="text-sm text-text/70">No upcoming sessions found.</p>
           ) : (
             <div className="space-y-3">
@@ -73,11 +114,11 @@ export default function LecturerDashboardPage() {
                   key={session.id}
                 >
                   <div>
-                    <p className="text-sm font-semibold text-heading">{session.studentName}</p>
+                    <p className="text-sm font-semibold text-heading">{session.student?.fullName ?? session.studentId}</p>
                     <p className="text-xs text-text/70">
-                      {session.date} • {session.start} - {session.end}
+                      {session.slot?.date} • {session.slot?.startTime} - {session.slot?.endTime}
                     </p>
-                    <p className="text-xs text-text/60">{session.topic}</p>
+                    <p className="text-xs text-text/60">{session.slot?.sessionType ?? session.purpose}</p>
                   </div>
                   <Badge variant={getConsultationBookingBadgeVariant(session.status)}>
                     {getConsultationBookingStatusLabel(session.status)}
@@ -115,4 +156,3 @@ export default function LecturerDashboardPage() {
     </div>
   );
 }
-
