@@ -16,6 +16,10 @@ import {
   COMMUNITY_PROFILE_REQUIRED_MESSAGE,
   userHasCommunityProfile,
 } from "@/lib/community-profile-guard";
+import {
+  applyCommunityProfileInc,
+  COMMUNITY_POINTS_PER_POST,
+} from "@/lib/community-profile-points";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { CommunityUrgentPrepayModel } from "@/models/communityUrgentPrepay";
 import CommunityPost from "@/models/communityPost";
@@ -422,6 +426,10 @@ export async function POST(req: Request) {
       { userRef: authorId },
       { $inc: { postsCount: 1 } }
     );
+    /** +2 profile points when the post is successfully published (submit / Post). */
+    await applyCommunityProfileInc(authorId, {
+      points: COMMUNITY_POINTS_PER_POST,
+    });
 
     return Response.json(
       {

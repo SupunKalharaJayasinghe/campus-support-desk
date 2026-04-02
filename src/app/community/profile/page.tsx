@@ -445,6 +445,12 @@ export default function CommunityProfilePage() {
             try {
                 setAcceptingReplyId(replyId);
                 setUserPostsError(null);
+                const storedUser = readStoredUser();
+                const settings = readCommunityProfileSettings();
+                const authorName =
+                    settings.displayName.trim() ||
+                    storedUser?.name?.trim() ||
+                    "Current User";
                 const res = await fetch(
                     `/api/community-replies/${encodeURIComponent(replyId)}`,
                     {
@@ -452,7 +458,13 @@ export default function CommunityProfilePage() {
                         headers: {
                             "Content-Type": "application/json",
                         },
-                        body: JSON.stringify({ isAccepted: true }),
+                        body: JSON.stringify({
+                            isAccepted: true,
+                            author: storedUser?.id,
+                            authorUsername: storedUser?.username,
+                            authorEmail: storedUser?.email,
+                            authorName,
+                        }),
                     }
                 );
                 if (!res.ok) {

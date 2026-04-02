@@ -251,6 +251,33 @@ export default function CommunityPostComposer({
         }
     }, []);
 
+    /** Refresh points after a successful Post (server awards +2 on publish). */
+    const refreshCommunityPointsFromServer = useCallback(async () => {
+        const userId = readStoredUser()?.id;
+        if (!userId) return;
+        try {
+            const res = await fetch(
+                `/api/community-profile?userId=${encodeURIComponent(userId)}`
+            );
+            const body = (await res.json().catch(() => null)) as
+                | { points?: number; message?: string }
+                | null;
+            if (res.status === 404) {
+                setCommunityPoints(0);
+                setPointsError("");
+                return;
+            }
+            if (!res.ok) return;
+            const pts = Number(body?.points);
+            if (Number.isFinite(pts)) {
+                setCommunityPoints(pts);
+                setPointsError("");
+            }
+        } catch {
+            // leave existing points on screen
+        }
+    }, []);
+
     useEffect(() => {
         // Load current community points for payment choice UX.
         const user = readStoredUser();
@@ -1031,6 +1058,8 @@ export default function CommunityPostComposer({
                 }
                 return;
             }
+
+            void refreshCommunityPointsFromServer();
 
             if (didSubmitFreshCardPayment) {
                 try {

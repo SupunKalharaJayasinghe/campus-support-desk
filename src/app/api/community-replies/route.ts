@@ -11,7 +11,10 @@ import {
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
-import { CommunityProfileModel } from "@/models/CommunityProfile";
+import {
+  applyCommunityProfileInc,
+  COMMUNITY_POINTS_PER_REPLY,
+} from "@/lib/community-profile-points";
 import mongoose from "mongoose";
 
 const MAX_REPLIES_PER_USER_PER_POST = 3;
@@ -99,10 +102,10 @@ export async function POST(req: Request) {
       attachmentName: attachmentNorm.value ? (attachmentLabel ?? null) : null,
     });
 
-    await CommunityProfileModel.updateOne(
-      { userRef: authorId },
-      { $inc: { repliesCount: 1 } }
-    );
+    await applyCommunityProfileInc(authorId, {
+      repliesCount: 1,
+      points: COMMUNITY_POINTS_PER_REPLY,
+    });
 
     return Response.json(
       {

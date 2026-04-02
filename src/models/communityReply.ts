@@ -51,6 +51,12 @@ const CommunityReplySchema = new Schema(
     type: Boolean,
     default: false,
   },
+
+  /** True after we've granted community profile points for this reply being accepted. */
+  acceptPointsAwarded: {
+    type: Boolean,
+    default: false,
+  },
 },
 { timestamps: true }
 );

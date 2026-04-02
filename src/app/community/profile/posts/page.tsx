@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, Eye, FileText, MessageSquare, ThumbsUp } from "lucide-react";
 import Card from "@/components/ui/Card";
 import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
+import { readCommunityProfileSettings } from "@/lib/community-profile";
 import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
@@ -105,12 +106,22 @@ export default function CommunityProfilePostsPage() {
     try {
       setAcceptingReplyId(replyId);
       setError(null);
+      const storedUser = readStoredUser();
+      const settings = readCommunityProfileSettings();
+      const authorName =
+        settings.displayName.trim() || storedUser?.name?.trim() || "Current User";
       const res = await fetch(`/api/community-replies/${encodeURIComponent(replyId)}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ isAccepted: true }),
+        body: JSON.stringify({
+          isAccepted: true,
+          author: storedUser?.id,
+          authorUsername: storedUser?.username,
+          authorEmail: storedUser?.email,
+          authorName,
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
