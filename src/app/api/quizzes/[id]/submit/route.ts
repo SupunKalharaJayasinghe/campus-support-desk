@@ -167,34 +167,46 @@ export async function POST(
 
     const showResultsImmediately = Boolean(quizRow.showResultsImmediately);
     const showCorrectAnswers = Boolean(quizRow.showCorrectAnswers);
-    const message =
-      xpAwarded && xpAwarded.totalXP > 0
+    const showAnswerDetails = showResultsImmediately || showCorrectAnswers;
+    const message = showResultsImmediately
+      ? xpAwarded && xpAwarded.totalXP > 0
         ? `Quiz submitted successfully! You scored ${attempt.percentage}% and earned ${xpAwarded.totalXP} XP!`
-        : `Quiz submitted successfully! You scored ${attempt.percentage}%.`;
+        : `Quiz submitted successfully! You scored ${attempt.percentage}%.`
+      : xpAwarded && xpAwarded.totalXP > 0
+        ? `Quiz submitted successfully. Your results will be available later. You earned ${xpAwarded.totalXP} XP.`
+        : "Quiz submitted successfully. Your results will be available later.";
 
     return NextResponse.json({
       success: true,
       data: {
         attempt: {
           id: String(attempt._id),
-          score: attempt.score,
-          totalMarks: attempt.totalMarks,
-          percentage: attempt.percentage,
-          passed: attempt.passed,
+          ...(showResultsImmediately
+            ? {
+                score: attempt.score,
+                totalMarks: attempt.totalMarks,
+                percentage: attempt.percentage,
+                passed: attempt.passed,
+              }
+            : {}),
           timeTaken: attempt.timeTaken,
           isOnTime: attempt.isOnTime,
           isWithinTimeLimit: attempt.isWithinTimeLimit,
           status: attempt.status,
         },
-        results: showResultsImmediately
+        results: showAnswerDetails
           ? {
               answers: grading.results.map((result) => ({
                 questionId: result.questionId,
                 questionText: result.questionText,
                 questionType: result.questionType,
-                isCorrect: result.isCorrect,
-                marksAwarded: result.marksAwarded,
-                questionMarks: result.questionMarks,
+                ...(showResultsImmediately
+                  ? {
+                      isCorrect: result.isCorrect,
+                      marksAwarded: result.marksAwarded,
+                      questionMarks: result.questionMarks,
+                    }
+                  : {}),
                 ...(showCorrectAnswers && result.correctAnswer
                   ? { correctAnswer: result.correctAnswer }
                   : {}),

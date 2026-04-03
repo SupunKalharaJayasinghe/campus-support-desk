@@ -106,6 +106,11 @@ function normalizeText(value: unknown) {
   return collapseSpaces(value).toLowerCase();
 }
 
+const QUIZ_PRIMARY_BUTTON_CLASS =
+  "gap-2 border border-[#034aa6] bg-[#034aa6] text-white shadow-[0_16px_32px_rgba(3,74,166,0.22)] hover:border-[#023a82] hover:bg-[#023a82] hover:shadow-[0_20px_36px_rgba(3,74,166,0.28)]";
+const QUIZ_SECONDARY_BUTTON_CLASS =
+  "gap-2 border border-[#bfd3fb] bg-[#eff6ff] text-[#034aa6] shadow-[0_12px_24px_rgba(59,130,246,0.12)] hover:border-[#93b4f6] hover:bg-[#dbeafe] hover:text-[#023a82]";
+
 function formatRelativeTime(date: Date | string | null | undefined) {
   if (!date) return "Just now";
   const now = new Date();
@@ -193,7 +198,7 @@ function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
               </p>
             </div>
           </div>
-          <Button onClick={onRetry} variant="secondary">
+          <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={onRetry} variant="secondary">
             Retry
           </Button>
         </div>
@@ -321,7 +326,7 @@ export default function StudentQuizzesPage() {
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-red-900/80">{error}</p>
             </div>
-            <Button onClick={() => void initializePage()} variant="secondary">
+            <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={() => void initializePage()} variant="secondary">
               Retry
             </Button>
           </div>
@@ -348,7 +353,12 @@ export default function StudentQuizzesPage() {
               </p>
             ) : null}
           </div>
-          <Button className="gap-2" disabled={refreshing} onClick={() => void initializePage(true)} variant="secondary">
+          <Button
+            className={QUIZ_SECONDARY_BUTTON_CLASS}
+            disabled={refreshing}
+            onClick={() => void initializePage(true)}
+            variant="secondary"
+          >
             <RefreshCw className={cn(refreshing && "animate-spin")} size={16} />
             Refresh
           </Button>
@@ -401,7 +411,7 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?resume=1`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <PlayCircle size={16} />
                         Continue
                       </Button>
@@ -451,7 +461,7 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <PlayCircle size={16} />
                         Start Quiz
                       </Button>
@@ -509,13 +519,13 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?review=1`}>
-                      <Button className="gap-2" variant="secondary">
+                      <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                         <FileCheck2 size={16} />
                         View Results
                       </Button>
                     </Link>
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?resume=1&retry=1`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <ArrowRight size={16} />
                         Retry
                       </Button>

@@ -9,6 +9,7 @@ import {
 export interface QuizSubmissionAnswerInput {
   questionId: string;
   selectedOptionId?: string;
+  selectedOptionIds?: string[];
   answerText?: string;
 }
 
@@ -42,6 +43,23 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function uniqueOptionIds(values: unknown[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => collapseSpaces(value))
+        .filter((value) => value && mongoose.Types.ObjectId.isValid(value))
+    )
+  );
+}
+
+function joinOptionTexts(values: Array<{ optionText?: unknown }>) {
+  return values
+    .map((value) => collapseSpaces(value.optionText))
+    .filter(Boolean)
+    .join(", ");
 }
 
 function readId(value: unknown) {
@@ -88,6 +106,9 @@ export function normalizeQuizSubmissionAnswers(
       }
 
       const selectedOptionId = collapseSpaces(row.selectedOptionId);
+      const selectedOptionIds = Array.isArray(row.selectedOptionIds)
+        ? uniqueOptionIds(row.selectedOptionIds)
+        : [];
 
       return {
         questionId,
@@ -95,6 +116,7 @@ export function normalizeQuizSubmissionAnswers(
         mongoose.Types.ObjectId.isValid(selectedOptionId)
           ? { selectedOptionId }
           : {}),
+        ...(selectedOptionIds.length > 0 ? { selectedOptionIds } : {}),
         ...(collapseSpaces(row.answerText)
           ? { answerText: collapseSpaces(row.answerText) }
           : {}),
@@ -132,32 +154,47 @@ export function gradeQuizSubmission(
     let isCorrect = false;
     let marksAwarded = 0;
     let selectedOptionId: mongoose.Types.ObjectId | undefined;
+    let selectedOptionIds: mongoose.Types.ObjectId[] | undefined;
     const answerText = collapseSpaces(submission?.answerText);
     let selectedAnswer = "";
     let correctAnswer = "";
 
     if (isChoiceQuizQuestionType(questionType)) {
-      const selectedId = collapseSpaces(submission?.selectedOptionId);
-      const selectedOption = optionRows.find((option) => {
-        const optionRow = asObject(option);
-
-        return readId(optionRow?._id ?? optionRow?.id) === selectedId;
-      });
-      const selectedRow = asObject(selectedOption);
-      const correctOption = optionRows.find((option) =>
-        Boolean(asObject(option)?.isCorrect)
+      const optionObjects = optionRows
+        .map((option) => asObject(option))
+        .filter(
+          (optionRow): optionRow is Record<string, unknown> => Boolean(optionRow)
+        );
+      const selectedIds = uniqueOptionIds([
+        ...(Array.isArray(submission?.selectedOptionIds)
+          ? submission.selectedOptionIds
+          : []),
+        submission?.selectedOptionId,
+      ]);
+      const selectedOptions = optionObjects.filter((optionRow) =>
+        selectedIds.includes(readId(optionRow._id ?? optionRow.id))
       );
-      const correctOptionRow = asObject(correctOption);
+      const correctOptions = optionObjects.filter((optionRow) =>
+        Boolean(optionRow.isCorrect)
+      );
+      const correctIds = uniqueOptionIds(
+        correctOptions.map((optionRow) => readId(optionRow._id ?? optionRow.id))
+      );
 
-      if (selectedId && mongoose.Types.ObjectId.isValid(selectedId)) {
-        selectedOptionId = new mongoose.Types.ObjectId(selectedId);
+      if (selectedIds.length === 1) {
+        selectedOptionId = new mongoose.Types.ObjectId(selectedIds[0]);
+      }
+      if (selectedIds.length > 0) {
+        selectedOptionIds = selectedIds.map((id) => new mongoose.Types.ObjectId(id));
       }
 
-      selectedAnswer = collapseSpaces(selectedRow?.optionText);
+      selectedAnswer = joinOptionTexts(selectedOptions);
       correctAnswer =
-        collapseSpaces(correctOptionRow?.optionText) ||
-        collapseSpaces(questionRow.correctAnswer);
-      isCorrect = Boolean(selectedRow?.isCorrect);
+        joinOptionTexts(correctOptions) || collapseSpaces(questionRow.correctAnswer);
+      isCorrect =
+        correctIds.length > 0 &&
+        correctIds.length === selectedIds.length &&
+        correctIds.every((id) => selectedIds.includes(id));
       marksAwarded = isCorrect ? questionMarks : 0;
     } else {
       // Short-answer auto grading remains exact-match only.
@@ -187,6 +224,7 @@ export function gradeQuizSubmission(
     return {
       questionId: new mongoose.Types.ObjectId(questionId),
       ...(selectedOptionId ? { selectedOptionId } : {}),
+      ...(selectedOptionIds ? { selectedOptionIds } : {}),
       ...(answerText ? { answerText } : {}),
       isCorrect,
       marksAwarded,

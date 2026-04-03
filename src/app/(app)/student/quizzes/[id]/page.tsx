@@ -39,6 +39,7 @@ interface StudentQuizQuestion {
   _id: string;
   questionText: string;
   questionType: QuestionType;
+  allowMultipleAnswers?: boolean;
   options: Array<{
     _id: string;
     optionText: string;
@@ -70,10 +71,10 @@ interface AttemptInfo {
 interface SubmissionResult {
   attempt: {
     id: string;
-    score: number;
-    totalMarks: number;
-    percentage: number;
-    passed: boolean;
+    score?: number;
+    totalMarks?: number;
+    percentage?: number;
+    passed?: boolean;
     timeTaken: number;
     isOnTime: boolean;
     isWithinTimeLimit: boolean;
@@ -84,9 +85,9 @@ interface SubmissionResult {
       questionId: string;
       questionText: string;
       questionType?: QuestionType | "";
-      isCorrect: boolean;
-      marksAwarded: number;
-      questionMarks: number;
+      isCorrect?: boolean;
+      marksAwarded?: number;
+      questionMarks?: number;
       correctAnswer?: string;
       selectedAnswer?: string;
     }>;
@@ -126,6 +127,7 @@ interface ReviewAttemptData {
 
 interface AnswerDraft {
   selectedOptionId?: string;
+  selectedOptionIds?: string[];
   answerText?: string;
 }
 
@@ -133,6 +135,12 @@ const STUDENT_PROFILE_EMPTY_TITLE = "Student profile not found";
 const STUDENT_PROFILE_EMPTY_MESSAGE =
   "Please make sure you're logged in with a valid student account, or contact your administrator.";
 const SHORT_ANSWER_MAX_LENGTH = 500;
+const QUIZ_PRIMARY_BUTTON_CLASS =
+  "gap-2 border border-[#034aa6] bg-[#034aa6] text-white shadow-[0_16px_32px_rgba(3,74,166,0.22)] hover:border-[#023a82] hover:bg-[#023a82] hover:shadow-[0_20px_36px_rgba(3,74,166,0.28)]";
+const QUIZ_SECONDARY_BUTTON_CLASS =
+  "gap-2 border border-[#bfd3fb] bg-[#eff6ff] text-[#034aa6] shadow-[0_12px_24px_rgba(59,130,246,0.12)] hover:border-[#93b4f6] hover:bg-[#dbeafe] hover:text-[#023a82]";
+const QUIZ_FINISH_BUTTON_CLASS =
+  "gap-2 border border-emerald-600 bg-emerald-600 text-white shadow-[0_16px_32px_rgba(5,150,105,0.22)] hover:border-emerald-700 hover:bg-emerald-700 hover:shadow-[0_20px_36px_rgba(5,150,105,0.28)]";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -140,6 +148,23 @@ function cn(...classes: Array<string | false | null | undefined>) {
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function getSelectedOptionIds(answer?: AnswerDraft) {
+  if (!answer) {
+    return [] as string[];
+  }
+
+  return Array.from(
+    new Set(
+      [
+        ...(Array.isArray(answer.selectedOptionIds) ? answer.selectedOptionIds : []),
+        answer.selectedOptionId,
+      ]
+        .map((value) => collapseSpaces(value))
+        .filter(Boolean)
+    )
+  );
 }
 
 function formatTimer(seconds: number) {
@@ -208,10 +233,10 @@ function StudentProfileEmptyState({ onBack, onRetry }: { onBack: () => void; onR
           </div>
         </div>
         <div className="flex gap-3">
-          <Button onClick={onBack} variant="secondary">
+          <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={onBack} variant="secondary">
             Back
           </Button>
-          <Button onClick={onRetry} variant="secondary">
+          <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={onRetry} variant="secondary">
             Retry
           </Button>
         </div>
@@ -238,7 +263,7 @@ function SubmitModal({
   return (
     <div className="fixed inset-0 z-[120] bg-slate-950/45 p-4 backdrop-blur-sm">
       <div className="mx-auto max-w-xl rounded-[32px] border border-border bg-card p-6 shadow-[0_28px_70px_rgba(15,23,42,0.22)]">
-        <h2 className="text-2xl font-semibold text-heading">Submit Quiz?</h2>
+        <h2 className="text-2xl font-semibold text-heading">Finish Quiz?</h2>
         <p className="mt-3 text-sm leading-6 text-text/72">
           You answered {answeredCount} out of {totalQuestions} question
           {totalQuestions === 1 ? "" : "s"}.
@@ -266,12 +291,12 @@ function SubmitModal({
           </div>
         )}
         <div className="mt-6 flex justify-end gap-3">
-          <Button onClick={onCancel} variant="secondary">
+          <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={onCancel} variant="secondary">
             Go Back &amp; Review
           </Button>
-          <Button className="gap-2" disabled={submitting} onClick={onConfirm}>
+          <Button className={QUIZ_FINISH_BUTTON_CLASS} disabled={submitting} onClick={onConfirm}>
             {submitting ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-            {unanswered.length > 0 ? "Submit Anyway" : "Submit Quiz"}
+            {unanswered.length > 0 ? "Finish Anyway" : "Finish Quiz"}
           </Button>
         </div>
       </div>
@@ -318,7 +343,7 @@ export default function StudentQuizAttemptPage() {
       if (isShortAnswerQuizQuestionType(question.questionType)) {
         return collapseSpaces(answer.answerText) ? count + 1 : count;
       }
-      return answer.selectedOptionId ? count + 1 : count;
+      return getSelectedOptionIds(answer).length > 0 ? count + 1 : count;
     }, 0);
   }, [answers, liveQuiz]);
 
@@ -331,7 +356,7 @@ export default function StudentQuizAttemptPage() {
         if (isShortAnswerQuizQuestionType(question.questionType)) {
           return !collapseSpaces(answer.answerText);
         }
-        return !answer.selectedOptionId;
+        return getSelectedOptionIds(answer).length === 0;
       })
       .map((question, index) => index + 1);
   }, [answers, liveQuiz]);
@@ -654,6 +679,32 @@ export default function StudentQuizAttemptPage() {
     }));
   }
 
+  function toggleOptionAnswer(
+    questionId: string,
+    optionId: string,
+    allowMultipleAnswers: boolean
+  ) {
+    setAnswers((previous) => {
+      const previousAnswer = previous[questionId];
+      const selectedOptionIds = getSelectedOptionIds(previousAnswer);
+      const nextSelectedOptionIds = allowMultipleAnswers
+        ? selectedOptionIds.includes(optionId)
+          ? selectedOptionIds.filter((value) => value !== optionId)
+          : [...selectedOptionIds, optionId]
+        : [optionId];
+
+      return {
+        ...previous,
+        [questionId]: {
+          ...previousAnswer,
+          selectedOptionId:
+            nextSelectedOptionIds.length === 1 ? nextSelectedOptionIds[0] : undefined,
+          selectedOptionIds: nextSelectedOptionIds,
+        },
+      };
+    });
+  }
+
   function handleReviewFromSubmitModal() {
     setSubmitModalOpen(false);
     if (unansweredQuestions.length > 0) {
@@ -677,8 +728,11 @@ export default function StudentQuizAttemptPage() {
           studentId: studentRecord.id,
           answers: liveQuiz.questions.map((question) => ({
             questionId: question._id,
-            ...(answers[question._id]?.selectedOptionId
-              ? { selectedOptionId: answers[question._id]?.selectedOptionId }
+            ...(getSelectedOptionIds(answers[question._id]).length > 0
+              ? { selectedOptionIds: getSelectedOptionIds(answers[question._id]) }
+              : {}),
+            ...(getSelectedOptionIds(answers[question._id]).length === 1
+              ? { selectedOptionId: getSelectedOptionIds(answers[question._id])[0] }
               : {}),
             ...(collapseSpaces(answers[question._id]?.answerText)
               ? { answerText: collapseSpaces(answers[question._id]?.answerText) }
@@ -745,10 +799,14 @@ export default function StudentQuizAttemptPage() {
             <p className="mt-3 max-w-2xl text-sm leading-6 text-red-900/80">{error}</p>
           </div>
           <div className="flex gap-3">
-            <Button onClick={() => router.push("/student/quizzes")} variant="secondary">
+            <Button
+              className={QUIZ_SECONDARY_BUTTON_CLASS}
+              onClick={() => router.push("/student/quizzes")}
+              variant="secondary"
+            >
               Back
             </Button>
-            <Button onClick={() => void initializePage()} variant="secondary">
+            <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={() => void initializePage()} variant="secondary">
               Retry
             </Button>
           </div>
@@ -773,6 +831,17 @@ export default function StudentQuizAttemptPage() {
   const earnedXp = submission?.xpAwarded ?? null;
 
   if (resultSource && resultSource.quiz) {
+    const hasVisibleScore =
+      typeof resultSource.attempt.score === "number" &&
+      typeof resultSource.attempt.percentage === "number";
+    const reviewHeading = hasVisibleScore
+      ? resultSource.attempt.passed
+        ? "Quiz Completed"
+        : "Quiz Review"
+      : resultSource.results
+        ? "Quiz Review"
+        : "Quiz Submitted";
+
     return (
       <div className="space-y-8">
         <section className="space-y-3">
@@ -780,7 +849,7 @@ export default function StudentQuizAttemptPage() {
             Student Portal / Quizzes
           </p>
           <h1 className="text-4xl font-semibold tracking-tight text-heading">
-            {resultSource.attempt.passed ? "Quiz Completed" : "Quiz Review"}
+            {reviewHeading}
           </h1>
         </section>
 
@@ -790,14 +859,22 @@ export default function StudentQuizAttemptPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#034aa6]">
                 {resultSource.quiz.title}
               </p>
-              <h2 className="mt-3 text-4xl font-semibold text-heading">
-                {resultSource.attempt.score ?? 0} / {resultSource.attempt.totalMarks ?? resultSource.quiz.totalMarks} (
-                {(resultSource.attempt.percentage ?? 0).toFixed(2)}%)
-              </h2>
+              {hasVisibleScore ? (
+                <h2 className="mt-3 text-4xl font-semibold text-heading">
+                  {resultSource.attempt.score ?? 0} / {resultSource.attempt.totalMarks ?? resultSource.quiz.totalMarks} (
+                  {(resultSource.attempt.percentage ?? 0).toFixed(2)}%)
+                </h2>
+              ) : (
+                <h2 className="mt-3 text-4xl font-semibold text-heading">
+                  {resultSource.results ? "Answers available" : "Submission received"}
+                </h2>
+              )}
               <div className="mt-4 flex flex-wrap gap-3">
-                <Badge variant={resultSource.attempt.passed ? "success" : "danger"}>
-                  {resultSource.attempt.passed ? "Passed" : "Needs Improvement"}
-                </Badge>
+                {hasVisibleScore ? (
+                  <Badge variant={resultSource.attempt.passed ? "success" : "danger"}>
+                    {resultSource.attempt.passed ? "Passed" : "Needs Improvement"}
+                  </Badge>
+                ) : null}
                 <Badge variant={resultSource.attempt.isOnTime ? "success" : "warning"}>
                   {resultSource.attempt.isOnTime ? "Submitted before deadline" : "Late submission"}
                 </Badge>
@@ -885,13 +962,13 @@ export default function StudentQuizAttemptPage() {
 
             <div className="mt-5 flex flex-wrap gap-3">
               <Link href="/student/gamification">
-                <Button className="gap-2" variant="secondary">
+                <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                   <Trophy size={16} />
                   View all XP
                 </Button>
               </Link>
               <Link href="/student/trophies">
-                <Button className="gap-2" variant="secondary">
+                <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                   <Trophy size={16} />
                   View Trophies
                 </Button>
@@ -911,12 +988,24 @@ export default function StudentQuizAttemptPage() {
                     </p>
                     <h3 className="mt-2 text-lg font-semibold text-heading">{answer.questionText}</h3>
                   </div>
-                  <Badge variant={answer.isCorrect ? "success" : "danger"}>
-                    {answer.marksAwarded}/{answer.questionMarks}
-                  </Badge>
+                  {typeof answer.marksAwarded === "number" &&
+                  typeof answer.questionMarks === "number" ? (
+                    <Badge variant={answer.isCorrect ? "success" : "danger"}>
+                      {answer.marksAwarded}/{answer.questionMarks}
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className={cn("rounded-2xl border px-4 py-3 text-sm", answer.isCorrect ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800")}>
+                  <div
+                    className={cn(
+                      "rounded-2xl border px-4 py-3 text-sm",
+                      answer.isCorrect === true
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : answer.isCorrect === false
+                          ? "border-rose-200 bg-rose-50 text-rose-800"
+                          : "border-slate-200 bg-slate-50 text-text/75"
+                    )}
+                  >
                     <p className="font-semibold">Your Answer</p>
                     <p className="mt-1">{answer.selectedAnswer || "No answer submitted"}</p>
                   </div>
@@ -960,22 +1049,24 @@ export default function StudentQuizAttemptPage() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Link href="/student/quizzes">
-                <Button variant="secondary">Back to Quizzes</Button>
+                <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
+                  Back to Quizzes
+                </Button>
               </Link>
               <Link href={`/student/quizzes/${encodeURIComponent(quizId)}?resume=1&retry=1`}>
-                <Button className="gap-2">
+                <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                   <ArrowRight size={16} />
                   Retry
                 </Button>
               </Link>
               <Link href="/student/gamification">
-                <Button className="gap-2" variant="secondary">
+                <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                   <Trophy size={16} />
                   My XP
                 </Button>
               </Link>
               <Link href="/student/trophies">
-                <Button className="gap-2" variant="secondary">
+                <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                   <Trophy size={16} />
                   Trophies
                 </Button>
@@ -1010,7 +1101,7 @@ export default function StudentQuizAttemptPage() {
             ) : null}
           </div>
           <Link href="/student/quizzes">
-            <Button className="gap-2" variant="secondary">
+            <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
               <ArrowLeft size={16} />
               Back to Quizzes
             </Button>
@@ -1034,9 +1125,9 @@ export default function StudentQuizAttemptPage() {
                     <Clock3 size={16} />
                     {formatTimer(remainingSeconds)} remaining
                   </div>
-                  <Button className="gap-2" onClick={() => setSubmitModalOpen(true)}>
+                  <Button className={QUIZ_FINISH_BUTTON_CLASS} onClick={() => setSubmitModalOpen(true)}>
                     <Send size={16} />
-                    Submit Quiz
+                    Finish Quiz
                   </Button>
                 </div>
               </div>
@@ -1123,7 +1214,10 @@ export default function StudentQuizAttemptPage() {
                   ) : (
                     <div className="space-y-3">
                       {currentQuestion.options.map((option) => {
-                        const selected = answers[currentQuestion._id]?.selectedOptionId === option._id;
+                        const selectedOptionIds = getSelectedOptionIds(
+                          answers[currentQuestion._id]
+                        );
+                        const selected = selectedOptionIds.includes(option._id);
                         return (
                           <label
                             className={cn(
@@ -1137,11 +1231,19 @@ export default function StudentQuizAttemptPage() {
                             <input
                               checked={selected}
                               className="h-4 w-4 accent-[#034aa6]"
-                              name={`question-${currentQuestion._id}`}
-                              onChange={() =>
-                                updateAnswer(currentQuestion._id, { selectedOptionId: option._id })
+                              name={
+                                currentQuestion.allowMultipleAnswers
+                                  ? undefined
+                                  : `question-${currentQuestion._id}`
                               }
-                              type="radio"
+                              onChange={() =>
+                                toggleOptionAnswer(
+                                  currentQuestion._id,
+                                  option._id,
+                                  Boolean(currentQuestion.allowMultipleAnswers)
+                                )
+                              }
+                              type={currentQuestion.allowMultipleAnswers ? "checkbox" : "radio"}
                             />
                             <span className="text-sm font-medium">{option.optionText}</span>
                           </label>
@@ -1153,22 +1255,33 @@ export default function StudentQuizAttemptPage() {
 
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Button
+                    className={QUIZ_SECONDARY_BUTTON_CLASS}
                     disabled={currentIndex === 0}
                     onClick={() => setCurrentIndex((value) => Math.max(0, value - 1))}
                     variant="secondary"
                   >
                     Previous
                   </Button>
-                  <Button
-                    className="gap-2"
-                    onClick={() =>
-                      setCurrentIndex((value) => Math.min(liveQuiz.questions.length - 1, value + 1))
-                    }
-                    variant={currentIndex === liveQuiz.questions.length - 1 ? "secondary" : "primary"}
-                  >
-                    Next
-                    <ArrowRight size={16} />
-                  </Button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Button className={QUIZ_FINISH_BUTTON_CLASS} onClick={() => setSubmitModalOpen(true)}>
+                      <Send size={16} />
+                      Finish Quiz
+                    </Button>
+                    <Button
+                      className={cn(
+                        currentIndex === liveQuiz.questions.length - 1
+                          ? QUIZ_SECONDARY_BUTTON_CLASS
+                          : QUIZ_PRIMARY_BUTTON_CLASS
+                      )}
+                      onClick={() =>
+                        setCurrentIndex((value) => Math.min(liveQuiz.questions.length - 1, value + 1))
+                      }
+                      variant={currentIndex === liveQuiz.questions.length - 1 ? "secondary" : "primary"}
+                    >
+                      Next
+                      <ArrowRight size={16} />
+                    </Button>
+                  </div>
                 </div>
               </Card>
 
@@ -1183,7 +1296,7 @@ export default function StudentQuizAttemptPage() {
                     const answered =
                       isShortAnswerQuizQuestionType(question.questionType)
                         ? Boolean(collapseSpaces(answer?.answerText))
-                        : Boolean(answer?.selectedOptionId);
+                        : getSelectedOptionIds(answer).length > 0;
                     return (
                       <button
                         className={cn(
@@ -1226,7 +1339,7 @@ export default function StudentQuizAttemptPage() {
                 </ul>
                 <div className="mt-6">
                   <Button
-                    className="gap-2"
+                    className={QUIZ_PRIMARY_BUTTON_CLASS}
                     disabled={starting || !studentRecord}
                     onClick={() => {
                       if (!studentRecord) return;

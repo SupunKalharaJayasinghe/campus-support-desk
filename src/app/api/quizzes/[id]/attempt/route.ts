@@ -7,6 +7,7 @@ import "@/models/QuizAttempt";
 import "@/models/Student";
 import { connectMongoose } from "@/lib/mongoose";
 import { EnrollmentModel } from "@/models/Enrollment";
+import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { QuizModel } from "@/models/Quiz";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { StudentModel } from "@/models/Student";
@@ -64,6 +65,50 @@ function buildStudentQuizPayload(quiz: Record<string, unknown>) {
           : question.options,
     })),
   };
+}
+
+async function checkStudentEnrollmentForOffering(
+  studentId: string,
+  offeringId: string
+) {
+  if (
+    !mongoose.Types.ObjectId.isValid(studentId) ||
+    !mongoose.Types.ObjectId.isValid(offeringId)
+  ) {
+    return false;
+  }
+
+  const enrollments = (await EnrollmentModel.find({
+    studentId: new mongoose.Types.ObjectId(studentId),
+    status: "ACTIVE",
+  })
+    .select("facultyId degreeProgramId intakeId")
+    .lean()
+    .exec()
+    .catch(() => [])) as unknown[];
+
+  const enrollmentSelectors = enrollments
+    .map((row) => asObject(row))
+    .filter((row): row is Record<string, unknown> => Boolean(row))
+    .map((row) => ({
+      facultyId: collapseSpaces(row.facultyId),
+      degreeProgramId: collapseSpaces(row.degreeProgramId),
+      intakeId: collapseSpaces(row.intakeId),
+    }))
+    .filter(
+      (row) => row.facultyId && row.degreeProgramId && row.intakeId
+    );
+
+  if (enrollmentSelectors.length === 0) {
+    return false;
+  }
+
+  return Boolean(
+    await ModuleOfferingModel.exists({
+      _id: new mongoose.Types.ObjectId(offeringId),
+      $or: enrollmentSelectors,
+    }).catch(() => null)
+  );
 }
 
 export async function POST(
@@ -157,18 +202,9 @@ export async function POST(
       );
     }
 
-    const offering = asObject(quizRow.moduleOfferingId);
-    // NOTE: Enrollment validation uses faculty/degree/intake matching because
-    // Enrollment.ts does not store moduleOfferingId directly.
-    // TODO: Add direct moduleOfferingId enrollment check when schema supports it.
-    const enrolled = Boolean(
-      await EnrollmentModel.exists({
-        studentId: new mongoose.Types.ObjectId(studentId),
-        facultyId: collapseSpaces(offering?.facultyId),
-        degreeProgramId: collapseSpaces(offering?.degreeProgramId),
-        intakeId: collapseSpaces(offering?.intakeId),
-        status: "ACTIVE",
-      }).catch(() => null)
+    const enrolled = await checkStudentEnrollmentForOffering(
+      studentId,
+      readId(quizRow.moduleOfferingId)
     );
 
     if (!enrolled) {

@@ -20,6 +20,7 @@ export interface IAnswer {
   _id?: Types.ObjectId;
   questionId: Types.ObjectId;
   selectedOptionId?: Types.ObjectId;
+  selectedOptionIds?: Types.ObjectId[];
   answerText?: string;
   isCorrect: boolean;
   marksAwarded: number;
@@ -101,6 +102,10 @@ const AnswerSchema = new Schema<IAnswer>(
     },
     selectedOptionId: {
       type: Schema.Types.ObjectId,
+      default: undefined,
+    },
+    selectedOptionIds: {
+      type: [Schema.Types.ObjectId],
       default: undefined,
     },
     answerText: {

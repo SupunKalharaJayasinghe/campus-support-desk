@@ -4,6 +4,7 @@ import "@/models/Module";
 import "@/models/ModuleOffering";
 import "@/models/Quiz";
 import "@/models/User";
+import { deriveAcademicPeriodFromOffering } from "@/lib/academic-period";
 import { connectMongoose } from "@/lib/mongoose";
 import {
   normalizeQuizQuestionType,
@@ -159,6 +160,13 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function joinAnswerTexts(options: Array<{ optionText: string }>) {
+  return options
+    .map((option) => collapseSpaces(option.optionText))
+    .filter(Boolean)
+    .join(", ");
+}
+
 export async function loadModuleMetaMap(moduleIds: string[]) {
   const normalizedIds = Array.from(
     new Set(moduleIds.map((item) => collapseSpaces(item)).filter(Boolean))
@@ -236,6 +244,9 @@ export function sanitizeQuizForStudent(quiz: Record<string, unknown>) {
         _id: readId(row._id ?? row.id) || null,
         questionText: collapseSpaces(row.questionText),
         questionType: collapseSpaces(row.questionType),
+        allowMultipleAnswers:
+          collapseSpaces(row.questionType) === "mcq" &&
+          options.filter((option) => Boolean(asObject(option)?.isCorrect)).length > 1,
         options: options.map((option) => {
           const optionRow = asObject(option) ?? {};
           return {
@@ -425,9 +436,15 @@ export function normalizeQuestionInputs(rawQuestions: unknown) {
     }
 
     const correctOptions = normalizedOptions.filter((option) => option.isCorrect);
-    if (correctOptions.length !== 1) {
+    if (questionType === "true-false" && correctOptions.length !== 1) {
       return {
         error: `Question ${index + 1} must have exactly 1 correct option`,
+        questions: [] as NormalizedQuestionInput[],
+      };
+    }
+    if (questionType === "mcq" && correctOptions.length < 1) {
+      return {
+        error: `Question ${index + 1} must have at least 1 correct option`,
         questions: [] as NormalizedQuestionInput[],
       };
     }
@@ -436,7 +453,7 @@ export function normalizeQuestionInputs(rawQuestions: unknown) {
       questionText,
       questionType,
       options: normalizedOptions,
-      correctAnswer: correctOptions[0].optionText,
+      correctAnswer: joinAnswerTexts(correctOptions),
       marks,
       explanation,
       order,
@@ -742,6 +759,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const academicContext = deriveAcademicPeriodFromOffering({
+      intakeName: asObject(offering)?.intakeName,
+      termCode: asObject(offering)?.termCode,
+    });
+
     const created = await QuizModel.create({
       title,
       description,
@@ -759,8 +781,8 @@ export async function POST(request: Request) {
       shuffleOptions,
       showResultsImmediately,
       showCorrectAnswers,
-      academicYear: academicYear || undefined,
-      semester: semester ?? undefined,
+      academicYear: academicContext.academicYear || academicYear || undefined,
+      semester: academicContext.semester ?? semester ?? undefined,
       tags,
     });
 
