@@ -22,6 +22,7 @@ import {
 } from "@/models/announcement-center";
 import {
   getStudentPortalSessionUser,
+  type StudentPortalEnrollment,
   resolveCurrentStudentRecord,
 } from "@/lib/student-session";
 
@@ -83,6 +84,13 @@ interface DashboardCommunityPost {
 interface DashboardState {
   studentName: string;
   registrationNumber: string;
+  modules: Array<{
+    id: string;
+    moduleCode: string;
+    moduleName: string;
+    termCode: string;
+    lecturerCount: number;
+  }> | null;
   performance: DashboardPerformanceData | null;
   points: DashboardPointsData | null;
   quizzes: DashboardQuizData | null;
@@ -162,6 +170,76 @@ async function fetchOptionalPosts(userId: string) {
       return null;
     }
     return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOptionalStudentModules(enrollment: StudentPortalEnrollment | null) {
+  if (!enrollment) {
+    return null;
+  }
+
+  const query = new URLSearchParams({
+    facultyId: enrollment.facultyId,
+    degreeProgramId: enrollment.degreeProgramId,
+    intakeId: enrollment.intakeId,
+    termCode: enrollment.currentTerm || "",
+    status: "ACTIVE",
+    page: "1",
+    pageSize: "100",
+    sort: "module",
+  });
+
+  try {
+    const response = await fetch(`/api/module-offerings?${query.toString()}`, {
+      cache: "no-store",
+    });
+    const payload = await readJson<{
+      items?: Array<{
+        id?: string;
+        _id?: string;
+        moduleCode?: string;
+        moduleName?: string;
+        termCode?: string;
+        lecturerCount?: number;
+      }>;
+    }>(response);
+    if (!response.ok) {
+      return null;
+    }
+
+    const rows = Array.isArray(payload?.items) ? payload.items : [];
+    return rows
+      .map((row) => {
+        const id = collapseSpaces(row.id ?? row._id);
+        const moduleCode = collapseSpaces(row.moduleCode);
+        const moduleName = collapseSpaces(row.moduleName);
+        const termCode = collapseSpaces(row.termCode);
+        const lecturerCount = Math.max(0, Math.floor(Number(row.lecturerCount) || 0));
+        if (!id || !moduleCode) {
+          return null;
+        }
+
+        return {
+          id,
+          moduleCode,
+          moduleName: moduleName || moduleCode,
+          termCode,
+          lecturerCount,
+        };
+      })
+      .filter(
+        (
+          row
+        ): row is {
+          id: string;
+          moduleCode: string;
+          moduleName: string;
+          termCode: string;
+          lecturerCount: number;
+        } => Boolean(row)
+      );
   } catch {
     return null;
   }
@@ -339,6 +417,7 @@ export default function StudentDashboardPage() {
     }
 
     const missing: string[] = [];
+    if (dashboard.modules === null) missing.push("modules");
     if (!dashboard.performance) missing.push("performance");
     if (!dashboard.points) missing.push("points");
     if (!dashboard.quizzes) missing.push("quizzes");
@@ -400,7 +479,8 @@ export default function StudentDashboardPage() {
         return;
       }
 
-      const [performance, points, quizzes, trophies, communityPosts, latestAnnouncements] = await Promise.all([
+      const [modules, performance, points, quizzes, trophies, communityPosts, latestAnnouncements] = await Promise.all([
+        fetchOptionalStudentModules(student.latestEnrollment),
         fetchOptionalApiData<DashboardPerformanceData>(
           `/api/performance/${encodeURIComponent(student.id)}`
         ),
@@ -420,6 +500,7 @@ export default function StudentDashboardPage() {
       setDashboard({
         studentName: student.fullName,
         registrationNumber: student.studentId,
+        modules,
         performance,
         points,
         quizzes,
@@ -701,6 +782,34 @@ export default function StudentDashboardPage() {
           </div>
         </Card>
       </section>
+
+      <Card title="My Modules">
+        {dashboard?.modules === null ? (
+          <p className="text-sm text-text/70">Module data is temporarily unavailable.</p>
+        ) : dashboard?.modules.length ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {dashboard.modules.map((module) => (
+              <div
+                className="rounded-2xl border border-border/70 bg-tint px-4 py-3"
+                key={module.id}
+              >
+                <p className="text-sm font-semibold text-heading">{module.moduleCode}</p>
+                <p className="mt-1 text-sm text-text/75">{module.moduleName}</p>
+                <p className="mt-2 text-xs text-text/62">
+                  {module.termCode || "Current Term"} •{" "}
+                  {module.lecturerCount > 0
+                    ? `${module.lecturerCount} lecturer${module.lecturerCount > 1 ? "s" : ""}`
+                    : "Lecturer pending"}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-text/70">
+            No modules assigned for your current intake/term yet.
+          </p>
+        )}
+      </Card>
 
       <Card title="Latest Announcements">
         {announcements.length === 0 ? (
