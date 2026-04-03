@@ -256,20 +256,20 @@ function getStandingClasses(level: string | null | undefined) {
   const normalized = collapseSpaces(level).toLowerCase();
 
   if (normalized === "critical") {
-    return "border-red-200 bg-red-50 text-red-700";
+    return "student-status-critical";
   }
 
   if (normalized === "warning") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
+    return "student-status-warning";
   }
 
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return "student-status-positive";
 }
 
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+      <Card className="student-panel overflow-hidden">
         <Skeleton className="h-6 w-28" />
         <Skeleton className="mt-4 h-12 w-72" />
         <Skeleton className="mt-3 h-4 w-full max-w-2xl" />
@@ -302,7 +302,7 @@ function LoadingSkeleton() {
 
 function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
   return (
-    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+    <Card className="student-panel">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-4">
           <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
@@ -544,7 +544,7 @@ export default function StudentDashboardPage() {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
+      <Card className="student-panel">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-700">
@@ -589,8 +589,7 @@ export default function StudentDashboardPage() {
       value: performance ? performance.overview.cumulativeGPA.toFixed(2) : "—",
       hint: performance?.overview.classification ?? "Performance data unavailable",
       icon: BarChart3,
-      className:
-        "border-sky-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(240,249,255,0.95))]",
+      className: "student-metric-card student-metric-sky",
     },
     {
       label: "Study Progress",
@@ -599,8 +598,7 @@ export default function StudentDashboardPage() {
         ? `${performance.overview.totalCreditsCompleted}/${performance.overview.totalCreditsRequired} credits`
         : "Progress data unavailable",
       icon: BookOpen,
-      className:
-        "border-emerald-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(236,253,245,0.95))]",
+      className: "student-metric-card student-metric-green",
     },
     {
       label: "Current Term",
@@ -609,8 +607,7 @@ export default function StudentDashboardPage() {
         ? `${currentTerm.yearLabel} • ${currentTerm.semesterLabel}`
         : "Enrollment details unavailable",
       icon: Sparkles,
-      className:
-        "border-violet-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(245,243,255,0.95))]",
+      className: "student-metric-card student-metric-violet",
     },
     {
       label: "Academic Flags",
@@ -621,8 +618,7 @@ export default function StudentDashboardPage() {
         ? `${performance.overview.totalRepeat} repeat • ${performance.overview.totalProRata} pro-rata`
         : "Risk data unavailable",
       icon: AlertTriangle,
-      className:
-        "border-amber-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(255,251,235,0.95))]",
+      className: "student-metric-card student-metric-amber",
     },
   ];
 
@@ -690,19 +686,19 @@ export default function StudentDashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 pb-2">
-      <section className="relative overflow-hidden rounded-[36px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(37,99,235,0.12),transparent_32%),linear-gradient(145deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96),rgba(239,246,255,0.96))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:p-8">
+    <div className="student-dashboard space-y-6 pb-2">
+      <section className="student-hero relative overflow-hidden rounded-[36px] border p-6 sm:p-8">
         <div
           aria-hidden
-          className="pointer-events-none absolute right-6 top-8 hidden h-44 w-60 rotate-6 rounded-[30px] border border-white/80 bg-white/50 shadow-[0_18px_38px_rgba(15,23,42,0.08)] backdrop-blur md:block"
+          className="student-hero-ambient pointer-events-none absolute right-6 top-8 hidden h-44 w-60 rotate-6 rounded-[30px] border border-white/80 bg-white/50 shadow-[0_18px_38px_rgba(15,23,42,0.08)] backdrop-blur md:block"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute right-20 top-14 hidden h-44 w-60 -rotate-6 rounded-[30px] border border-white/70 bg-white/65 shadow-[0_14px_34px_rgba(15,23,42,0.06)] backdrop-blur xl:block"
+          className="student-hero-ambient pointer-events-none absolute right-20 top-14 hidden h-44 w-60 -rotate-6 rounded-[30px] border border-white/70 bg-white/65 shadow-[0_14px_34px_rgba(15,23,42,0.06)] backdrop-blur xl:block"
         />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-sky-700 backdrop-blur">
+            <div className="student-chip inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] backdrop-blur">
               <BookOpen size={14} />
               Student workspace
             </div>
@@ -717,13 +713,13 @@ export default function StudentDashboardPage() {
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur">
+              <div className="student-soft-block rounded-2xl border px-4 py-3 backdrop-blur">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Current term
                 </p>
                 <p className="mt-1 text-base font-semibold text-heading">{currentTerm.code}</p>
               </div>
-              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur">
+              <div className="student-soft-block rounded-2xl border px-4 py-3 backdrop-blur">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Current year
                 </p>
@@ -731,7 +727,7 @@ export default function StudentDashboardPage() {
               </div>
               <div
                 className={cn(
-                  "rounded-2xl border px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)]",
+                  "student-soft-block rounded-2xl border px-4 py-3",
                   getStandingClasses(performance?.overview.academicStanding.level)
                 )}
               >
@@ -746,7 +742,7 @@ export default function StudentDashboardPage() {
           </div>
 
           <div className="relative z-[1] flex w-full max-w-sm flex-col gap-3">
-            <div className="rounded-[28px] border border-white/80 bg-white/80 p-5 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur">
+            <div className="student-sheet rounded-[28px] border p-5 backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -756,13 +752,13 @@ export default function StudentDashboardPage() {
                     {dashboard.latestEnrollment?.degreeProgramName || "Student record"}
                   </p>
                 </div>
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <BarChart3 size={18} />
                 </span>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="student-soft-block rounded-2xl px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Credits
                   </p>
@@ -772,7 +768,7 @@ export default function StudentDashboardPage() {
                       : "—"}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="student-soft-block rounded-2xl px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Repetition
                   </p>
@@ -780,7 +776,7 @@ export default function StudentDashboardPage() {
                     {performance ? performance.overview.totalRepeat : "—"}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div className="student-soft-block rounded-2xl px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Pro-rata
                   </p>
@@ -834,7 +830,7 @@ export default function StudentDashboardPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
-        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <Card className="student-panel">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -845,14 +841,14 @@ export default function StudentDashboardPage() {
                 Current enrollment details, progression, and module focus for this student.
               </p>
             </div>
-            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            <div className="student-chip rounded-full border px-3 py-1 text-xs font-medium">
               Trend: {formatTrend(performance?.overview.trend)}
             </div>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {academicFacts.map((fact) => (
               <div
-                className="rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3"
+                className="student-soft-block rounded-2xl border px-4 py-3"
                 key={fact.label}
               >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -863,7 +859,7 @@ export default function StudentDashboardPage() {
             ))}
           </div>
 
-          <div className="mt-6 rounded-[28px] border border-slate-200/80 bg-[linear-gradient(145deg,rgba(241,245,249,0.85),rgba(255,255,255,0.9))] p-5">
+          <div className="student-soft-block mt-6 rounded-[28px] border p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -875,16 +871,16 @@ export default function StudentDashboardPage() {
                     : "Progress unavailable"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 text-sm text-slate-600">
+              <div className="student-soft-block rounded-2xl border px-4 py-3 text-sm text-slate-600">
                 {performance
                   ? `${performance.overview.totalModulesPassed} passed / ${performance.overview.totalModulesFailed} needing attention`
                   : "Module summary unavailable"}
               </div>
             </div>
 
-            <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-200/80">
+            <div className="student-progress-track mt-5 h-3 overflow-hidden rounded-full">
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#0ea5e9,#2563eb)]"
+                className="student-progress-fill h-full rounded-full"
                 style={{ width: `${progressValue}%` }}
               />
             </div>
@@ -910,14 +906,14 @@ export default function StudentDashboardPage() {
             </div>
 
             {currentModules.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+              <div className="student-empty-block mt-4 rounded-2xl border px-4 py-5 text-sm text-slate-600">
                 No semester modules are available yet for this student.
               </div>
             ) : (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {currentModules.map((module) => (
                   <div
-                    className="rounded-2xl border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                    className="student-soft-block rounded-2xl border px-4 py-4"
                     key={module.gradeId || `${module.moduleCode}-${module.moduleName}`}
                   >
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">
@@ -935,7 +931,7 @@ export default function StudentDashboardPage() {
           </div>
         </Card>
 
-        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,250,245,0.95))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <Card className="student-panel">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -948,7 +944,7 @@ export default function StudentDashboardPage() {
             </span>
           </div>
 
-          <div className="mt-4 rounded-[28px] border border-amber-200 bg-[linear-gradient(145deg,rgba(255,251,235,0.96),rgba(255,255,255,0.94))] p-5">
+          <div className="student-soft-block mt-4 rounded-[28px] border p-5">
             <p className="text-sm leading-6 text-slate-700">
               {performance?.overview.academicStanding.message ??
                 performance?.riskReport.summary ??
@@ -977,7 +973,7 @@ export default function StudentDashboardPage() {
             </div>
           </div>
           <div className="mt-5 space-y-4">
-            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4">
+            <div className="student-soft-block rounded-2xl border p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-heading">Repeat modules</p>
                 <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
@@ -1005,7 +1001,7 @@ export default function StudentDashboardPage() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4">
+            <div className="student-soft-block rounded-2xl border p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-heading">Pro-rata modules</p>
                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
@@ -1037,7 +1033,7 @@ export default function StudentDashboardPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <Card className="student-panel">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -1045,20 +1041,20 @@ export default function StudentDashboardPage() {
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-heading">Recent alerts</h2>
             </div>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            <span className="student-chip rounded-full border px-3 py-1 text-xs font-medium">
               {recentAlerts.length} latest
             </span>
           </div>
 
           {recentAlerts.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+            <div className="student-empty-block mt-4 rounded-2xl border px-4 py-5 text-sm text-slate-600">
               No student alerts available yet.
             </div>
           ) : (
             <div className="mt-5 space-y-3">
               {recentAlerts.map((item) => (
                 <div
-                  className="rounded-[26px] border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                  className="student-soft-block rounded-[26px] border px-4 py-4"
                   key={item.id}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1082,7 +1078,7 @@ export default function StudentDashboardPage() {
           )}
         </Card>
 
-        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,248,255,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <Card className="student-panel">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
               Engagement
@@ -1095,7 +1091,7 @@ export default function StudentDashboardPage() {
               const Icon = item.icon;
               return (
                 <div
-                  className="rounded-[24px] border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                  className="student-soft-block rounded-[24px] border px-4 py-4"
                   key={item.label}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1113,7 +1109,7 @@ export default function StudentDashboardPage() {
         </Card>
       </section>
 
-      <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <Card className="student-panel">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -1121,20 +1117,20 @@ export default function StudentDashboardPage() {
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-heading">Latest announcements</h2>
           </div>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+          <span className="student-chip rounded-full border px-3 py-1 text-xs font-medium">
             All-user updates
           </span>
         </div>
 
         {announcements.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+          <div className="student-empty-block mt-4 rounded-2xl border px-4 py-5 text-sm text-slate-600">
             No announcements available yet.
           </div>
         ) : (
           <div className="mt-5 grid gap-3">
             {announcements.map((item) => (
               <div
-                className="rounded-[26px] border border-slate-200/80 bg-white/92 px-5 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                className="student-soft-block rounded-[26px] border px-5 py-4"
                 key={item.id}
               >
                 <div className="flex flex-wrap items-center gap-2">
@@ -1161,7 +1157,7 @@ export default function StudentDashboardPage() {
           </Link>
         </div>
       </Card>
-      <Card className="border-sky-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.96),rgba(255,255,255,0.98))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+      <Card className="student-panel student-panel-accent">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
@@ -1193,7 +1189,7 @@ export default function StudentDashboardPage() {
         >
           <div
             aria-modal="true"
-            className="w-full max-w-xl overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_36px_rgba(15,23,42,0.2)]"
+            className="student-modal w-full max-w-xl overflow-hidden rounded-3xl border"
             role="dialog"
           >
             <div className="px-6 py-6">

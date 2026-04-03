@@ -512,7 +512,7 @@ function deriveCreditsRequired(completed: number, percentage: number) {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-8">
+    <div className="student-performance-page space-y-8">
       <div className="space-y-3">
         <Skeleton className="h-4 w-36" />
         <Skeleton className="h-10 w-72" />
@@ -554,30 +554,32 @@ function LoadingSkeleton() {
 
 function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
   return (
-    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-4">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-            <GraduationCap size={22} />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
-              Student Portal / Performance
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
-              {STUDENT_PROFILE_EMPTY_TITLE}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
-              {STUDENT_PROFILE_EMPTY_MESSAGE}
-            </p>
+    <div className="student-performance-page">
+      <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-4">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+              <GraduationCap size={22} />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+                Student Portal / Performance
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+                {STUDENT_PROFILE_EMPTY_TITLE}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+                {STUDENT_PROFILE_EMPTY_MESSAGE}
+              </p>
+            </div>
           </div>
+          <Button className="h-11 min-w-[132px] gap-2 self-start" onClick={onRetry} variant="secondary">
+            <RefreshCw size={16} />
+            Retry
+          </Button>
         </div>
-        <Button className="h-11 min-w-[132px] gap-2 self-start" onClick={onRetry} variant="secondary">
-          <RefreshCw size={16} />
-          Retry
-        </Button>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -793,7 +795,7 @@ export default function StudentPerformancePage() {
             }
           }
         `}</style>
-        <div className="space-y-6">
+        <div className="student-performance-page space-y-6">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text/55">
               Student Portal / Performance
@@ -850,7 +852,7 @@ export default function StudentPerformancePage() {
             }
           }
         `}</style>
-        <div className="space-y-6">
+        <div className="student-performance-page space-y-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text/55">
@@ -883,10 +885,9 @@ export default function StudentPerformancePage() {
             </div>
           </div>
 
-          <Card className="overflow-hidden border-sky-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.08)]">
-            <div className="relative">
-              <div className="absolute inset-x-0 top-0 h-36 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.18),transparent_55%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.14),transparent_50%)]" />
-              <div className="relative flex flex-col items-center px-4 py-12 text-center">
+          <Card className="overflow-hidden border-sky-200">
+            <div className="student-empty-state-panel relative rounded-[28px] border px-4 py-12 text-center">
+              <div className="relative flex flex-col items-center text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-sky-100 text-sky-700 shadow-[0_12px_24px_rgba(14,165,233,0.16)]">
                   <BarChart3 size={34} />
                 </div>
@@ -933,7 +934,7 @@ export default function StudentPerformancePage() {
           }
         }
       `}</style>
-      <div className="space-y-8">
+      <div className="student-performance-page space-y-8">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text/55">

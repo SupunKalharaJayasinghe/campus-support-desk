@@ -25,7 +25,7 @@ export default function Card({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-3xl border p-6",
+        "ui-card relative overflow-hidden rounded-3xl border p-6",
         variant === "default"
           ? "border-border bg-card shadow-shadow"
           : "border-border bg-tint",

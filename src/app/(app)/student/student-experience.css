@@ -1,0 +1,427 @@
+.student-experience {
+  --bg: #f0f2f7;
+  --card: rgba(255, 255, 255, 0.82);
+  --tint: rgba(52, 97, 255, 0.06);
+  --text: #3d4a6b;
+  --heading: #0f1729;
+  --primary: #3461ff;
+  --primaryHover: #2d56eb;
+  --border: rgba(180, 190, 220, 0.42);
+  --shadow: 0 8px 32px rgba(15, 23, 41, 0.08), 0 2px 8px rgba(15, 23, 41, 0.04);
+  --shadowHover: 0 20px 60px rgba(15, 23, 41, 0.12), 0 4px 16px rgba(15, 23, 41, 0.06);
+  --focus: rgba(52, 97, 255, 0.2);
+  min-height: 100vh;
+  position: relative;
+}
+
+.student-experience::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 900px 600px at 10% 0%, rgba(52, 97, 255, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 700px 500px at 90% 80%, rgba(13, 181, 200, 0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 400px at 50% 40%, rgba(139, 92, 246, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.student-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.student-header {
+  background: rgba(240, 242, 247, 0.84);
+  border-color: var(--border);
+  box-shadow: 0 10px 28px rgba(15, 23, 41, 0.06);
+}
+
+.student-brand {
+  color: var(--heading);
+  font-family: var(--font-heading), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.student-brand:hover {
+  color: var(--primary);
+}
+
+.student-nav-link,
+.student-nav-trigger,
+.student-nav-item,
+.student-mobile-link,
+.student-mobile-trigger,
+.student-nav-signout,
+.student-mobile-toggle {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.student-nav-link,
+.student-nav-trigger,
+.student-mobile-link,
+.student-mobile-trigger {
+  color: var(--text);
+}
+
+.student-nav-link-active,
+.student-nav-trigger-active,
+.student-mobile-link-active,
+.student-mobile-trigger-active,
+.student-nav-item-active {
+  background: rgba(52, 97, 255, 0.12);
+  border-color: rgba(52, 97, 255, 0.24);
+  box-shadow: 0 6px 18px rgba(52, 97, 255, 0.14);
+  color: var(--primary);
+}
+
+.student-nav-link-inactive:hover,
+.student-nav-trigger-inactive:hover,
+.student-nav-item-inactive:hover,
+.student-mobile-link-inactive:hover,
+.student-mobile-trigger-inactive:hover {
+  background: rgba(52, 97, 255, 0.06);
+  border-color: rgba(52, 97, 255, 0.16);
+  color: var(--heading);
+}
+
+.student-nav-menu,
+.student-mobile-panel,
+.student-mobile-group {
+  background: rgba(255, 255, 255, 0.84);
+  border-color: var(--border);
+  box-shadow: var(--shadowHover);
+  backdrop-filter: blur(24px) saturate(1.45);
+}
+
+.student-nav-item {
+  color: var(--text);
+}
+
+.student-nav-signout,
+.student-mobile-signout {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--border) !important;
+  color: var(--heading) !important;
+  box-shadow: none;
+}
+
+.student-nav-signout:hover,
+.student-mobile-signout:hover {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(52, 97, 255, 0.22) !important;
+  box-shadow: var(--shadow);
+  color: var(--primary) !important;
+  transform: translateY(-1px);
+}
+
+.student-mobile-toggle {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--border);
+  color: var(--heading);
+  box-shadow: none;
+}
+
+.student-mobile-toggle:hover {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(52, 97, 255, 0.24);
+  color: var(--primary);
+}
+
+.student-mobile-shell {
+  border-color: var(--border);
+  background: rgba(240, 242, 247, 0.84);
+}
+
+.student-main {
+  position: relative;
+  z-index: 1;
+}
+
+.student-content {
+  position: relative;
+  z-index: 1;
+}
+
+.student-experience .ui-card,
+.student-experience .ui-input,
+.student-experience .ui-select,
+.student-experience .ui-textarea {
+  backdrop-filter: blur(18px) saturate(1.35);
+}
+
+.student-experience .ui-card {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+
+.student-experience .ui-card:hover {
+  box-shadow: var(--shadowHover);
+}
+
+.student-experience .ui-input,
+.student-experience .ui-select,
+.student-experience .ui-textarea {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: var(--border);
+}
+
+.student-experience .ui-button {
+  box-shadow: none;
+}
+
+.student-experience .ui-button:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.student-experience .ui-badge {
+  border-color: rgba(52, 97, 255, 0.14);
+}
+
+.student-dashboard .student-hero,
+.student-dashboard .student-panel,
+.student-dashboard .student-sheet,
+.student-dashboard .student-soft-block,
+.student-dashboard .student-empty-block,
+.student-dashboard .student-modal {
+  border-color: var(--border);
+}
+
+.student-dashboard .student-hero {
+  background:
+    radial-gradient(circle at top left, rgba(52, 97, 255, 0.12), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(13, 181, 200, 0.1), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.92));
+  box-shadow: var(--shadowHover);
+}
+
+.student-dashboard .student-hero-ambient {
+  display: none;
+}
+
+.student-dashboard .student-panel,
+.student-dashboard .student-sheet,
+.student-dashboard .student-modal {
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadowHover);
+  backdrop-filter: blur(24px) saturate(1.45);
+}
+
+.student-dashboard .student-soft-block {
+  background: rgba(240, 242, 247, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.student-dashboard .student-empty-block {
+  background: rgba(240, 242, 247, 0.62);
+  border-style: dashed;
+}
+
+.student-dashboard .student-chip {
+  background: rgba(52, 97, 255, 0.08);
+  border-color: rgba(52, 97, 255, 0.18);
+  color: var(--primary);
+}
+
+.student-dashboard .student-progress-track {
+  background: rgba(180, 190, 220, 0.26);
+}
+
+.student-dashboard .student-progress-fill {
+  background: linear-gradient(90deg, var(--primary) 0%, #0db5c8 100%);
+}
+
+.student-dashboard .student-status-critical {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.18);
+  color: #dc2626;
+}
+
+.student-dashboard .student-status-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.18);
+  color: #d97706;
+}
+
+.student-dashboard .student-status-positive {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.18);
+  color: #059669;
+}
+
+.student-dashboard .student-metric-card {
+  overflow: hidden;
+  position: relative;
+}
+
+.student-dashboard .student-metric-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -22px -28px auto;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  opacity: 0.08;
+  background: currentColor;
+}
+
+.student-dashboard .student-metric-sky {
+  color: #3461ff;
+}
+
+.student-dashboard .student-metric-green {
+  color: #10b981;
+}
+
+.student-dashboard .student-metric-violet {
+  color: #8b5cf6;
+}
+
+.student-dashboard .student-metric-amber {
+  color: #f59e0b;
+}
+
+.student-dashboard .student-panel-accent {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 255, 0.94));
+}
+
+.student-course-page,
+.student-course-detail-page,
+.student-booking-page,
+.student-gamification-page,
+.student-quizzes-page,
+.student-performance-page {
+  --student-card-accent: rgba(52, 97, 255, 0.16);
+  --student-card-accent-ring: rgba(52, 97, 255, 0.08);
+}
+
+.student-course-page .ui-card,
+.student-course-detail-page .ui-card,
+.student-booking-page .ui-card,
+.student-gamification-page .ui-card,
+.student-quizzes-page .ui-card,
+.student-performance-page .ui-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.72) 26%, transparent 56%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  border-color: var(--border);
+  box-shadow: var(--shadowHover);
+  backdrop-filter: blur(24px) saturate(1.45);
+}
+
+.student-course-page .ui-card::before,
+.student-course-detail-page .ui-card::before,
+.student-booking-page .ui-card::before,
+.student-gamification-page .ui-card::before,
+.student-quizzes-page .ui-card::before,
+.student-performance-page .ui-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 90px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent);
+  pointer-events: none;
+}
+
+.student-course-page .ui-card::after,
+.student-course-detail-page .ui-card::after,
+.student-booking-page .ui-card::after,
+.student-gamification-page .ui-card::after,
+.student-quizzes-page .ui-card::after,
+.student-performance-page .ui-card::after {
+  content: "";
+  position: absolute;
+  right: -22px;
+  bottom: -28px;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: var(--student-card-accent);
+  box-shadow: 0 0 0 30px var(--student-card-accent-ring);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.student-course-page .ui-card > *,
+.student-course-detail-page .ui-card > *,
+.student-booking-page .ui-card > *,
+.student-gamification-page .ui-card > *,
+.student-quizzes-page .ui-card > *,
+.student-performance-page .ui-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.student-course-page {
+  --student-card-accent: rgba(52, 97, 255, 0.16);
+  --student-card-accent-ring: rgba(13, 181, 200, 0.08);
+}
+
+.student-course-detail-page {
+  --student-card-accent: rgba(52, 97, 255, 0.16);
+  --student-card-accent-ring: rgba(139, 92, 246, 0.08);
+}
+
+.student-booking-page {
+  --student-card-accent: rgba(245, 158, 11, 0.14);
+  --student-card-accent-ring: rgba(52, 97, 255, 0.08);
+}
+
+.student-gamification-page {
+  --student-card-accent: rgba(139, 92, 246, 0.14);
+  --student-card-accent-ring: rgba(52, 97, 255, 0.08);
+}
+
+.student-quizzes-page {
+  --student-card-accent: rgba(52, 97, 255, 0.16);
+  --student-card-accent-ring: rgba(245, 158, 11, 0.08);
+}
+
+.student-performance-page {
+  --student-card-accent: rgba(14, 165, 233, 0.15);
+  --student-card-accent-ring: rgba(245, 158, 11, 0.08);
+}
+
+.student-course-page .student-soft-card,
+.student-course-detail-page .student-soft-card,
+.student-booking-page .student-soft-card,
+.student-gamification-page .student-soft-card,
+.student-quizzes-page .student-soft-card,
+.student-performance-page .student-soft-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  backdrop-filter: blur(18px) saturate(1.3);
+}
+
+.student-performance-page .student-empty-state-panel {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(20px) saturate(1.35);
+}
+
+.student-course-detail-page .student-card-current {
+  border-color: rgba(52, 97, 255, 0.26) !important;
+  background:
+    radial-gradient(circle at top left, rgba(52, 97, 255, 0.12), transparent 30%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 255, 0.96));
+}
+
+@media (max-width: 1024px) {
+  .student-brand {
+    font-size: 1.125rem;
+  }
+}

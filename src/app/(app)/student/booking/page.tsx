@@ -198,7 +198,7 @@ export default function StudentBookingPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="student-booking-page space-y-4">
         <Skeleton className="h-7 w-24" />
         <Card>
           <Skeleton className="h-16 w-full" />
@@ -209,7 +209,7 @@ export default function StudentBookingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="student-booking-page space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-heading">Booking</h1>
         <p className="text-sm text-text/72">
@@ -236,7 +236,7 @@ export default function StudentBookingPage() {
           <div className="grid gap-4 md:grid-cols-2">
             {groupedSlots.map((lecturer) => (
               <div
-                className="rounded-xl border border-border p-4"
+                className="student-soft-card rounded-xl border border-border p-4"
                 key={lecturer.lecturerId}
               >
                 <p className="text-sm font-semibold text-heading">
@@ -248,7 +248,7 @@ export default function StudentBookingPage() {
                 <div className="mt-3 grid gap-2">
                   {lecturer.slots.map((slot) => (
                     <div
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                      className="student-soft-card flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
                       key={slot.id}
                     >
                       <div>
@@ -283,7 +283,7 @@ export default function StudentBookingPage() {
           ) : (
             bookings.map((booking) => (
               <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4"
+                className="student-soft-card flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4"
                 key={booking.id}
               >
                 <div>

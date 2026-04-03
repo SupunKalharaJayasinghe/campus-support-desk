@@ -12,7 +12,7 @@ export default function Select({
   return (
     <select
       className={cn(
-        "w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors",
+        "ui-select w-full rounded-[16px] border border-border bg-card px-3.5 py-2.5 text-sm text-text transition-colors",
         "focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         className
       )}

@@ -393,7 +393,7 @@ function getConfigActionKey(action: ConfigActionItem) {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-8">
+    <div className="student-gamification-page space-y-8">
       <div className="space-y-3">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-10 w-64" />
@@ -435,29 +435,31 @@ function LoadingSkeleton() {
 
 function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
   return (
-    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-4">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-            <BookOpen size={22} />
-          </span>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
-              Student Portal / Gamification
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
-              {STUDENT_PROFILE_EMPTY_TITLE}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
-              {STUDENT_PROFILE_EMPTY_MESSAGE}
-            </p>
+    <div className="student-gamification-page">
+      <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-4">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+              <BookOpen size={22} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
+                Student Portal / Gamification
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+                {STUDENT_PROFILE_EMPTY_TITLE}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+                {STUDENT_PROFILE_EMPTY_MESSAGE}
+              </p>
+            </div>
           </div>
+          <Button onClick={onRetry} variant="secondary">
+            Retry
+          </Button>
         </div>
-        <Button onClick={onRetry} variant="secondary">
-          Retry
-        </Button>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -720,7 +722,7 @@ export default function StudentGamificationPage() {
 
   if (error || !summary) {
     return (
-      <div className="space-y-8">
+      <div className="student-gamification-page space-y-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-text/55">
@@ -767,7 +769,7 @@ export default function StudentGamificationPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="student-gamification-page space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-text/55">
