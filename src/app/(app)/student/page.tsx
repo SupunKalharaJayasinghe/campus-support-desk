@@ -721,7 +721,7 @@ export default function StudentDashboardPage() {
         <div className="mt-4">
           <Link
             className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-            href="/announcements"
+            href="/student/announcements"
           >
             View All
           </Link>

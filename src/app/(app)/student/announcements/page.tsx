@@ -1,5 +1,11 @@
-import { redirect } from "next/navigation";
+import AnnouncementsPortalPage from "@/components/announcements/AnnouncementsPortalPage";
 
-export default function StudentAnnouncementsRedirectPage() {
-  redirect("/announcements");
+export default function StudentAnnouncementsPage() {
+  return (
+    <AnnouncementsPortalPage
+      contained={false}
+      includeTopNav={false}
+      showCreateButton={false}
+    />
+  );
 }
