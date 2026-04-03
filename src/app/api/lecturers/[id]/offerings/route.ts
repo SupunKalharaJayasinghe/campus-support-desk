@@ -3,8 +3,8 @@ import "@/models/ModuleOffering";
 import { findDegreeProgram } from "@/models/degree-program-store";
 import { findFaculty } from "@/models/faculty-store";
 import { findIntakeById, listIntakes } from "@/models/intake-store";
+import { deriveAcademicPeriodFromOffering } from "@/lib/academic-period";
 import { connectMongoose } from "@/models/mongoose";
-import { listModuleOfferingsByLecturerId, type ModuleOfferingRecord } from "@/models/module-offering-store";
 import { findModuleByCode, findModuleById } from "@/models/module-store";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 
@@ -82,6 +82,10 @@ function toApiOffering(item: {
   const degree = findDegreeProgram(item.degreeProgramId);
   const intake = findIntakeById(item.intakeId);
   const moduleRecord = findModuleById(item.moduleId) ?? findModuleByCode(item.moduleCode);
+  const academicPeriod = deriveAcademicPeriodFromOffering({
+    intakeName: item.intakeName || intake?.name || "",
+    termCode: item.termCode,
+  });
 
   return {
     id: item.id,
@@ -98,6 +102,8 @@ function toApiOffering(item: {
     syllabusVersion: item.syllabusVersion,
     status: item.status,
     currentTerm: intake?.currentTerm ?? "",
+    academicYear: academicPeriod.academicYear,
+    semester: academicPeriod.semester,
     updatedAt: item.updatedAt,
   };
 }
@@ -157,23 +163,6 @@ function normalizeDbOffering(value: unknown) {
       row.assignedLecturers
     ),
   };
-}
-
-function toApiFromMemory(item: ModuleOfferingRecord) {
-  return toApiOffering({
-    id: item.id,
-    facultyId: item.facultyId,
-    degreeProgramId: item.degreeProgramId,
-    intakeId: item.intakeId,
-    intakeName: item.intakeName,
-    termCode: item.termCode,
-    moduleId: item.moduleId,
-    moduleCode: item.moduleCode,
-    moduleName: item.moduleName,
-    syllabusVersion: item.syllabusVersion,
-    status: item.status,
-    updatedAt: item.updatedAt,
-  });
 }
 
 export async function GET(

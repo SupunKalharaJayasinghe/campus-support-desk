@@ -1,5 +1,7 @@
 "use client";
 
+import "./student-experience.css";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -112,10 +114,10 @@ function NavDropdownItem({
   return (
     <Link
       className={[
-        "flex items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-all duration-150",
+        "student-nav-item flex items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-all duration-150",
         active
-          ? "border-[#034AA6]/30 bg-[#034AA6]/10 font-medium text-[#034AA6]"
-          : "border-transparent text-[#26150F]/82 hover:border-[#034AA6]/16 hover:bg-[#034AA6]/6 hover:text-[#0339A6]",
+          ? "student-nav-item-active font-medium"
+          : "student-nav-item-inactive border-transparent",
       ].join(" ")}
       href={item.href}
       onClick={onClick}
@@ -233,9 +235,10 @@ export default function StudentLayout({
 
   return (
     <RoleGuard allowedRole="STUDENT">
-      <div className="min-h-screen bg-bg">
+      <div className="student-experience">
+        <div className="student-shell min-h-screen bg-bg">
         <header
-          className="fixed inset-x-0 top-0 z-40 border-b border-[#BFBFBF]/45 bg-white/96 shadow-[0_6px_24px_rgba(38,21,15,0.05)] backdrop-blur"
+          className="student-header fixed inset-x-0 top-0 z-40 border-b backdrop-blur"
           ref={navRef}
         >
           <Container
@@ -244,7 +247,7 @@ export default function StudentLayout({
           >
             <div className="flex min-w-0 items-center gap-3">
               <Link
-                className="inline-flex items-center rounded-lg px-1 py-1 text-base font-semibold tracking-tight text-[#0A0A0A] transition-colors hover:text-[#0339A6]"
+                className="student-brand inline-flex items-center rounded-lg px-1 py-1 transition-colors"
                 href="/student"
               >
                 UniHub
@@ -254,10 +257,10 @@ export default function StudentLayout({
             <nav className="hidden min-w-0 flex-1 items-center justify-center gap-2 md:flex">
               <Link
                 className={[
-                  "inline-flex items-center rounded-full border px-3 py-2 text-sm font-medium transition-all duration-150",
+                  "student-nav-link inline-flex items-center rounded-full border px-3 py-2 text-sm font-medium transition-all duration-150",
                   isActivePath(pathname, DASHBOARD_LINK.href)
-                    ? "border-[#034AA6]/30 bg-[#034AA6]/10 text-[#034AA6]"
-                    : "border-transparent text-[#26150F]/82 hover:border-[#034AA6]/18 hover:bg-[#034AA6]/6 hover:text-[#0339A6]",
+                    ? "student-nav-link-active"
+                    : "student-nav-link-inactive border-transparent",
                 ].join(" ")}
                 href={DASHBOARD_LINK.href}
               >
@@ -273,10 +276,10 @@ export default function StudentLayout({
                     <button
                       aria-expanded={open}
                       className={[
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all duration-150",
+                        "student-nav-trigger inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-all duration-150",
                         active || open
-                          ? "border-[#034AA6]/30 bg-[#034AA6]/10 text-[#034AA6]"
-                          : "border-transparent text-[#26150F]/82 hover:border-[#034AA6]/18 hover:bg-[#034AA6]/6 hover:text-[#0339A6]",
+                          ? "student-nav-trigger-active"
+                          : "student-nav-trigger-inactive border-transparent",
                       ].join(" ")}
                       onClick={() => toggleDropdown(group.key)}
                       type="button"
@@ -293,7 +296,7 @@ export default function StudentLayout({
                     <div
                       aria-hidden={!open}
                       className={[
-                        "absolute left-0 top-[calc(100%+0.6rem)] w-56 rounded-2xl border border-[#BFBFBF]/55 bg-white p-2 shadow-[0_18px_40px_rgba(38,21,15,0.12)] transition-all duration-150",
+                        "student-nav-menu absolute left-0 top-[calc(100%+0.6rem)] w-56 rounded-2xl border p-2 transition-all duration-150",
                         open
                           ? "visible translate-y-0 opacity-100"
                           : "pointer-events-none invisible translate-y-2 opacity-0",
@@ -317,7 +320,7 @@ export default function StudentLayout({
 
             <div className="ml-auto hidden items-center justify-end md:flex">
               <Button
-                className="border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
+                className="student-nav-signout"
                 onClick={handleSignOut}
                 variant="secondary"
               >
@@ -329,7 +332,7 @@ export default function StudentLayout({
             <button
               aria-expanded={mobileMenuOpen}
               aria-label="Toggle student navigation menu"
-              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#26150F]/24 text-[#26150F] transition-colors duration-150 hover:border-[#0339A6]/45 hover:text-[#0339A6] md:hidden"
+              className="student-mobile-toggle ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-colors duration-150 md:hidden"
               onClick={toggleMobileMenu}
               type="button"
             >
@@ -339,19 +342,19 @@ export default function StudentLayout({
 
           <div
             className={[
-              "overflow-hidden border-t border-[#BFBFBF]/45 bg-white transition-all duration-200 md:hidden",
+              "student-mobile-shell overflow-hidden border-t transition-all duration-200 md:hidden",
               mobileMenuOpen ? "max-h-[85vh] opacity-100" : "max-h-0 opacity-0",
             ].join(" ")}
           >
             <Container className="py-3" size="6xl">
-              <div className="rounded-2xl border border-[#BFBFBF]/55 bg-white p-3 shadow-[0_10px_32px_rgba(38,21,15,0.08)]">
+              <div className="student-mobile-panel rounded-2xl border p-3">
                 <div className="space-y-2">
                   <Link
                     className={[
-                      "flex items-center gap-3 rounded-xl border px-3 py-3 text-sm transition-all duration-150",
+                      "student-mobile-link flex items-center gap-3 rounded-xl border px-3 py-3 text-sm transition-all duration-150",
                       isActivePath(pathname, DASHBOARD_LINK.href)
-                        ? "border-[#034AA6]/30 bg-[#034AA6]/10 font-medium text-[#034AA6]"
-                        : "border-transparent text-[#26150F]/82 hover:border-[#034AA6]/18 hover:bg-[#034AA6]/6 hover:text-[#0339A6]",
+                        ? "student-mobile-link-active font-medium"
+                        : "student-mobile-link-inactive border-transparent",
                     ].join(" ")}
                     href={DASHBOARD_LINK.href}
                     onClick={closeMenus}
@@ -366,16 +369,16 @@ export default function StudentLayout({
 
                     return (
                       <div
-                        className="rounded-2xl border border-[#BFBFBF]/45 bg-[#FBFAF8]"
+                        className="student-mobile-group rounded-2xl border"
                         key={group.key}
                       >
                         <button
                           aria-expanded={open}
                           className={[
-                            "flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-medium transition-colors duration-150",
+                            "student-mobile-trigger flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-medium transition-colors duration-150",
                             active || open
-                              ? "text-[#034AA6]"
-                              : "text-[#26150F]/88 hover:text-[#0339A6]",
+                              ? "student-mobile-trigger-active"
+                              : "student-mobile-trigger-inactive",
                           ].join(" ")}
                           onClick={() => toggleMobileSection(group.key)}
                           type="button"
@@ -395,7 +398,7 @@ export default function StudentLayout({
                             open ? "max-h-80 px-3 pb-3 opacity-100" : "max-h-0 opacity-0",
                           ].join(" ")}
                         >
-                          <div className="space-y-1 border-t border-[#BFBFBF]/45 pt-3">
+                          <div className="space-y-1 border-t border-border pt-3">
                             {group.items.map((item) => (
                               <NavDropdownItem
                                 active={isActivePath(pathname, item.href)}
@@ -412,7 +415,7 @@ export default function StudentLayout({
                 </div>
 
                 <Button
-                  className="mt-3 w-full justify-center border-[#26150F]/28 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-white hover:text-[#0339A6]"
+                  className="student-mobile-signout mt-3 w-full justify-center"
                   onClick={handleSignOut}
                   variant="secondary"
                 >
@@ -424,9 +427,12 @@ export default function StudentLayout({
           </div>
         </header>
 
-        <main className="px-0 pb-8 pt-20">
-          <Container size="6xl">{children}</Container>
+        <main className="student-main px-0 pb-8 pt-20">
+          <Container className="student-content" size="6xl">
+            {children}
+          </Container>
         </main>
+      </div>
       </div>
     </RoleGuard>
   );

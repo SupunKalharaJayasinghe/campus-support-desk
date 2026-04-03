@@ -33,7 +33,7 @@ export default function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+        "ui-badge inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         variantClasses[variant],
         className
       )}

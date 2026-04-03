@@ -4,6 +4,7 @@ import "@/models/ModuleOffering";
 import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import "@/models/User";
+import { deriveAcademicPeriodFromOffering } from "@/lib/academic-period";
 import { connectMongoose } from "@/lib/mongoose";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { QuizModel } from "@/models/Quiz";
@@ -361,19 +362,43 @@ export async function PUT(
         quiz.shuffleOptions = Boolean(body.shuffleOptions);
       }
 
-      if (Object.prototype.hasOwnProperty.call(body, "academicYear")) {
-        quiz.academicYear = collapseSpaces(body.academicYear) || undefined;
-      }
-
-      if (Object.prototype.hasOwnProperty.call(body, "semester")) {
-        const semester = sanitizeSemester(body.semester);
-        if (semester === null) {
+      if (
+        Object.prototype.hasOwnProperty.call(body, "moduleOfferingId") ||
+        Object.prototype.hasOwnProperty.call(body, "academicYear") ||
+        Object.prototype.hasOwnProperty.call(body, "semester")
+      ) {
+        const semester =
+          Object.prototype.hasOwnProperty.call(body, "semester")
+            ? sanitizeSemester(body.semester)
+            : sanitizeSemester(quiz.semester);
+        if (
+          Object.prototype.hasOwnProperty.call(body, "semester") &&
+          semester === null
+        ) {
           return NextResponse.json(
             { success: false, error: "Semester must be 1 or 2" },
             { status: 400 }
           );
         }
-        quiz.semester = semester;
+
+        const offeringForContext = await ModuleOfferingModel.findById(quiz.moduleOfferingId)
+          .lean()
+          .exec()
+          .catch(() => null);
+        const academicContext = deriveAcademicPeriodFromOffering({
+          intakeName: (offeringForContext as { intakeName?: unknown } | null)?.intakeName,
+          termCode: (offeringForContext as { termCode?: unknown } | null)?.termCode,
+        });
+
+        quiz.academicYear =
+          academicContext.academicYear ||
+          collapseSpaces(
+            Object.prototype.hasOwnProperty.call(body, "academicYear")
+              ? body.academicYear
+              : quiz.academicYear
+          ) ||
+          undefined;
+        quiz.semester = academicContext.semester ?? semester ?? undefined;
       }
     }
 

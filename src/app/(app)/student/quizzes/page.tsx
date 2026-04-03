@@ -106,6 +106,11 @@ function normalizeText(value: unknown) {
   return collapseSpaces(value).toLowerCase();
 }
 
+const QUIZ_PRIMARY_BUTTON_CLASS =
+  "gap-2 border border-[#034aa6] bg-[#034aa6] text-white shadow-[0_16px_32px_rgba(3,74,166,0.22)] hover:border-[#023a82] hover:bg-[#023a82] hover:shadow-[0_20px_36px_rgba(3,74,166,0.28)]";
+const QUIZ_SECONDARY_BUTTON_CLASS =
+  "gap-2 border border-[#bfd3fb] bg-[#eff6ff] text-[#034aa6] shadow-[0_12px_24px_rgba(59,130,246,0.12)] hover:border-[#93b4f6] hover:bg-[#dbeafe] hover:text-[#023a82]";
+
 function formatRelativeTime(date: Date | string | null | undefined) {
   if (!date) return "Just now";
   const now = new Date();
@@ -143,7 +148,7 @@ function buildStudentName(student: StudentLookupRecord) {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-8">
+    <div className="student-quizzes-page space-y-8">
       <div className="space-y-3">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-10 w-56" />
@@ -174,29 +179,31 @@ function LoadingSkeleton() {
 
 function StudentProfileEmptyState({ onRetry }: { onRetry: () => void }) {
   return (
-    <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-4">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-            <BookOpen size={22} />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
-              Student Portal / Quizzes
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
-              {STUDENT_PROFILE_EMPTY_TITLE}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
-              {STUDENT_PROFILE_EMPTY_MESSAGE}
-            </p>
+    <div className="student-quizzes-page">
+      <Card className="border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-4">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+              <BookOpen size={22} />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+                Student Portal / Quizzes
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-heading">
+                {STUDENT_PROFILE_EMPTY_TITLE}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-text/72">
+                {STUDENT_PROFILE_EMPTY_MESSAGE}
+              </p>
+            </div>
           </div>
+          <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={onRetry} variant="secondary">
+            Retry
+          </Button>
         </div>
-        <Button onClick={onRetry} variant="secondary">
-          Retry
-        </Button>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -307,27 +314,29 @@ export default function StudentQuizzesPage() {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-700">
-              Student Portal / Quizzes
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight text-red-900">
-              Failed to load quizzes
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-red-900/80">{error}</p>
+      <div className="student-quizzes-page">
+        <Card className="border-red-200 bg-red-50">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-700">
+                Student Portal / Quizzes
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-red-900">
+                Failed to load quizzes
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-red-900/80">{error}</p>
+            </div>
+            <Button className={QUIZ_SECONDARY_BUTTON_CLASS} onClick={() => void initializePage()} variant="secondary">
+              Retry
+            </Button>
           </div>
-          <Button onClick={() => void initializePage()} variant="secondary">
-            Retry
-          </Button>
-        </div>
-      </Card>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="student-quizzes-page space-y-8">
       <section className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#034aa6]">
           Student Portal / Quizzes
@@ -344,7 +353,12 @@ export default function StudentQuizzesPage() {
               </p>
             ) : null}
           </div>
-          <Button className="gap-2" disabled={refreshing} onClick={() => void initializePage(true)} variant="secondary">
+          <Button
+            className={QUIZ_SECONDARY_BUTTON_CLASS}
+            disabled={refreshing}
+            onClick={() => void initializePage(true)}
+            variant="secondary"
+          >
             <RefreshCw className={cn(refreshing && "animate-spin")} size={16} />
             Refresh
           </Button>
@@ -397,7 +411,7 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?resume=1`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <PlayCircle size={16} />
                         Continue
                       </Button>
@@ -447,7 +461,7 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <PlayCircle size={16} />
                         Start Quiz
                       </Button>
@@ -505,13 +519,13 @@ export default function StudentQuizzesPage() {
                   </div>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?review=1`}>
-                      <Button className="gap-2" variant="secondary">
+                      <Button className={QUIZ_SECONDARY_BUTTON_CLASS} variant="secondary">
                         <FileCheck2 size={16} />
                         View Results
                       </Button>
                     </Link>
                     <Link href={`/student/quizzes/${encodeURIComponent(item.quiz.id)}?resume=1&retry=1`}>
-                      <Button className="gap-2">
+                      <Button className={QUIZ_PRIMARY_BUTTON_CLASS}>
                         <ArrowRight size={16} />
                         Retry
                       </Button>

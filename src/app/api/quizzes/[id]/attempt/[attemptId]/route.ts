@@ -4,6 +4,7 @@ import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import "@/models/Student";
 import { connectMongoose } from "@/lib/mongoose";
+import { normalizeQuizQuestionType } from "@/lib/quiz-question-types";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { buildStudentName, collapseSpaces, readId, sanitizeQuizForStudent } from "../../../route";
 
@@ -13,6 +14,19 @@ function asObject(value: unknown): Record<string, unknown> | null {
   }
 
   return value as Record<string, unknown>;
+}
+
+function collectOptionIds(values: unknown[]) {
+  return Array.from(
+    new Set(values.map((value) => readId(value)).filter(Boolean))
+  );
+}
+
+function joinOptionTexts(values: Array<Record<string, unknown>>) {
+  return values
+    .map((value) => collapseSpaces(value.optionText))
+    .filter(Boolean)
+    .join(", ");
 }
 
 function buildAttemptResults(
@@ -33,23 +47,30 @@ function buildAttemptResults(
     const question = questionMap.get(readId(answerRow.questionId)) ?? null;
     const questionRow = asObject(question) ?? {};
     const options = Array.isArray(questionRow.options) ? questionRow.options : [];
-    const selectedOption = options.find((option) => {
-      const optionRow = asObject(option);
-      return readId(optionRow?._id ?? optionRow?.id) === readId(answerRow.selectedOptionId);
-    });
-    const correctOption = options.find((option) => Boolean(asObject(option)?.isCorrect));
+    const optionRows = options
+      .map((option) => asObject(option))
+      .filter((optionRow): optionRow is Record<string, unknown> => Boolean(optionRow));
+    const selectedOptionIds = collectOptionIds([
+      ...(Array.isArray(answerRow.selectedOptionIds) ? answerRow.selectedOptionIds : []),
+      answerRow.selectedOptionId,
+    ]);
+    const selectedOptions = optionRows.filter((optionRow) =>
+      selectedOptionIds.includes(readId(optionRow._id ?? optionRow.id))
+    );
+    const correctOptions = optionRows.filter((optionRow) => Boolean(optionRow.isCorrect));
 
     return {
       questionId: readId(answerRow.questionId),
       questionText: collapseSpaces(questionRow.questionText),
+      questionType: normalizeQuizQuestionType(questionRow.questionType) ?? "",
       isCorrect: Boolean(answerRow.isCorrect),
       marksAwarded: Number(answerRow.marksAwarded ?? 0),
       questionMarks: Number(answerRow.questionMarks ?? 0),
       correctAnswer:
-        collapseSpaces(asObject(correctOption)?.optionText) ||
+        joinOptionTexts(correctOptions) ||
         collapseSpaces(questionRow.correctAnswer),
       selectedAnswer:
-        collapseSpaces(asObject(selectedOption)?.optionText) ||
+        joinOptionTexts(selectedOptions) ||
         collapseSpaces(answerRow.answerText),
     };
   });
@@ -128,6 +149,7 @@ export async function GET(
     const attemptStatus = collapseSpaces(attemptRow.status);
     const showResultsImmediately = Boolean(quiz.showResultsImmediately);
     const showCorrectAnswers = Boolean(quiz.showCorrectAnswers);
+    const showAnswerDetails = showResultsImmediately || showCorrectAnswers;
 
     if (attemptStatus === "in_progress") {
       return NextResponse.json({
@@ -181,10 +203,14 @@ export async function GET(
             attemptRow.submittedAt instanceof Date
               ? attemptRow.submittedAt.toISOString()
               : attemptRow.submittedAt ?? null,
-          score: Number(attemptRow.score ?? 0),
-          totalMarks: Number(attemptRow.totalMarks ?? 0),
-          percentage: Number(attemptRow.percentage ?? 0),
-          passed: Boolean(attemptRow.passed),
+          ...(showResultsImmediately
+            ? {
+                score: Number(attemptRow.score ?? 0),
+                totalMarks: Number(attemptRow.totalMarks ?? 0),
+                percentage: Number(attemptRow.percentage ?? 0),
+                passed: Boolean(attemptRow.passed),
+              }
+            : {}),
           isOnTime: Boolean(attemptRow.isOnTime),
           isWithinTimeLimit: Boolean(attemptRow.isWithinTimeLimit),
           timeTaken: Number(attemptRow.timeTaken ?? 0),
@@ -205,14 +231,19 @@ export async function GET(
           name: buildStudentName(student),
           registrationNumber: collapseSpaces(student.studentId),
         },
-        results: showResultsImmediately
+        results: showAnswerDetails
           ? {
               answers: results.map((result) => ({
                 questionId: result.questionId,
                 questionText: result.questionText,
-                isCorrect: result.isCorrect,
-                marksAwarded: result.marksAwarded,
-                questionMarks: result.questionMarks,
+                questionType: result.questionType,
+                ...(showResultsImmediately
+                  ? {
+                      isCorrect: result.isCorrect,
+                      marksAwarded: result.marksAwarded,
+                      questionMarks: result.questionMarks,
+                    }
+                  : {}),
                 ...(showCorrectAnswers && result.correctAnswer
                   ? { correctAnswer: result.correctAnswer }
                   : {}),

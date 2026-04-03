@@ -117,7 +117,7 @@ export default function StudentMyCoursePage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="student-course-page space-y-4">
         <Skeleton className="h-7 w-44" />
         <Card>
           <Skeleton className="h-12 w-full" />
@@ -131,17 +131,19 @@ export default function StudentMyCoursePage() {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
-        <h1 className="text-2xl font-semibold text-red-900">My Course</h1>
-        <p className="mt-2 text-sm text-red-800/85">{error}</p>
-      </Card>
+      <div className="student-course-page">
+        <Card>
+          <h1 className="text-2xl font-semibold text-red-900">My Course</h1>
+          <p className="mt-2 text-sm text-red-800/85">{error}</p>
+        </Card>
+      </div>
     );
   }
 
   const modules = data?.items ?? [];
 
   return (
-    <div className="space-y-5">
+    <div className="student-course-page space-y-5">
       <Card>
         <h1 className="text-2xl font-semibold text-heading">My Course</h1>
         <p className="mt-2 text-sm text-text/75">

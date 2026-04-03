@@ -1,5 +1,4 @@
 import {
-  isDemoModeEnabled,
   readStoredUser,
   updateStoredUser,
   type DemoUser,
@@ -229,20 +228,7 @@ function syncStoredStudent(student: StudentPortalRecord) {
 }
 
 export function getStudentPortalSessionUser() {
-  const stored = readStoredUser();
-  if (stored) {
-    return stored;
-  }
-
-  if (!isDemoModeEnabled()) {
-    return null;
-  }
-
-  return {
-    id: "",
-    name: "Demo Student",
-    role: "STUDENT",
-  } satisfies DemoUser;
+  return readStoredUser();
 }
 
 export async function resolveCurrentStudentRecord(user?: DemoUser | null) {
@@ -304,28 +290,6 @@ export async function resolveCurrentStudentRecord(user?: DemoUser | null) {
     const detailedMatch = (await fetchStudentDetail(match.id)) ?? match;
     syncStoredStudent(detailedMatch);
     return detailedMatch;
-  }
-
-  if (isDemoModeEnabled()) {
-    const response = await fetch("/api/students?page=1&pageSize=100&sort=az", {
-      cache: "no-store",
-    });
-    const payload = await readJson<{ error?: string; message?: string; items?: unknown }>(
-      response
-    );
-    if (response.ok) {
-      hadSuccessfulLookup = true;
-      const fallback = parseStudentItems(payload)[0] ?? null;
-      if (fallback) {
-        const detailedFallback = (await fetchStudentDetail(fallback.id)) ?? fallback;
-        syncStoredStudent(detailedFallback);
-        return detailedFallback;
-      }
-    } else {
-      lastLookupError =
-        collapseSpaces(payload?.error ?? payload?.message) ||
-        "Failed to look up your student profile.";
-    }
   }
 
   if (!hadSuccessfulLookup && lastLookupError) {

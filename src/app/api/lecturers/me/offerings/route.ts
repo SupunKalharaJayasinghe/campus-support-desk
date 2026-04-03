@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/ModuleOffering";
 import "@/models/User";
+import { deriveAcademicPeriodFromOffering } from "@/lib/academic-period";
 import { connectMongoose } from "@/models/mongoose";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
@@ -199,20 +200,29 @@ export async function GET(request: Request) {
     .filter((row): row is NonNullable<ReturnType<typeof normalizeDbOffering>> =>
       Boolean(row)
     )
-    .map((row) => ({
-      id: row.id,
-      facultyId: row.facultyId,
-      degreeProgramId: row.degreeProgramId,
-      intakeId: row.intakeId,
-      intakeName: row.intakeName,
-      termCode: row.termCode,
-      moduleId: row.moduleId,
-      moduleCode: row.moduleCode,
-      moduleName: row.moduleName,
-      syllabusVersion: row.syllabusVersion,
-      status: row.status,
-      updatedAt: row.updatedAt,
-    }));
+    .map((row) => {
+      const academicPeriod = deriveAcademicPeriodFromOffering({
+        intakeName: row.intakeName,
+        termCode: row.termCode,
+      });
+
+      return {
+        id: row.id,
+        facultyId: row.facultyId,
+        degreeProgramId: row.degreeProgramId,
+        intakeId: row.intakeId,
+        intakeName: row.intakeName,
+        termCode: row.termCode,
+        moduleId: row.moduleId,
+        moduleCode: row.moduleCode,
+        moduleName: row.moduleName,
+        syllabusVersion: row.syllabusVersion,
+        status: row.status,
+        academicYear: academicPeriod.academicYear,
+        semester: academicPeriod.semester,
+        updatedAt: row.updatedAt,
+      };
+    });
 
   return NextResponse.json({
     items,

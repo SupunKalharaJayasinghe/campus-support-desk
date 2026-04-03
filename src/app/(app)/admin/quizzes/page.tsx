@@ -26,8 +26,10 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
+import { deriveAcademicPeriodFromOffering } from "@/lib/academic-period";
 import { useToast } from "@/components/ui/ToastProvider";
-import { readStoredUser, type DemoUser } from "@/lib/rbac";
+import type { QuizQuestionType } from "@/lib/quiz-question-types";
+import { readStoredUser } from "@/lib/rbac";
 import {
   collapseValidationWhitespace,
   countValidationMessages,
@@ -38,7 +40,7 @@ import {
 
 type PageSize = 10 | 25 | 50 | 100;
 type QuizStatus = "draft" | "published" | "closed" | "archived";
-type QuestionType = "mcq" | "true-false" | "short-answer";
+type QuestionType = QuizQuestionType;
 type SortOption = "newest" | "deadline" | "title";
 type ResultSortKey = "score" | "name" | "time";
 type QuizValidationMode = "draft" | "publish";
@@ -49,12 +51,8 @@ interface ModuleOfferingOption {
   moduleName: string;
   intakeName: string;
   termCode: string;
-}
-
-interface LecturerLookupRecord {
-  id: string;
-  email: string;
-  fullName: string;
+  academicYear: string;
+  semester: "" | "1" | "2";
 }
 
 interface QuizOptionForm {
@@ -207,6 +205,10 @@ function collapseSpaces(value: unknown) {
 
 function normalizeText(value: unknown) {
   return collapseSpaces(value).toLowerCase();
+}
+
+function normalizeSemesterValue(value: unknown): "" | "1" | "2" {
+  return value === 1 || value === "1" ? "1" : value === 2 || value === "2" ? "2" : "";
 }
 
 function buildQuestionValidationKey(questionId: string, field: string) {
@@ -379,100 +381,24 @@ function parseModuleOfferings(payload: unknown) {
       const moduleCode = collapseSpaces(row.moduleCode);
       const moduleName = collapseSpaces(row.moduleName);
       if (!id || !moduleCode) return null;
+      const academicPeriod = deriveAcademicPeriodFromOffering({
+        intakeName: row.intakeName,
+        termCode: row.termCode,
+      });
       return {
         id,
         moduleCode,
         moduleName,
         intakeName: collapseSpaces(row.intakeName),
         termCode: collapseSpaces(row.termCode),
+        academicYear:
+          collapseSpaces(row.academicYear) || academicPeriod.academicYear,
+        semester:
+          normalizeSemesterValue(row.semester) ||
+          normalizeSemesterValue(academicPeriod.semester),
       } satisfies ModuleOfferingOption;
     })
     .filter((item): item is ModuleOfferingOption => Boolean(item));
-}
-
-function parseLecturerItems(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const items = Array.isArray((payload as { items?: unknown }).items)
-    ? ((payload as { items: unknown[] }).items as unknown[])
-    : [];
-
-  return items
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        return null;
-      }
-
-      const row = item as Record<string, unknown>;
-      const id = collapseSpaces(row.id ?? row._id);
-      const email = collapseSpaces(row.email).toLowerCase();
-      const fullName = collapseSpaces(row.fullName ?? row.name);
-
-      if (!id) {
-        return null;
-      }
-
-      return {
-        id,
-        email,
-        fullName,
-      } satisfies LecturerLookupRecord;
-    })
-    .filter((item): item is LecturerLookupRecord => Boolean(item));
-}
-
-function findBestLecturerMatch(items: LecturerLookupRecord[], user: DemoUser) {
-  const sessionEmail = normalizeText(user.email);
-  const sessionName = normalizeText(user.name);
-
-  if (sessionEmail) {
-    const emailMatch = items.find((item) => normalizeText(item.email) === sessionEmail);
-    if (emailMatch) {
-      return emailMatch;
-    }
-  }
-
-  if (sessionName) {
-    const nameMatch = items.find((item) => normalizeText(item.fullName) === sessionName);
-    if (nameMatch) {
-      return nameMatch;
-    }
-  }
-
-  return items.length === 1 ? items[0] : null;
-}
-
-async function resolveLecturerRecord(user: DemoUser) {
-  const candidates = [user.email, user.username, user.name]
-    .map((value) => collapseSpaces(value))
-    .filter(Boolean);
-  const seen = new Set<string>();
-
-  for (const candidate of candidates) {
-    const normalized = normalizeText(candidate);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-
-    const payload = await readLooseJson<{ items?: unknown }>(
-      await fetch(
-        `/api/lecturers?search=${encodeURIComponent(candidate)}&page=1&pageSize=100&sort=az`,
-        {
-          cache: "no-store",
-        }
-      )
-    );
-
-    const match = findBestLecturerMatch(parseLecturerItems(payload), user);
-    if (match) {
-      return match;
-    }
-  }
-
-  return null;
 }
 
 function parseQuizzes(payload: unknown) {
@@ -883,9 +809,9 @@ function validateQuizForm(
     });
 
     const correctCount = question.options.filter((option) => option.isCorrect).length;
-    if (correctCount !== 1) {
+    if (correctCount < 1) {
       errors.questionErrors[`${key}-correct-option`] =
-        "Exactly one correct answer must be selected";
+        "Select at least one correct answer";
     }
   });
 
@@ -927,6 +853,7 @@ function QuizModalShell({
   children,
   size = "xl",
   immersive = false,
+  renderAsPage = false,
 }: {
   title: string;
   description?: string;
@@ -934,7 +861,61 @@ function QuizModalShell({
   children: React.ReactNode;
   size?: "lg" | "xl" | "full";
   immersive?: boolean;
+  renderAsPage?: boolean;
 }) {
+  if (renderAsPage) {
+    return (
+      <div className="fadein">
+        <div
+          className={cn(
+            "mx-auto w-full rounded-[32px] border border-border bg-white shadow-[0_28px_70px_rgba(15,23,42,0.14)]",
+            immersive &&
+              "rounded-[24px] border-[rgba(180,190,220,0.4)] bg-white/96 shadow-[0_24px_60px_rgba(15,23,42,0.16)]",
+            size === "lg" && "max-w-4xl",
+            size === "xl" && "max-w-6xl",
+            size === "full" && "max-w-[min(1200px,100%)]"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-start justify-between gap-4 border-b border-border bg-white px-6 py-5",
+              immersive && "border-[rgba(180,190,220,0.35)] px-7 py-6"
+            )}
+          >
+            <div>
+              <h2 className="text-2xl font-semibold text-heading">{title}</h2>
+              {description ? (
+                <p className="mt-2 text-sm leading-6 text-text/72">
+                  {description}
+                </p>
+              ) : null}
+            </div>
+            <button
+              aria-label="Close builder"
+              className={cn(
+                "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/75 transition-colors hover:text-heading",
+                immersive &&
+                  "border-[rgba(180,190,220,0.35)] bg-[rgba(240,242,247,0.72)]"
+              )}
+              onClick={onClose}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div
+            className={cn(
+              "bg-white px-6 py-6",
+              immersive && "bg-[rgba(248,250,255,0.85)] px-7 py-7"
+            )}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -1033,6 +1014,55 @@ export default function AdminQuizzesPage() {
   const [formErrors, setFormErrors] = useState<QuizFormErrors>({ questionErrors: {} });
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [initialFormSnapshot, setInitialFormSnapshot] = useState("");
+  const selectedFormOffering = useMemo(
+    () =>
+      moduleOfferings.find((offering) => offering.id === form.moduleOfferingId) ?? null,
+    [form.moduleOfferingId, moduleOfferings]
+  );
+  const availableAcademicYears = useMemo(() => {
+    const scopedOfferings = selectedFormOffering ? [selectedFormOffering] : moduleOfferings;
+    return Array.from(
+      new Set(scopedOfferings.map((offering) => offering.academicYear).filter(Boolean))
+    );
+  }, [moduleOfferings, selectedFormOffering]);
+  const availableSemesters = useMemo(() => {
+    const scopedOfferings = selectedFormOffering
+      ? [selectedFormOffering]
+      : moduleOfferings.filter(
+          (offering) => !form.academicYear || offering.academicYear === form.academicYear
+        );
+    return Array.from(
+      new Set(
+        scopedOfferings
+          .map((offering) => offering.semester)
+          .filter((value): value is "1" | "2" => value === "1" || value === "2")
+      )
+    );
+  }, [form.academicYear, moduleOfferings, selectedFormOffering]);
+
+  useEffect(() => {
+    if (!selectedFormOffering) {
+      return;
+    }
+
+    setForm((previous) => {
+      const nextAcademicYear = previous.academicYear || selectedFormOffering.academicYear;
+      const nextSemester = previous.semester || selectedFormOffering.semester;
+
+      if (
+        nextAcademicYear === previous.academicYear &&
+        nextSemester === previous.semester
+      ) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        academicYear: nextAcademicYear,
+        semester: nextSemester,
+      };
+    });
+  }, [selectedFormOffering]);
 
   const totalMarks = useMemo(() => calculateTotalMarks(form.questions), [form.questions]);
   const draftValidation = useMemo(() => validateQuizForm(form, "draft"), [form]);
@@ -1046,7 +1076,10 @@ export default function AdminQuizzesPage() {
     [builderOpen, form, initialFormSnapshot]
   );
 
-  const isOverlayOpen = builderOpen || Boolean(previewQuiz || resultsData || deleteTarget);
+  const showLecturerBuilderPage = isLecturerView && builderOpen;
+  const isOverlayOpen =
+    (!isLecturerView && builderOpen) ||
+    Boolean(previewQuiz || resultsData || deleteTarget);
   const canSaveDraft =
     !saving &&
     countQuizValidationErrors(draftValidation) === 0 &&
@@ -1083,24 +1116,18 @@ export default function AdminQuizzesPage() {
   const loadModuleOfferings = useCallback(async () => {
     try {
       if (isLecturerView) {
-        if (!currentUser) {
-          setModuleOfferings([]);
-          return;
-        }
-
-        const lecturer = await resolveLecturerRecord(currentUser);
-        if (!lecturer) {
+        if (!currentUser?.id) {
           setModuleOfferings([]);
           return;
         }
 
         const payload = await readLooseJson<unknown>(
-          await fetch(
-            `/api/lecturers/${encodeURIComponent(lecturer.id)}/offerings`,
-            {
-              cache: "no-store",
-            }
-          )
+          await fetch("/api/lecturers/me/offerings", {
+            cache: "no-store",
+            headers: {
+              "x-user-id": currentUser.id,
+            },
+          })
         );
         setModuleOfferings(parseModuleOfferings(payload));
         return;
@@ -1515,6 +1542,18 @@ export default function AdminQuizzesPage() {
     }));
   }
 
+  function updateModuleOfferingSelection(moduleOfferingId: string) {
+    const selectedOffering =
+      moduleOfferings.find((offering) => offering.id === moduleOfferingId) ?? null;
+
+    setForm((previous) => ({
+      ...previous,
+      moduleOfferingId,
+      academicYear: selectedOffering?.academicYear ?? "",
+      semester: selectedOffering?.semester ?? "",
+    }));
+  }
+
   function addQuestion(afterIndex?: number) {
     setForm((previous) => {
       const insertIndex = typeof afterIndex === "number" ? afterIndex + 1 : previous.questions.length;
@@ -1614,7 +1653,7 @@ export default function AdminQuizzesPage() {
     }));
   }
 
-  function markCorrectOption(questionId: string, optionId: string) {
+  function toggleCorrectOption(questionId: string, optionId: string) {
     setForm((previous) => ({
       ...previous,
       questions: previous.questions.map((question) =>
@@ -1623,7 +1662,8 @@ export default function AdminQuizzesPage() {
               ...question,
               options: question.options.map((option) => ({
                 ...option,
-                isCorrect: option.id === optionId,
+                isCorrect:
+                  option.id === optionId ? !option.isCorrect : option.isCorrect,
               })),
             }
           : question
@@ -1666,6 +1706,16 @@ export default function AdminQuizzesPage() {
       Create Quiz
     </Button>
   );
+  const lecturerHeaderAction = showLecturerBuilderPage ? (
+    <Button className="h-11 rounded-2xl px-5" onClick={closeBuilder} variant="secondary">
+      Back to Quizzes
+    </Button>
+  ) : (
+    createQuizAction
+  );
+  const lecturerPageDescription = showLecturerBuilderPage
+    ? "Build the quiz on this page and save it when ready."
+    : pageDescription;
   const publishedQuizCount = quizzes.filter((quiz) => quiz.status === "published").length;
   const draftQuizCount = quizzes.filter((quiz) => quiz.status === "draft").length;
   const closingSoonCount = quizzes.filter((quiz) => {
@@ -1683,15 +1733,15 @@ export default function AdminQuizzesPage() {
         <div className="page-header fadein">
           <div>
             <div className="page-title">{pageTitle}</div>
-            <div className="page-subtitle">{pageDescription}</div>
+            <div className="page-subtitle">{lecturerPageDescription}</div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">{createQuizAction}</div>
+          <div className="flex flex-wrap items-center gap-2">{lecturerHeaderAction}</div>
         </div>
       ) : (
         <PageHeader actions={createQuizAction} description={pageDescription} title={pageTitle} />
       )}
 
-      {isLecturerView && !loading ? (
+      {!showLecturerBuilderPage && isLecturerView && !loading ? (
         <div className="stats-row fadein">
           {[
             { icon: <BarChart3 size={18} />, label: "Total quizzes", value: pagination.total, color: "var(--accent)" },
@@ -1710,7 +1760,7 @@ export default function AdminQuizzesPage() {
         </div>
       ) : null}
 
-      {isLecturerView && !loading && moduleOfferings.length === 0 ? (
+      {!showLecturerBuilderPage && isLecturerView && !loading && moduleOfferings.length === 0 ? (
         <Card className={cn("border-amber-200 bg-amber-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex items-start gap-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -1730,7 +1780,7 @@ export default function AdminQuizzesPage() {
         </Card>
       ) : null}
 
-      {error ? (
+      {!showLecturerBuilderPage && error ? (
         <Card className={cn("border-red-200 bg-red-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -1749,9 +1799,9 @@ export default function AdminQuizzesPage() {
         </Card>
       ) : null}
 
-      {loading ? (
+      {!showLecturerBuilderPage && loading ? (
         <LoadingTable immersive={isLecturerView} />
-      ) : (
+      ) : !showLecturerBuilderPage ? (
         <Card
           className={cn(
             "transition-all",
@@ -1969,13 +2019,14 @@ export default function AdminQuizzesPage() {
             totalItems={pagination.total}
           />
         </Card>
-      )}
+      ) : null}
 
       {builderOpen ? (
         <QuizModalShell
           description="Create a quiz, define the settings, and build questions with inline validation before publishing."
           immersive={isLecturerView}
           onClose={closeBuilder}
+          renderAsPage={showLecturerBuilderPage}
           size="full"
           title={editingQuiz ? "Edit Quiz" : "Create Quiz"}
         >
@@ -2019,9 +2070,7 @@ export default function AdminQuizzesPage() {
                     onBlur={() =>
                       setTouchedFields((previous) => ({ ...previous, moduleOfferingId: true }))
                     }
-                    onChange={(event) =>
-                      setForm((previous) => ({ ...previous, moduleOfferingId: event.target.value }))
-                    }
+                    onChange={(event) => updateModuleOfferingSelection(event.target.value)}
                     value={form.moduleOfferingId}
                   >
                     <option value="">Select module offering</option>
@@ -2170,14 +2219,37 @@ export default function AdminQuizzesPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Academic Year</label>
-                  <Input onChange={(event) => setForm((previous) => ({ ...previous, academicYear: event.target.value }))} placeholder="2025/2026" value={form.academicYear} />
+                  <Select
+                    onChange={(event) =>
+                      setForm((previous) => ({ ...previous, academicYear: event.target.value }))
+                    }
+                    value={form.academicYear}
+                  >
+                    <option value="">Select academic year</option>
+                    {availableAcademicYears.map((academicYear) => (
+                      <option key={academicYear} value={academicYear}>
+                        {academicYear}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-heading">Semester</label>
-                  <Select onChange={(event) => setForm((previous) => ({ ...previous, semester: event.target.value as "" | "1" | "2" }))} value={form.semester}>
-                    <option value="">Not set</option>
-                    <option value="1">Semester 1</option>
-                    <option value="2">Semester 2</option>
+                  <Select
+                    onChange={(event) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        semester: event.target.value as "" | "1" | "2",
+                      }))
+                    }
+                    value={form.semester}
+                  >
+                    <option value="">Select semester</option>
+                    {availableSemesters.map((semester) => (
+                      <option key={semester} value={semester}>
+                        Semester {semester}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div className="space-y-2 lg:col-span-2">
@@ -2440,8 +2512,8 @@ export default function AdminQuizzesPage() {
                                       [`${key}-correct-option`]: true,
                                     }))
                                   }
-                                  onChange={() => markCorrectOption(question.id, option.id)}
-                                  type="radio"
+                                  onChange={() => toggleCorrectOption(question.id, option.id)}
+                                  type="checkbox"
                                 />
                                 <div className="space-y-2">
                                   <Input

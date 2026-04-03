@@ -5,99 +5,14 @@ import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import "@/models/User";
 import { awardPointsForQuizAttempt } from "@/lib/points-engine";
+import {
+  gradeQuizSubmission,
+  normalizeQuizSubmissionAnswers,
+} from "@/lib/quiz-grading";
 import { connectMongoose } from "@/lib/mongoose";
-import type { IAnswer } from "@/models/QuizAttempt";
 import { QuizModel } from "@/models/Quiz";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
-import { collapseSpaces, mapQuizRowsForResponse, readId } from "../../route";
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function gradeAnswers(
-  quiz: Record<string, unknown>,
-  submittedAnswers: unknown[]
-) {
-  const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
-  const answersByQuestion = new Map<string, Record<string, unknown>>();
-
-  submittedAnswers.forEach((answer) => {
-    const row = asObject(answer);
-    if (!row) {
-      return;
-    }
-
-    const questionId = readId(row.questionId);
-    if (questionId) {
-      answersByQuestion.set(questionId, row);
-    }
-  });
-
-  const gradedAnswers: IAnswer[] = questions.map((question) => {
-    const questionRow = asObject(question) ?? {};
-    const questionId = readId(questionRow._id ?? questionRow.id);
-    const submitted = answersByQuestion.get(questionId) ?? null;
-    const questionType = collapseSpaces(questionRow.questionType);
-    const questionMarks = Number(questionRow.marks ?? 0);
-    const options = Array.isArray(questionRow.options) ? questionRow.options : [];
-
-    let isCorrect = false;
-    let marksAwarded = 0;
-    let selectedOptionId: mongoose.Types.ObjectId | undefined;
-    const answerText = collapseSpaces(submitted?.answerText);
-
-    if (questionType === "mcq" || questionType === "true-false") {
-      const selectedId = readId(submitted?.selectedOptionId);
-      if (selectedId && mongoose.Types.ObjectId.isValid(selectedId)) {
-        selectedOptionId = new mongoose.Types.ObjectId(selectedId);
-      }
-
-      const selectedOption = options.find((option) => {
-        const optionRow = asObject(option);
-        return readId(optionRow?._id ?? optionRow?.id) === selectedId;
-      });
-      const selectedRow = asObject(selectedOption);
-      isCorrect = Boolean(selectedRow?.isCorrect);
-      marksAwarded = isCorrect ? questionMarks : 0;
-    } else {
-      // Short-answer auto grading is exact-match only. Lecturers can manually re-grade later.
-      const normalizedAnswer = answerText.toLowerCase();
-      const normalizedCorrect = collapseSpaces(questionRow.correctAnswer).toLowerCase();
-      isCorrect = Boolean(normalizedAnswer) && normalizedAnswer === normalizedCorrect;
-      marksAwarded = isCorrect ? questionMarks : 0;
-    }
-
-    return {
-      questionId: new mongoose.Types.ObjectId(questionId),
-      ...(selectedOptionId ? { selectedOptionId } : {}),
-      ...(answerText ? { answerText } : {}),
-      isCorrect,
-      marksAwarded,
-      questionMarks,
-    };
-  });
-
-  const score = gradedAnswers.reduce((sum, answer) => sum + answer.marksAwarded, 0);
-  const totalMarks = Number(quiz.totalMarks ?? 0);
-  const percentage =
-    totalMarks > 0
-      ? Math.round(((score / totalMarks) * 100 + Number.EPSILON) * 100) / 100
-      : 0;
-  const passed = score >= Number(quiz.passingMarks ?? 0);
-
-  return {
-    gradedAnswers,
-    score,
-    totalMarks,
-    percentage,
-    passed,
-  };
-}
+import { mapQuizRowsForResponse } from "../../route";
 
 export async function POST(
   _request: Request,
@@ -145,9 +60,11 @@ export async function POST(
     const autoSubmittedAttemptIds: string[] = [];
 
     for (const attempt of inProgressAttempts) {
-      const submission = gradeAnswers(
+      const submission = gradeQuizSubmission(
         quiz.toObject() as unknown as Record<string, unknown>,
-        Array.isArray(attempt.answers) ? attempt.answers : []
+        normalizeQuizSubmissionAnswers(
+          Array.isArray(attempt.answers) ? attempt.answers : []
+        )
       );
       const startedAt = attempt.startedAt instanceof Date ? attempt.startedAt : now;
       const timeTaken = Math.max(
