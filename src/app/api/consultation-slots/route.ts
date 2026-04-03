@@ -273,6 +273,12 @@ async function findOverlappingSlotForLecturer(input: {
 
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
   const { searchParams } = new URL(request.url);
   const scope = String(searchParams.get("scope") ?? "").trim().toLowerCase();
   const lecturerIdFilter = String(searchParams.get("lecturerId") ?? "").trim();
@@ -424,6 +430,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;

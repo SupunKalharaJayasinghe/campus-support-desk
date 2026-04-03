@@ -12,6 +12,47 @@ const OutlineWeekSchema = new Schema(
   { _id: false }
 );
 
+const WeekResourceSchema = new Schema(
+  {
+    id: { type: String, trim: true, default: "" },
+    title: { type: String, trim: true, default: "" },
+    url: { type: String, trim: true, default: "" },
+    description: { type: String, trim: true, default: "" },
+  },
+  { _id: false }
+);
+
+const WeekAssignmentSchema = new Schema(
+  {
+    id: { type: String, trim: true, default: "" },
+    title: { type: String, trim: true, default: "" },
+    description: { type: String, trim: true, default: "" },
+    link: { type: String, trim: true, default: "" },
+  },
+  { _id: false }
+);
+
+const WeekTodoSchema = new Schema(
+  {
+    id: { type: String, trim: true, default: "" },
+    text: { type: String, trim: true, default: "" },
+  },
+  { _id: false }
+);
+
+const WeekContentSchema = new Schema(
+  {
+    weekNo: { type: Number, required: true, min: 1, max: 60 },
+    outline: { type: String, trim: true, default: "" },
+    lectureSlides: { type: [WeekResourceSchema], default: [] },
+    resources: { type: [WeekResourceSchema], default: [] },
+    assignments: { type: [WeekAssignmentSchema], default: [] },
+    todoItems: { type: [WeekTodoSchema], default: [] },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 function normalizeAcademicCode(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -157,6 +198,7 @@ const ModuleOfferingSchema = new Schema(
     assignedLecturerIds: { type: [String], default: [] },
     assignedLabAssistantIds: { type: [String], default: [] },
     outlineWeeks: { type: [OutlineWeekSchema], default: [] },
+    weekContents: { type: [WeekContentSchema], default: [] },
     outlinePending: { type: Boolean, default: false },
     hasGrades: { type: Boolean, default: false },
     hasAttendance: { type: Boolean, default: false },

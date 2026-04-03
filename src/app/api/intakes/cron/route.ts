@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { persistIntakeRecords } from "@/models/intake-record-persistence";
 import { connectMongoose } from "@/models/mongoose";
+import { runCourseWeekNotificationJob } from "@/models/course-week-notifications";
 import { runIntakeDailyAutomation, snapshotIntakes } from "@/models/intake-store";
 
 export async function POST() {
@@ -13,10 +14,12 @@ export async function POST() {
       );
     }
     const summary = runIntakeDailyAutomation();
+    const weekNotificationSummary = await runCourseWeekNotificationJob();
     await persistIntakeRecords(snapshotIntakes({ includeDeleted: true }));
     return NextResponse.json({
       ok: true,
       summary,
+      weekNotificationSummary,
     });
   } catch {
     return NextResponse.json(

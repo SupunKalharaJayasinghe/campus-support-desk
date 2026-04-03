@@ -79,6 +79,12 @@ export async function GET(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
 
     if (!mongooseConnection) {
       const booking = findConsultationBookingInMemoryById(bookingId);
@@ -164,6 +170,12 @@ export async function PATCH(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;

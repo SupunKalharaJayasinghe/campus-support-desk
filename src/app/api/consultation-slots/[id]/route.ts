@@ -262,6 +262,12 @@ export async function GET(
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
+  if (!mongooseConnection) {
+    return NextResponse.json(
+      { message: "Database connection is required" },
+      { status: 503 }
+    );
+  }
 
   if (!mongooseConnection) {
     const row = findConsultationAvailabilitySlotInMemoryById(slotId);
@@ -301,6 +307,12 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;
@@ -498,6 +510,12 @@ export async function DELETE(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const { searchParams } = new URL(request.url);
     const fallbackLecturerId = String(searchParams.get("lecturerId") ?? "").trim();
 

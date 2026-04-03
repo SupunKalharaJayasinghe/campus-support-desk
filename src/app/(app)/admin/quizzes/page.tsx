@@ -926,13 +926,13 @@ function QuizModalShell({
     <div className="fixed inset-0 z-[120] bg-slate-950/45 p-4 backdrop-blur-sm">
       <div
         className={cn(
-          "mx-auto flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-card shadow-[0_28px_70px_rgba(15,23,42,0.22)]",
+          "mx-auto flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-white shadow-[0_28px_70px_rgba(15,23,42,0.22)]",
           size === "lg" && "max-w-4xl",
           size === "xl" && "max-w-6xl",
           size === "full" && "max-w-[min(1200px,100%)]"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-border bg-white px-6 py-5">
           <div>
             <h2 className="text-2xl font-semibold text-heading">{title}</h2>
             {description ? <p className="mt-2 text-sm leading-6 text-text/72">{description}</p> : null}
@@ -946,7 +946,7 @@ function QuizModalShell({
             <X size={18} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6">{children}</div>
       </div>
     </div>
   );

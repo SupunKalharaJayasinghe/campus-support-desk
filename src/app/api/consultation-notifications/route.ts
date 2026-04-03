@@ -236,6 +236,12 @@ async function syncConsultationReminders(
 export async function GET(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     await syncConsultationReminders(mongooseConnection);
 
     const { searchParams } = new URL(request.url);
@@ -288,6 +294,12 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const rawBody = (await request.json().catch(() => null)) as
       | Partial<Record<string, unknown>>
       | null;

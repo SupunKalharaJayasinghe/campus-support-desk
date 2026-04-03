@@ -7,6 +7,7 @@ import Container from "@/components/ui/Container";
 
 const LECTURER_LINKS = [
   { label: "Dashboard", href: "/lecturer" },
+  { label: "My Course", href: "/lecturer/my-course" },
   { label: "Quizzes", href: "/lecturer/quizzes" },
   { label: "Availability", href: "/lecturer/availability" },
   { label: "Bookings", href: "/lecturer/bookings" },

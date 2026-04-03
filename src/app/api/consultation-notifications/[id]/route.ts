@@ -24,6 +24,12 @@ export async function PATCH(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
+    if (!mongooseConnection) {
+      return NextResponse.json(
+        { message: "Database connection is required" },
+        { status: 503 }
+      );
+    }
     const { searchParams } = new URL(request.url);
     const actor = await resolveCurrentConsultationActor(request, mongooseConnection, {
       lecturerId: String(searchParams.get("lecturerId") ?? "").trim(),

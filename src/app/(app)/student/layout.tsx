@@ -47,6 +47,7 @@ const ACADEMICS_GROUP: StudentNavGroup = {
   key: "academics",
   label: "Academics",
   items: [
+    { label: "My Course", href: "/student/my-course", icon: BookOpen },
     { label: "Quizzes", href: "/student/quizzes", icon: BookOpen },
     { label: "Performance", href: "/student/performance", icon: BarChart3 },
   ],
