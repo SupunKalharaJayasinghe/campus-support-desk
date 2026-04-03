@@ -33,6 +33,7 @@ import { listTermOptions, type TermCode } from "@/models/intake-store";
 import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { syncLecturerModuleLinksForOfferingMutation } from "@/models/module-offering-lecturer-module-sync";
+import { syncLabAssistantModuleLinksForOfferingMutation } from "@/models/module-offering-lab-assistant-module-sync";
 
 const TERM_SORT_ORDER = listTermOptions();
 
@@ -524,6 +525,22 @@ export async function POST(request: Request) {
         moduleCode: responseOffering.moduleCode,
         moduleId: responseOffering.moduleId,
         lecturerIds: responseOffering.assignedLecturerIds,
+      },
+      mongooseConnection,
+    }).catch(() => null);
+
+    await syncLabAssistantModuleLinksForOfferingMutation({
+      previous: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        labAssistantIds: [],
+      },
+      next: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        labAssistantIds: responseOffering.assignedLabAssistantIds,
       },
       mongooseConnection,
     }).catch(() => null);

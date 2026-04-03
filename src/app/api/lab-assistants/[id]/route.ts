@@ -24,6 +24,7 @@ import { getMongoDuplicateField } from "@/models/student-registration";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { UserModel } from "@/models/User";
+import { syncLabAssistantAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lab-assistant-sync";
 import {
   StaffEligibilityValidationError,
   validateStaffEligibilityWithDb,
@@ -199,6 +200,19 @@ export async function PUT(
       return NextResponse.json({ message: "Failed to map lab assistant" }, { status: 500 });
     }
 
+    await syncLabAssistantAssignmentsAcrossModuleOfferings(
+      {
+        labAssistantId: parsed.id,
+        fullName: parsed.fullName,
+        email: parsed.email,
+        status: parsed.status,
+        facultyIds: parsed.facultyIds,
+        degreeProgramIds: parsed.degreeProgramIds,
+        moduleIds: parsed.moduleIds,
+      },
+      { mongooseConnection }
+    ).catch(() => null);
+
     return NextResponse.json(toApiLabAssistant(parsed));
   } catch (error) {
     return NextResponse.json(
@@ -231,7 +245,13 @@ export async function DELETE(
 
     const assignedOfferingExists = Boolean(
       await ModuleOfferingModel.exists({
-        assignedLabAssistantIds: labAssistantId,
+        $or: [
+          { assignedLabAssistantIds: labAssistantId },
+          { assignedLabAssistants: labAssistantId },
+          { "assignedLabAssistants.assistantId": labAssistantId },
+          { "assignedLabAssistants.id": labAssistantId },
+          { "assignedLabAssistants._id": labAssistantId },
+        ],
       }).catch(() => null)
     );
     if (assignedOfferingExists) {

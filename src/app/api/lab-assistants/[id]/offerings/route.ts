@@ -166,7 +166,13 @@ export async function GET(
   }
 
   const rows = (await ModuleOfferingModel.find({
-    assignedLabAssistantIds: labAssistantId,
+    $or: [
+      { assignedLabAssistantIds: labAssistantId },
+      { assignedLabAssistants: labAssistantId },
+      { "assignedLabAssistants.assistantId": labAssistantId },
+      { "assignedLabAssistants.id": labAssistantId },
+      { "assignedLabAssistants._id": labAssistantId },
+    ],
   })
     .sort({ updatedAt: -1 })
     .lean()
