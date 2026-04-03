@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import RoleGuard from "@/components/auth/RoleGuard";
 import TopNav from "@/components/layout/TopNav";
-import Container from "@/components/ui/Container";
 
 const LECTURER_LINKS = [
   { label: "Dashboard", href: "/lecturer" },
@@ -21,19 +20,13 @@ export default function LecturerLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
-  const isImmersive =
-    pathname === "/lecturer/availability" ||
-    pathname === "/lecturer/bookings" ||
-    pathname.startsWith("/lecturer/availability/") ||
-    pathname.startsWith("/lecturer/bookings/");
+  const activePath = pathname.startsWith("/lecturer") ? pathname : "/lecturer";
 
   return (
     <RoleGuard allowedRole="LECTURER">
-      <div className="min-h-screen bg-bg">
-        <TopNav homeHref="/lecturer" links={LECTURER_LINKS} />
-        <main className="px-0 pb-8 pt-20">
-          {isImmersive ? children : <Container size="6xl">{children}</Container>}
-        </main>
+      <div className="min-h-screen bg-[#f0f2f7]">
+        <TopNav currentPath={activePath} homeHref="/lecturer" links={LECTURER_LINKS} />
+        <main className="px-0 pb-0 pt-20">{children}</main>
       </div>
     </RoleGuard>
   );

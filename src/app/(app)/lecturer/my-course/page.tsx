@@ -1,10 +1,10 @@
 "use client";
 
+import "../lecturer-experience.css";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-import Skeleton from "@/components/ui/Skeleton";
+import { ArrowRight, BookOpen, CalendarRange, Layers3, MonitorPlay } from "lucide-react";
 import { authHeaders } from "@/models/rbac";
 
 interface LecturerCourseItem {
@@ -88,64 +88,153 @@ export default function LecturerMyCoursePage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-7 w-52" />
-        <Card>
-          <Skeleton className="h-12 w-full" />
-        </Card>
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong card-body">Loading course modules...</div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
-        <h1 className="text-2xl font-semibold text-red-900">My Course</h1>
-        <p className="mt-2 text-sm text-red-800/85">{error}</p>
-      </Card>
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong">
+              <div className="card-body">
+                <div className="page-title" style={{ fontSize: 24 }}>My Course</div>
+                <div className="page-subtitle" style={{ color: "var(--red)", marginTop: 8 }}>{error}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 
   const modules = data?.items ?? [];
+  const activeWeekCount = modules.filter((module) => module.currentWeekNo !== null).length;
+  const totalWeeks = modules.reduce((sum, module) => sum + Math.max(0, module.totalWeeks), 0);
+  const intakeCount = new Set(modules.map((module) => module.intakeId).filter(Boolean)).size;
 
   return (
-    <div className="space-y-5">
-      <Card>
-        <h1 className="text-2xl font-semibold text-heading">My Course</h1>
-        <p className="mt-2 text-sm text-text/75">
-          Weekly teaching content is assigned by academic week and intake-derived dates.
-        </p>
-      </Card>
-
-      {modules.length === 0 ? (
-        <Card>
-          <p className="text-sm text-text/75">
-            No active module offerings are assigned to your lecturer account.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {modules.map((module) => (
-            <Card key={module.id}>
-              <p className="text-sm font-semibold text-heading">{module.moduleCode}</p>
-              <p className="mt-1 text-sm text-text/80">{module.moduleName}</p>
-              <p className="mt-2 text-xs text-text/65">
-                {module.intakeName} • {module.termCode} • {module.totalWeeks} weeks
-              </p>
-              <p className="mt-1 text-xs text-text/60">
-                {module.currentWeekNo ? `Current: Week ${module.currentWeekNo}` : "No active week"}
-              </p>
-              <div className="mt-4">
-                <Link href={`/lecturer/my-course/${encodeURIComponent(module.id)}`}>
-                  <Button className="h-10 px-4" variant="secondary">
-                    Manage Weekly Content
-                  </Button>
-                </Link>
+    <div className="lecturer-experience">
+      <div className="page">
+        <div className="section active">
+          <div className="container">
+            <div className="page-header fadein">
+              <div>
+                <div className="page-title">My Course</div>
+                <div className="page-subtitle">
+                  Weekly teaching content grouped by assigned module offerings and intake schedules.
+                </div>
               </div>
-            </Card>
-          ))}
+            </div>
+
+            <div className="stats-row fadein">
+              {[
+                { icon: <BookOpen size={18} />, label: "Assigned modules", value: modules.length, color: "var(--accent)" },
+                { icon: <MonitorPlay size={18} />, label: "Active weeks", value: activeWeekCount, color: "var(--green)" },
+                { icon: <CalendarRange size={18} />, label: "Planned weeks", value: totalWeeks, color: "var(--purple)" },
+                { icon: <Layers3 size={18} />, label: "Intakes", value: intakeCount, color: "var(--amber)" },
+              ].map((item) => (
+                <div className="glass stat-card" key={item.label} style={{ color: item.color }}>
+                  <div className="stat-icon" style={{ background: "rgba(52,97,255,0.08)" }}>
+                    {item.icon}
+                  </div>
+                  <div className="stat-value" style={{ color: "var(--ink)" }}>
+                    {item.value}
+                  </div>
+                  <div className="stat-label">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-strong fadein">
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Assigned Module Offerings</div>
+                  <div className="card-subtitle">
+                    Open a module to edit weekly content in the same lecturer workspace.
+                  </div>
+                </div>
+              </div>
+              <div className="card-body">
+                {modules.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-text">
+                      No active module offerings are assigned to your lecturer account.
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 16,
+                      gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    }}
+                  >
+                    {modules.map((module) => (
+                      <div className="glass" key={module.id} style={{ padding: 20 }}>
+                        <div
+                          className="inline-flex"
+                          style={{
+                            justifyContent: "space-between",
+                            width: "100%",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div>
+                            <div className="student-name">{module.moduleCode}</div>
+                            <div className="slot-time" style={{ marginTop: 4 }}>{module.moduleName}</div>
+                          </div>
+                          <span className={`badge ${module.currentWeekNo ? "badge-available" : "badge-waitlist"}`}>
+                            {module.currentWeekNo ? `Week ${module.currentWeekNo}` : "Planned"}
+                          </span>
+                        </div>
+
+                        <div className="slot-list" style={{ marginTop: 14 }}>
+                          <div className="slot-item" style={{ cursor: "default" }}>
+                            <div className="slot-indicator ind-blue" />
+                            <div style={{ flex: 1 }}>
+                              <div className="slot-date">{module.intakeName}</div>
+                              <div className="slot-time">{module.termCode || "Term not set"}</div>
+                            </div>
+                          </div>
+                          <div className="slot-item" style={{ cursor: "default" }}>
+                            <div className="slot-indicator ind-green" />
+                            <div style={{ flex: 1 }}>
+                              <div className="slot-date">{module.totalWeeks} academic weeks</div>
+                              <div className="slot-time">
+                                {module.currentWeekNo
+                                  ? `Current teaching week: ${module.currentWeekNo}`
+                                  : "No active academic week right now"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 16 }}>
+                          <Link
+                            className="btn-outline"
+                            href={`/lecturer/my-course/${encodeURIComponent(module.id)}`}
+                          >
+                            Manage Weekly Content
+                            <ArrowRight size={16} />
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

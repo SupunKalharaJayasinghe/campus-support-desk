@@ -1,5 +1,7 @@
 "use client";
 
+import "../../lecturer-experience.css";
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -119,7 +121,7 @@ function resourceBadge(item: Pick<WeekResourceItem, "title" | "url">) {
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-[28px] border border-border/80 bg-[#fafbff] p-5">
+    <div className="glass" style={{ padding: 20 }}>
       <div className="flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#034aa6] shadow-sm ring-1 ring-border/80">{icon}</div>
         <p className="text-sm font-semibold text-heading">{title}</p>
@@ -183,6 +185,8 @@ export default function LecturerCourseDetailPage() {
   const selectedWeek = useMemo(() => data?.weeks.find((week) => week.weekNo === selectedWeekNo) ?? null, [data, selectedWeekNo]);
   const currentWeek = useMemo(() => data?.weeks.find((week) => week.isCurrent) ?? null, [data]);
   const totalEntries = useMemo(() => data?.weeks.reduce((sum, week) => sum + week.lectureSlides.length + week.resources.length + week.assignments.length + week.todoItems.length, 0) ?? 0, [data]);
+  const shellCardClass = "glass-strong !rounded-[18px] !border-[rgba(180,190,220,0.35)] !bg-white/85 !shadow-[0_20px_60px_rgba(15,23,41,0.12),0_4px_16px_rgba(15,23,41,0.06)]";
+  const softCardClass = "glass !rounded-[18px] !border-[rgba(180,190,220,0.35)] !bg-white/70";
 
   useEffect(() => {
     if (!selectedWeek) {
@@ -233,57 +237,121 @@ export default function LecturerCourseDetailPage() {
   };
 
   if (loading) {
-    return <div className="space-y-4"><Skeleton className="h-7 w-52" /><Card><Skeleton className="h-16 w-full" /></Card></div>;
+    return (
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong card-body">
+              <Skeleton className="h-7 w-52" />
+              <div style={{ marginTop: 16 }}>
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <Card className="border-red-200 bg-red-50"><h1 className="text-2xl font-semibold text-red-900">My Course</h1><p className="mt-2 text-sm text-red-800/85">{error}</p><div className="mt-4"><Link href="/lecturer/my-course"><Button variant="secondary">Back to My Course</Button></Link></div></Card>;
+    return (
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong">
+              <div className="card-body">
+                <h1 className="text-2xl font-semibold text-red-900">My Course</h1>
+                <p className="mt-2 text-sm text-red-800/85">{error}</p>
+                <div className="mt-4">
+                  <Link href="/lecturer/my-course">
+                    <Button variant="secondary">Back to My Course</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!data) {
-    return <Card><p className="text-sm text-text/75">Module details are unavailable.</p></Card>;
+    return (
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong card-body">
+              <p className="text-sm text-text/75">Module details are unavailable.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <Card accent className="overflow-visible">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#034aa6]">Weekly content manager</p>
-            <div>
-              <h1 className="text-2xl font-semibold text-heading md:text-3xl">
-                {data.offering.moduleCode} - {data.offering.moduleName}
-              </h1>
-              <p className="mt-2 text-sm text-text/75">
-                {data.offering.intakeName} • {data.offering.termCode}
-                {currentWeek ? ` • Active week: Week ${currentWeek.weekNo}` : ""}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="rounded-full bg-[#034aa6]/10 px-3 py-1 text-xs font-medium text-[#034aa6]">{data.weeks.length} academic weeks</div>
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{totalEntries} content entries</div>
-              <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Editing Week {selectedWeekNo}</div>
-            </div>
-          </div>
+    <div className="lecturer-experience">
+      <div className="page">
+        <div className="section active">
+          <div className="container">
+            <div className="space-y-6">
+              <div className="page-header fadein">
+                <div>
+                  <div className="page-title">
+                    {data.offering.moduleCode} - {data.offering.moduleName}
+                  </div>
+                  <div className="page-subtitle">
+                    Weekly content manager for {data.offering.intakeName} • {data.offering.termCode}
+                    {currentWeek ? ` • Active week: Week ${currentWeek.weekNo}` : ""}
+                  </div>
+                </div>
+                <div className="inline-flex" style={{ flexWrap: "wrap" }}>
+                  <Link className="btn-outline" href="/lecturer/my-course">
+                    Back to My Course
+                  </Link>
+                  <button
+                    className="btn-primary"
+                    disabled={saving || !selectedWeek}
+                    onClick={() => {
+                      void saveWeekContent();
+                    }}
+                    type="button"
+                  >
+                    <Save size={16} />
+                    {saving ? "Saving..." : `Save Week ${selectedWeekNo}`}
+                  </button>
+                </div>
+              </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link href="/lecturer/my-course">
-              <Button variant="secondary">Back to My Course</Button>
-            </Link>
-            <Button className="gap-2 bg-[#034aa6] text-white hover:bg-[#033d8a]" disabled={saving || !selectedWeek} onClick={() => { void saveWeekContent(); }}>
-              <Save size={16} />
-              {saving ? "Saving..." : `Save Week ${selectedWeekNo}`}
-            </Button>
-          </div>
-        </div>
-      </Card>
+              <div className="stats-row fadein">
+                {[
+                  { icon: <CalendarDays size={18} />, label: "Academic weeks", value: data.weeks.length, color: "var(--accent)" },
+                  { icon: <BookOpen size={18} />, label: "Content entries", value: totalEntries, color: "var(--green)" },
+                  { icon: <FileText size={18} />, label: "Current week", value: currentWeek?.weekNo ?? "—", color: "var(--purple)" },
+                  { icon: <PencilLine size={18} />, label: "Editing week", value: selectedWeekNo, color: "var(--amber)" },
+                ].map((item) => (
+                  <div className="glass stat-card" key={item.label} style={{ color: item.color }}>
+                    <div className="stat-icon" style={{ background: "rgba(52,97,255,0.08)" }}>
+                      {item.icon}
+                    </div>
+                    <div className="stat-value" style={{ color: "var(--ink)" }}>
+                      {item.value}
+                    </div>
+                    <div className="stat-label">{item.label}</div>
+                  </div>
+                ))}
+              </div>
 
       {data.weeks.length === 0 ? (
-        <Card>
-          <p className="text-sm text-text/75">No academic weeks are available for this module yet.</p>
-        </Card>
+        <div className="glass-strong fadein">
+          <div className="card-body">
+            <div className="empty-state">
+              <div className="empty-text">No academic weeks are available for this module yet.</div>
+            </div>
+          </div>
+        </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,420px)]">
+        <div className="main-side fadein">
           <div className="space-y-4">
             {data.weeks.map((week) => {
               const status = weekStatus(week);
@@ -293,7 +361,8 @@ export default function LecturerCourseDetailPage() {
               return (
                 <Card
                   className={cn(
-                    "overflow-hidden border-border/80 transition-colors",
+                    shellCardClass,
+                    "overflow-hidden transition-colors",
                     week.isCurrent && "border-[#034aa6]/30 bg-[linear-gradient(135deg,rgba(3,74,166,0.08),rgba(255,255,255,1))]",
                     isSelected && "ring-2 ring-[#034aa6]/12"
                   )}
@@ -460,7 +529,7 @@ export default function LecturerCourseDetailPage() {
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-            <Card accent description="Update the selected week and keep the preview on the left aligned with what students will see." title="Week Editor">
+            <Card accent className={shellCardClass} description="Update the selected week and keep the preview on the left aligned with what students will see." title="Week Editor">
               <div className="space-y-4">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-text/65">Academic Week</label>
@@ -522,7 +591,7 @@ export default function LecturerCourseDetailPage() {
               </div>
             </Card>
 
-            <Card variant="subtle">
+            <Card className={softCardClass} variant="subtle">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#034aa6] ring-1 ring-border/80">
                   <PencilLine size={18} />
@@ -550,6 +619,10 @@ export default function LecturerCourseDetailPage() {
           </div>
         </div>
       )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,16 @@
 "use client";
 
+import "./lecturer-experience.css";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import Badge from "@/components/ui/Badge";
-import Card from "@/components/ui/Card";
+import {
+  BellRing,
+  BookOpen,
+  CalendarCheck,
+  CalendarRange,
+  FolderKanban,
+} from "lucide-react";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   listConsultationNotifications,
@@ -13,7 +20,6 @@ import {
 } from "@/lib/consultation-client";
 import { authHeaders } from "@/lib/rbac";
 import {
-  getConsultationBookingBadgeVariant,
   getConsultationBookingStatusLabel,
   isActiveConsultationBookingStatus,
 } from "@/models/consultation-booking";
@@ -95,6 +101,13 @@ function formatDateTime(value: string) {
   return parsed.toLocaleString();
 }
 
+function bookingStatusClass(status: ConsultationBookingApiRecord["status"]) {
+  if (status === "CONFIRMED") return "badge-waitlist";
+  if (status === "COMPLETED") return "badge-available";
+  if (status === "CANCELLED") return "badge-full";
+  return "badge-booked";
+}
+
 export default function LecturerDashboardPage() {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<ConsultationBookingApiRecord[]>([]);
@@ -172,174 +185,287 @@ export default function LecturerDashboardPage() {
   const todaysSessions = upcomingSessions.filter((item) => item.slot?.date === todayKey);
   const scheduleItems = todaysSessions.length > 0 ? todaysSessions : upcomingSessions.slice(0, 3);
   const recentActivity = notifications.slice(0, 3);
+  const activeModules = assignedModules.filter((item) => item.status === "ACTIVE").length;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-semibold text-heading">Lecturer Dashboard</h1>
-        <p className="mt-2 text-sm text-text/75">Manage availability, bookings, and student support.</p>
+    <div className="lecturer-experience">
+      <div className="page">
+        <div className="section active">
+          <div className="container">
+            <div className="page-header fadein">
+              <div>
+                <div className="page-title">Lecturer Dashboard</div>
+                <div className="page-subtitle">
+                  Track consultation work, teaching activity, and recent updates from one lecturer workspace.
+                </div>
+              </div>
+              <div className="inline-flex" style={{ flexWrap: "wrap" }}>
+                <Link className="btn-outline" href="/lecturer/availability">
+                  Manage Availability
+                </Link>
+                <Link className="btn-primary" href="/lecturer/bookings">
+                  Open Bookings
+                </Link>
+              </div>
+            </div>
+
+            <div className="stats-row fadein">
+              {[
+                {
+                  icon: <CalendarRange size={18} />,
+                  label: "Pending bookings",
+                  value: pendingRequests,
+                  color: "var(--amber)",
+                },
+                {
+                  icon: <BellRing size={18} />,
+                  label: "Unread notifications",
+                  value: unread,
+                  color: "var(--accent)",
+                },
+                {
+                  icon: <CalendarCheck size={18} />,
+                  label: "Upcoming sessions",
+                  value: upcomingSessions.length,
+                  color: "var(--purple)",
+                },
+                {
+                  icon: <BookOpen size={18} />,
+                  label: "Active modules",
+                  value: activeModules,
+                  color: "var(--green)",
+                },
+              ].map((item) => (
+                <div className="glass stat-card" key={item.label} style={{ color: item.color }}>
+                  <div className="stat-icon" style={{ background: "rgba(52,97,255,0.08)" }}>
+                    {item.icon}
+                  </div>
+                  <div className="stat-value" style={{ color: "var(--ink)" }}>
+                    {item.value}
+                  </div>
+                  <div className="stat-label">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="two-col fadein" style={{ marginBottom: 20 }}>
+              <div className="glass-strong">
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Today&apos;s Schedule</div>
+                    <div className="card-subtitle">
+                      {todaysSessions.length > 0
+                        ? "Sessions planned for today"
+                        : "Next upcoming consultation sessions"}
+                    </div>
+                  </div>
+                  <Link className="btn-outline" href="/lecturer/bookings">
+                    View all
+                  </Link>
+                </div>
+                <div className="card-body">
+                  {loading ? (
+                    <div className="empty-state">
+                      <div className="empty-text">Loading schedule...</div>
+                    </div>
+                  ) : scheduleItems.length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-text">No upcoming sessions found.</div>
+                    </div>
+                  ) : (
+                    <div className="slot-list">
+                      {scheduleItems.map((session) => (
+                        <div className="slot-item" key={session.id}>
+                          <div
+                            className={`slot-indicator ${
+                              session.status === "PENDING"
+                                ? "ind-amber"
+                                : session.status === "CONFIRMED"
+                                  ? "ind-blue"
+                                  : "ind-green"
+                            }`}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div className="slot-date">{session.student?.fullName ?? session.studentId}</div>
+                            <div className="slot-time">
+                              {session.slot?.date} • {session.slot?.startTime} - {session.slot?.endTime}
+                            </div>
+                            <div className="text-xs">
+                              {session.slot?.sessionType ?? session.purpose} • {session.student?.studentId ?? session.studentId}
+                            </div>
+                          </div>
+                          <div className="slot-meta">
+                            <span className={`badge ${bookingStatusClass(session.status)}`}>
+                              {getConsultationBookingStatusLabel(session.status)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="glass-strong">
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Recent Activity</div>
+                    <div className="card-subtitle">Latest lecturer reminders and consultation updates</div>
+                  </div>
+                  <Link className="btn-outline" href="/lecturer/notifications">
+                    Notifications
+                  </Link>
+                </div>
+                <div className="card-body">
+                  {recentActivity.length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-text">No recent activity.</div>
+                    </div>
+                  ) : (
+                    <div className="slot-list">
+                      {recentActivity.map((item) => (
+                        <div className="slot-item" key={item.id}>
+                          <div className={`slot-indicator ${item.unread ? "ind-blue" : "ind-green"}`} />
+                          <div style={{ flex: 1 }}>
+                            <div className="slot-date">{item.title}</div>
+                            <div className="slot-time">{item.message}</div>
+                            <div className="text-xs">{new Date(item.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="slot-meta">
+                            <span className={`badge ${item.unread ? "badge-booked" : "badge-available"}`}>
+                              {item.unread ? "Unread" : "Seen"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="two-col fadein">
+              <div className="glass-strong">
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Assigned Modules</div>
+                    <div className="card-subtitle">Module offerings linked to your lecturer profile</div>
+                  </div>
+                  <Link className="btn-outline" href="/lecturer/my-course">
+                    My Course
+                  </Link>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="booking-table">
+                    <thead>
+                      <tr>
+                        <th>Module</th>
+                        <th>Intake</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={4}>
+                            <div className="empty-state">
+                              <div className="empty-text">Loading assigned modules...</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : assignedModules.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>
+                            <div className="empty-state">
+                              <div className="empty-text">No modules assigned yet.</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        assignedModules.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <div className="student-name">
+                                {item.moduleCode} - {item.moduleName}
+                              </div>
+                            </td>
+                            <td>{item.intakeName || "Unknown Intake"} {item.termCode ? `• ${item.termCode}` : ""}</td>
+                            <td>
+                              <span className={`badge ${item.status === "ACTIVE" ? "badge-available" : "badge-full"}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td>{item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "—"}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="glass-strong">
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Latest Announcements</div>
+                    <div className="card-subtitle">Recent announcements shared with all users</div>
+                  </div>
+                  <Link className="btn-outline" href="/announcements">
+                    View all
+                  </Link>
+                </div>
+                <div className="card-body">
+                  {loading ? (
+                    <div className="empty-state">
+                      <div className="empty-text">Loading announcements...</div>
+                    </div>
+                  ) : announcements.length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-text">No announcements available yet.</div>
+                    </div>
+                  ) : (
+                    <div className="slot-list">
+                      {announcements.map((item) => (
+                        <div className="slot-item" key={item.id}>
+                          <div className="slot-indicator ind-blue" />
+                          <div style={{ flex: 1 }}>
+                            <div className="slot-date">{item.title}</div>
+                            <div className="slot-time">{item.message}</div>
+                            <div className="text-xs">
+                              {item.targetLabel} • {formatDateTime(item.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="glass fadein" style={{ marginTop: 20, padding: "18px 22px" }}>
+              <div
+                className="inline-flex"
+                style={{
+                  color: "var(--ink-2)",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>
+                  <FolderKanban size={16} />
+                  Teaching overview updates automatically from your existing lecturer data sources.
+                </span>
+                <span className="text-xs">
+                  {announcements.length} recent announcements • {notifications.length} total reminders
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <section className="grid gap-5 sm:grid-cols-3">
-        <Card accent>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-text/72">Pending bookings</p>
-            <Badge variant="warning">Live</Badge>
-          </div>
-          <p className="mt-2 text-3xl font-semibold text-heading">{pendingRequests}</p>
-          <p className="mt-1 text-xs text-text/60">From consultation booking API</p>
-        </Card>
-        <Card accent>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-text/72">Unread notifications</p>
-            <Badge variant="info">Updates</Badge>
-          </div>
-          <p className="mt-2 text-3xl font-semibold text-heading">{unread}</p>
-          <p className="mt-1 text-xs text-text/60">Last 24 hours</p>
-        </Card>
-        <Card accent>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-text/72">Upcoming sessions</p>
-            <Badge variant="primary">Schedule</Badge>
-          </div>
-          <p className="mt-2 text-3xl font-semibold text-heading">{upcomingSessions.length}</p>
-          <p className="mt-1 text-xs text-text/60">Future consultation bookings</p>
-        </Card>
-        <Card accent>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-text/72">Assigned modules</p>
-            <Badge variant="success">Teaching</Badge>
-          </div>
-          <p className="mt-2 text-3xl font-semibold text-heading">{assignedModules.length}</p>
-          <p className="mt-1 text-xs text-text/60">From module offerings</p>
-        </Card>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-2">
-        <Card
-          title="Today's Schedule"
-          description={todaysSessions.length > 0 ? "Sessions planned for today" : "Upcoming consultation sessions"}
-        >
-          {loading ? (
-            <p className="text-sm text-text/70">Loading schedule...</p>
-          ) : scheduleItems.length === 0 ? (
-            <p className="text-sm text-text/70">No upcoming sessions found.</p>
-          ) : (
-            <div className="space-y-3">
-              {scheduleItems.map((session) => (
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-tint px-4 py-3"
-                  key={session.id}
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-heading">{session.student?.fullName ?? session.studentId}</p>
-                    <p className="text-xs text-text/70">
-                      {session.slot?.date} • {session.slot?.startTime} - {session.slot?.endTime}
-                    </p>
-                    <p className="text-xs text-text/60">{session.slot?.sessionType ?? session.purpose}</p>
-                  </div>
-                  <Badge variant={getConsultationBookingBadgeVariant(session.status)}>
-                    {getConsultationBookingStatusLabel(session.status)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <Card title="Recent Activity" description="Latest notifications and alerts">
-          {recentActivity.length === 0 ? (
-            <p className="text-sm text-text/70">No recent activity.</p>
-          ) : (
-            <div className="space-y-3">
-              {recentActivity.map((item) => (
-                <div
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border px-4 py-3"
-                  key={item.id}
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-heading">{item.title}</p>
-                    <p className="text-xs text-text/70">{item.message}</p>
-                    <p className="mt-1 text-[11px] text-text/55">
-                      {new Date(item.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <Badge variant={item.unread ? "primary" : "neutral"}>
-                    {item.unread ? "Unread" : "Seen"}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </section>
-
-      <section>
-        <Card title="Assigned Modules" description="Module offerings linked to your lecturer profile">
-          {loading ? (
-            <p className="text-sm text-text/70">Loading assigned modules...</p>
-          ) : assignedModules.length === 0 ? (
-            <p className="text-sm text-text/70">No modules assigned yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {assignedModules.map((item) => (
-                <div
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-tint px-4 py-3"
-                  key={item.id}
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-heading">
-                      {item.moduleCode} - {item.moduleName}
-                    </p>
-                    <p className="text-xs text-text/70">
-                      {item.intakeName || "Unknown Intake"} {item.termCode ? `• ${item.termCode}` : ""}
-                    </p>
-                    <p className="mt-1 text-[11px] text-text/55">
-                      Updated {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "—"}
-                    </p>
-                  </div>
-                  <Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>
-                    {item.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </section>
-
-      <section>
-        <Card title="Latest Announcements" description="Recent announcements shared with all users">
-          {loading ? (
-            <p className="text-sm text-text/70">Loading announcements...</p>
-          ) : announcements.length === 0 ? (
-            <p className="text-sm text-text/70">No announcements available yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {announcements.map((item) => (
-                <div
-                  className="rounded-2xl border border-border bg-tint px-4 py-3"
-                  key={item.id}
-                >
-                  <p className="text-sm font-semibold text-heading">{item.title}</p>
-                  <p className="mt-1 text-xs text-text/70">{item.message}</p>
-                  <p className="mt-1 text-[11px] text-text/55">
-                    {item.targetLabel} • {formatDateTime(item.createdAt)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-4">
-            <Link
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-              href="/announcements"
-            >
-              View All
-            </Link>
-          </div>
-        </Card>
-      </section>
     </div>
   );
 }

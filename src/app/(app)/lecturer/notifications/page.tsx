@@ -1,9 +1,9 @@
 "use client";
 
+import "../lecturer-experience.css";
+
 import { useEffect, useState } from "react";
-import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
+import { BellRing, CheckCheck, MailOpen, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   listConsultationNotifications,
@@ -53,90 +53,134 @@ export default function LecturerNotificationsPage() {
     };
   }, [toast]);
 
+  const unreadCount = notifications.filter((item) => item.unread).length;
+  const readCount = notifications.length - unreadCount;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayCount = notifications.filter((item) => item.createdAt.slice(0, 10) === todayKey).length;
+
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-heading">Notifications</h1>
-          <p className="text-sm text-text/72">Loading consultation reminders...</p>
+      <div className="lecturer-experience">
+        <div className="page">
+          <div className="container">
+            <div className="glass-strong card-body">Loading consultation reminders...</div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-heading">Notifications</h1>
-          <p className="text-sm text-text/72">
-            Lecturer consultation reminders and upcoming session alerts.
-          </p>
-        </div>
-        <Button
-          disabled={isMarkingAll || notifications.every((item) => !item.unread)}
-          onClick={async () => {
-            setIsMarkingAll(true);
-            try {
-              await markAllConsultationNotificationsRead();
-              setNotifications((prev) =>
-                prev.map((item) => ({
-                  ...item,
-                  unread: false,
-                  readAt: item.readAt || new Date().toISOString(),
-                }))
-              );
-              toast({
-                title: "Marked all read",
-                message: "All lecturer reminders are now read.",
-              });
-            } catch (error) {
-              toast({
-                title: "Update failed",
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to update reminders.",
-                variant: "error",
-              });
-            } finally {
-              setIsMarkingAll(false);
-            }
-          }}
-          variant="secondary"
-        >
-          Mark all read
-        </Button>
-      </div>
-
-      <div className="space-y-3">
-        {notifications.length === 0 ? (
-          <Card>
-            <p className="text-sm text-text/70">
-              No consultation reminders yet.
-            </p>
-          </Card>
-        ) : (
-          notifications.map((item) => (
-            <Card className={item.unread ? "border-l-4 border-l-primary" : ""} key={item.id}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="warning">
-                      {toConsultationNotificationLabel(item.type)}
-                    </Badge>
-                    {item.unread ? <Badge variant="danger">Unread</Badge> : null}
-                  </div>
-                  <p className="mt-2 text-base font-semibold text-heading">{item.title}</p>
-                  <p className="mt-1 text-sm text-text/72">{item.message}</p>
+    <div className="lecturer-experience">
+      <div className="page">
+        <div className="section active">
+          <div className="container">
+            <div className="page-header fadein">
+              <div>
+                <div className="page-title">Notifications</div>
+                <div className="page-subtitle">
+                  Lecturer consultation reminders and upcoming session alerts in the bookings workspace style.
                 </div>
-                <p className="text-xs text-text/72">
-                  {new Date(item.createdAt).toLocaleString()}
-                </p>
               </div>
-            </Card>
-          ))
-        )}
+              <button
+                className="btn-outline"
+                disabled={isMarkingAll || notifications.every((item) => !item.unread)}
+                onClick={async () => {
+                  setIsMarkingAll(true);
+                  try {
+                    await markAllConsultationNotificationsRead();
+                    setNotifications((prev) =>
+                      prev.map((item) => ({
+                        ...item,
+                        unread: false,
+                        readAt: item.readAt || new Date().toISOString(),
+                      }))
+                    );
+                    toast({
+                      title: "Marked all read",
+                      message: "All lecturer reminders are now read.",
+                    });
+                  } catch (error) {
+                    toast({
+                      title: "Update failed",
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to update reminders.",
+                      variant: "error",
+                    });
+                  } finally {
+                    setIsMarkingAll(false);
+                  }
+                }}
+                type="button"
+              >
+                {isMarkingAll ? "Updating..." : "Mark all read"}
+              </button>
+            </div>
+
+            <div className="stats-row fadein">
+              {[
+                { icon: <BellRing size={18} />, label: "Total reminders", value: notifications.length, color: "var(--accent)" },
+                { icon: <MailOpen size={18} />, label: "Unread", value: unreadCount, color: "var(--amber)" },
+                { icon: <CheckCheck size={18} />, label: "Read", value: readCount, color: "var(--green)" },
+                { icon: <ShieldCheck size={18} />, label: "Today", value: todayCount, color: "var(--purple)" },
+              ].map((item) => (
+                <div className="glass stat-card" key={item.label} style={{ color: item.color }}>
+                  <div className="stat-icon" style={{ background: "rgba(52,97,255,0.08)" }}>
+                    {item.icon}
+                  </div>
+                  <div className="stat-value" style={{ color: "var(--ink)" }}>
+                    {item.value}
+                  </div>
+                  <div className="stat-label">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-strong fadein">
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Notification Feed</div>
+                  <div className="card-subtitle">Ordered by latest consultation activity</div>
+                </div>
+              </div>
+              <div className="card-body">
+                {notifications.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-text">No consultation reminders yet.</div>
+                  </div>
+                ) : (
+                  <div className="slot-list">
+                    {notifications.map((item) => (
+                      <div className="slot-item" key={item.id}>
+                        <div className={`slot-indicator ${item.unread ? "ind-amber" : "ind-green"}`} />
+                        <div style={{ flex: 1 }}>
+                          <div className="inline-flex" style={{ flexWrap: "wrap" }}>
+                            <span className="badge badge-waitlist">
+                              {toConsultationNotificationLabel(item.type)}
+                            </span>
+                            <span className={`badge ${item.unread ? "badge-booked" : "badge-available"}`}>
+                              {item.unread ? "Unread" : "Read"}
+                            </span>
+                          </div>
+                          <div className="slot-date" style={{ marginTop: 8 }}>
+                            {item.title}
+                          </div>
+                          <div className="slot-time">{item.message}</div>
+                          <div className="text-xs">
+                            Created {new Date(item.createdAt).toLocaleString()}
+                            {item.readAt ? ` • Read ${new Date(item.readAt).toLocaleString()}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

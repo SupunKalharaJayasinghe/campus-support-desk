@@ -892,10 +892,21 @@ function validateQuizForm(
   return errors;
 }
 
-function LoadingTable() {
+function LoadingTable({ immersive = false }: { immersive?: boolean }) {
   return (
-    <Card className="border-border bg-card">
-      <div className="grid gap-3 border-b border-border pb-5 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_220px]">
+    <Card
+      className={cn(
+        "border-border bg-card",
+        immersive &&
+          "!rounded-[18px] !border-[rgba(180,190,220,0.35)] !bg-white/88 !shadow-[0_20px_60px_rgba(15,23,41,0.12),0_4px_16px_rgba(15,23,41,0.06)]"
+      )}
+    >
+      <div
+        className={cn(
+          "grid gap-3 border-b border-border pb-5 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_220px]",
+          immersive && "border-[rgba(180,190,220,0.35)]"
+        )}
+      >
         {Array.from({ length: 5 }).map((_, index) => (
           <Skeleton className="h-12 w-full rounded-2xl" key={index} />
         ))}
@@ -915,38 +926,62 @@ function QuizModalShell({
   onClose,
   children,
   size = "xl",
+  immersive = false,
 }: {
   title: string;
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
   size?: "lg" | "xl" | "full";
+  immersive?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-[120] bg-slate-950/45 p-4 backdrop-blur-sm">
+    <div
+      className={cn(
+        "fixed inset-0 z-[120] bg-slate-950/45 p-4 backdrop-blur-sm",
+        immersive && "bg-[rgba(15,23,41,0.5)]"
+      )}
+    >
       <div
         className={cn(
           "mx-auto flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[32px] border border-border bg-white shadow-[0_28px_70px_rgba(15,23,42,0.22)]",
+          immersive &&
+            "rounded-[24px] border-[rgba(180,190,220,0.4)] bg-white/96 shadow-[0_28px_70px_rgba(15,23,42,0.22)]",
           size === "lg" && "max-w-4xl",
           size === "xl" && "max-w-6xl",
           size === "full" && "max-w-[min(1200px,100%)]"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border bg-white px-6 py-5">
+        <div
+          className={cn(
+            "flex items-start justify-between gap-4 border-b border-border bg-white px-6 py-5",
+            immersive && "border-[rgba(180,190,220,0.35)] px-7 py-6"
+          )}
+        >
           <div>
             <h2 className="text-2xl font-semibold text-heading">{title}</h2>
             {description ? <p className="mt-2 text-sm leading-6 text-text/72">{description}</p> : null}
           </div>
           <button
             aria-label="Close modal"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/75 transition-colors hover:text-heading"
+            className={cn(
+              "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/75 transition-colors hover:text-heading",
+              immersive && "border-[rgba(180,190,220,0.35)] bg-[rgba(240,242,247,0.72)]"
+            )}
             onClick={onClose}
             type="button"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6">{children}</div>
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto bg-white px-6 py-6",
+            immersive && "bg-[rgba(248,250,255,0.85)] px-7 py-7"
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -1610,30 +1645,73 @@ export default function AdminQuizzesPage() {
     }));
   }
 
+  const lecturerPanelClass =
+    "!rounded-[18px] !shadow-[0_20px_60px_rgba(15,23,41,0.12),0_4px_16px_rgba(15,23,41,0.06)]";
+  const lecturerCardClass =
+    "!rounded-[18px] !border-[rgba(180,190,220,0.35)] !bg-white/85 !shadow-[0_20px_60px_rgba(15,23,41,0.12),0_4px_16px_rgba(15,23,41,0.06)]";
+  const lecturerMetricCardClass =
+    "rounded-[16px] border border-[rgba(180,190,220,0.35)] bg-[rgba(240,242,247,0.72)] px-4 py-3";
+  const createQuizAction = (
+    <Button
+      className="h-11 gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+      disabled={isLecturerView && moduleOfferings.length === 0}
+      onClick={() => openBuilder("create")}
+      title={
+        isLecturerView && moduleOfferings.length === 0
+          ? "You need an assigned module offering before creating a quiz."
+          : undefined
+      }
+    >
+      <Plus size={16} />
+      Create Quiz
+    </Button>
+  );
+  const publishedQuizCount = quizzes.filter((quiz) => quiz.status === "published").length;
+  const draftQuizCount = quizzes.filter((quiz) => quiz.status === "draft").length;
+  const closingSoonCount = quizzes.filter((quiz) => {
+    const target = new Date(quiz.deadline);
+    if (Number.isNaN(target.getTime())) {
+      return false;
+    }
+    const diff = target.getTime() - Date.now();
+    return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
   return (
     <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={
-          <Button
-            className="h-11 gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
-            disabled={isLecturerView && moduleOfferings.length === 0}
-            onClick={() => openBuilder("create")}
-            title={
-              isLecturerView && moduleOfferings.length === 0
-                ? "You need an assigned module offering before creating a quiz."
-                : undefined
-            }
-          >
-            <Plus size={16} />
-            Create Quiz
-          </Button>
-        }
-        description={pageDescription}
-        title={pageTitle}
-      />
+      {isLecturerView ? (
+        <div className="page-header fadein">
+          <div>
+            <div className="page-title">{pageTitle}</div>
+            <div className="page-subtitle">{pageDescription}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">{createQuizAction}</div>
+        </div>
+      ) : (
+        <PageHeader actions={createQuizAction} description={pageDescription} title={pageTitle} />
+      )}
+
+      {isLecturerView && !loading ? (
+        <div className="stats-row fadein">
+          {[
+            { icon: <BarChart3 size={18} />, label: "Total quizzes", value: pagination.total, color: "var(--accent)" },
+            { icon: <Rocket size={18} />, label: "Published", value: publishedQuizCount, color: "var(--green)" },
+            { icon: <Pencil size={18} />, label: "Drafts", value: draftQuizCount, color: "var(--amber)" },
+            { icon: <Clock3 size={18} />, label: "Closing soon", value: closingSoonCount, color: "var(--purple)" },
+          ].map((item) => (
+            <div className="glass stat-card" key={item.label} style={{ color: item.color }}>
+              <div className="stat-icon" style={{ background: "rgba(52,97,255,0.08)" }}>
+                {item.icon}
+              </div>
+              <div className="stat-value" style={{ color: "var(--ink)" }}>{item.value}</div>
+              <div className="stat-label">{item.label}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {isLecturerView && !loading && moduleOfferings.length === 0 ? (
-        <Card className="border-amber-200 bg-amber-50">
+        <Card className={cn("border-amber-200 bg-amber-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex items-start gap-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
               <ShieldAlert size={22} />
@@ -1653,7 +1731,7 @@ export default function AdminQuizzesPage() {
       ) : null}
 
       {error ? (
-        <Card className="border-red-200 bg-red-50">
+        <Card className={cn("border-red-200 bg-red-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-700">
@@ -1672,9 +1750,15 @@ export default function AdminQuizzesPage() {
       ) : null}
 
       {loading ? (
-        <LoadingTable />
+        <LoadingTable immersive={isLecturerView} />
       ) : (
-        <Card className={cn("transition-all", isOverlayOpen && "pointer-events-none opacity-45 blur-[1px]")}>
+        <Card
+          className={cn(
+            "transition-all",
+            isOverlayOpen && "pointer-events-none opacity-45 blur-[1px]",
+            isLecturerView && lecturerCardClass
+          )}
+        >
           <div className="grid gap-3 border-b border-border pb-5 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_220px]">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Search</label>
@@ -1747,7 +1831,7 @@ export default function AdminQuizzesPage() {
               </Select>
             </div>
 
-            <div className="rounded-2xl border border-border bg-tint px-4 py-3">
+            <div className={cn("rounded-2xl border border-border bg-tint px-4 py-3", isLecturerView && lecturerMetricCardClass)}>
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Total Quizzes</p>
               <p className="mt-1 text-2xl font-semibold text-heading">{pagination.total}</p>
             </div>
@@ -1873,6 +1957,7 @@ export default function AdminQuizzesPage() {
           </div>
 
           <TablePagination
+            className={isLecturerView ? "border-[rgba(180,190,220,0.35)] pt-6" : undefined}
             onPageChange={setPage}
             onPageSizeChange={(value) => {
               setPage(1);
@@ -1889,6 +1974,7 @@ export default function AdminQuizzesPage() {
       {builderOpen ? (
         <QuizModalShell
           description="Create a quiz, define the settings, and build questions with inline validation before publishing."
+          immersive={isLecturerView}
           onClose={closeBuilder}
           size="full"
           title={editingQuiz ? "Edit Quiz" : "Create Quiz"}
@@ -2449,7 +2535,7 @@ export default function AdminQuizzesPage() {
       ) : null}
 
       {previewQuiz ? (
-        <QuizModalShell description="Preview the quiz exactly as it is configured before students attempt it." onClose={() => setPreviewQuiz(null)} size="lg" title={previewQuiz.title}>
+        <QuizModalShell description="Preview the quiz exactly as it is configured before students attempt it." immersive={isLecturerView} onClose={() => setPreviewQuiz(null)} size="lg" title={previewQuiz.title}>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card className="border-border bg-tint" title="Module">
               <p className="text-sm text-text/78">{previewQuiz.moduleOfferingId?.moduleCode} · {previewQuiz.moduleOfferingId?.moduleName}</p>
@@ -2497,7 +2583,7 @@ export default function AdminQuizzesPage() {
       ) : null}
 
       {resultsData ? (
-        <QuizModalShell description="Review quiz analytics, inspect student attempts, and export the results as CSV." onClose={() => setResultsData(null)} size="full" title={`Results · ${resultsData.quiz.title}`}>
+        <QuizModalShell description="Review quiz analytics, inspect student attempts, and export the results as CSV." immersive={isLecturerView} onClose={() => setResultsData(null)} size="full" title={`Results · ${resultsData.quiz.title}`}>
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               {[
@@ -2598,7 +2684,7 @@ export default function AdminQuizzesPage() {
       ) : null}
 
       {deleteTarget ? (
-        <QuizModalShell description="If the quiz already has attempts, deleting will archive it instead so existing submissions remain intact." onClose={() => setDeleteTarget(null)} size="lg" title="Delete Quiz?">
+        <QuizModalShell description="If the quiz already has attempts, deleting will archive it instead so existing submissions remain intact." immersive={isLecturerView} onClose={() => setDeleteTarget(null)} size="lg" title="Delete Quiz?">
           <div className="space-y-4">
             <p className="text-sm leading-6 text-text/75">You are about to delete <span className="font-semibold text-heading">{deleteTarget.title}</span>. This action cannot be undone for quizzes without attempts.</p>
             <div className="flex justify-end gap-3">
