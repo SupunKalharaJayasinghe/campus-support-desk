@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import {
   buildVisibleAdminSections,
@@ -10,7 +11,13 @@ import {
   resolveActiveAdminRoute,
 } from "@/components/layout/admin/admin-nav";
 import Badge from "@/components/ui/Badge";
-import { readStoredRole, readStoredUser } from "@/models/rbac";
+import Button from "@/components/ui/Button";
+import {
+  clearDemoSession,
+  isDemoModeEnabled,
+  readStoredRole,
+  readStoredUser,
+} from "@/models/rbac";
 import type { AppRole } from "@/models/rbac";
 
 const SEGMENT_LABELS: Record<string, string> = {
@@ -84,9 +91,11 @@ function labelForSegment(segment: string) {
 
 export default function AdminTopbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { activeWindow } = useAdminContext();
   const role = readStoredRole() ?? "SUPER_ADMIN";
   const user = readStoredUser();
+  const logoutRedirect = isDemoModeEnabled() ? "/" : "/login";
 
   const visibleSections = useMemo(() => buildVisibleAdminSections(role), [role]);
   const { activeItem, activeSection } = useMemo(
@@ -171,6 +180,17 @@ export default function AdminTopbar() {
           <p className="truncate text-sm font-medium text-heading" title={userLabel}>
             {userLabel}
           </p>
+          <Button
+            className="shrink-0 px-3 py-1.5"
+            onClick={() => {
+              clearDemoSession();
+              router.replace(logoutRedirect);
+            }}
+            variant="secondary"
+          >
+            <LogOut size={16} />
+            <span className="ml-1">Logout</span>
+          </Button>
         </div>
       </div>
     </header>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   ClipboardList,
@@ -16,6 +16,12 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
+import {
+  createDefaultAdminSettings,
+  normalizeAdminSettings,
+  type AdminSettingsRecord,
+} from "@/lib/admin-settings";
+import { authHeaders, readStoredUser } from "@/models/rbac";
 
 const SETTINGS_SECTIONS = [
   { id: "general", label: "General", icon: Settings2 },
@@ -29,105 +35,22 @@ const SETTINGS_SECTIONS = [
 type SettingSection = (typeof SETTINGS_SECTIONS)[number]["id"];
 type PageSize = 10 | 25 | 50 | 100;
 
-const GENERAL_DEFAULTS = {
-  campusName: "UniHub University",
-  timezone: "Asia/Colombo",
-  academicYear: "2025/2026",
-  maintenanceMode: false,
-};
+async function readJson<T>(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | T
+    | { message?: string }
+    | null;
 
-const ACADEMIC_DEFAULTS = {
-  semesterNaming: "semester",
-  creditsMin: "2",
-  creditsMax: "6",
-  programCodeFormat: "FAC-PROG-YYY",
-  moduleCodePrefix: "CS",
-};
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === "object" && "message" in payload && payload.message
+        ? payload.message
+        : "Request failed"
+    );
+  }
 
-const SECURITY_DEFAULTS = {
-  uiDemoMode: true,
-  passwordPolicy: "Standard",
-  sessionTimeout: "1h",
-  allowCampusEmail: true,
-  allowCampusId: true,
-};
-
-const NOTIFICATION_DEFAULTS = {
-  senderName: "Campus IT Services",
-  enableEmail: true,
-  enableInApp: true,
-  quietHoursStart: "22:00",
-  quietHoursEnd: "06:00",
-};
-
-const BRANDING_DEFAULTS = {
-  logoFileName: "",
-  primaryAccent: "#034AA6",
-  footerText: "University Digital Services",
-};
-
-const AUDIT_LOGS = [
-  {
-    id: "log-1",
-    date: "2026-03-01",
-    timestamp: "Mar 01, 2026 • 09:15 AM",
-    actor: "Rhea Admin",
-    action: "Updated password policy",
-    actionType: "Security",
-    target: "Security Settings",
-    status: "Success",
-  },
-  {
-    id: "log-2",
-    date: "2026-02-28",
-    timestamp: "Feb 28, 2026 • 04:40 PM",
-    actor: "Nimali Wijesinghe",
-    action: "Edited faculty defaults",
-    actionType: "Academic",
-    target: "Academic Defaults",
-    status: "Success",
-  },
-  {
-    id: "log-3",
-    date: "2026-02-28",
-    timestamp: "Feb 28, 2026 • 11:02 AM",
-    actor: "Rhea Admin",
-    action: "Enabled maintenance mode",
-    actionType: "General",
-    target: "General Settings",
-    status: "Success",
-  },
-  {
-    id: "log-4",
-    date: "2026-02-27",
-    timestamp: "Feb 27, 2026 • 06:28 PM",
-    actor: "System",
-    action: "Notification queue export",
-    actionType: "Notifications",
-    target: "Announcement Delivery",
-    status: "Success",
-  },
-  {
-    id: "log-5",
-    date: "2026-02-27",
-    timestamp: "Feb 27, 2026 • 02:10 PM",
-    actor: "Rhea Admin",
-    action: "Branding color updated",
-    actionType: "Branding",
-    target: "Branding Settings",
-    status: "Success",
-  },
-  {
-    id: "log-6",
-    date: "2026-02-26",
-    timestamp: "Feb 26, 2026 • 10:01 AM",
-    actor: "Nimali Wijesinghe",
-    action: "Session timeout change rejected",
-    actionType: "Security",
-    target: "Security Settings",
-    status: "Warning",
-  },
-];
+  return (payload ?? ({} as T)) as T;
+}
 
 function cn(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -194,16 +117,18 @@ function Toggle({
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
+  const defaults = useMemo(() => createDefaultAdminSettings(), []);
   const [activeSection, setActiveSection] = useState<SettingSection>("general");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  const [general, setGeneral] = useState({ ...GENERAL_DEFAULTS });
-  const [academic, setAcademic] = useState({ ...ACADEMIC_DEFAULTS });
-  const [security, setSecurity] = useState({ ...SECURITY_DEFAULTS });
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    ...NOTIFICATION_DEFAULTS,
-  });
-  const [branding, setBranding] = useState({ ...BRANDING_DEFAULTS });
+  const [general, setGeneral] = useState(defaults.general);
+  const [academic, setAcademic] = useState(defaults.academic);
+  const [security, setSecurity] = useState(defaults.security);
+  const [notificationPrefs, setNotificationPrefs] = useState(defaults.notificationPrefs);
+  const [branding, setBranding] = useState(defaults.branding);
+  const [auditLogs, setAuditLogs] = useState(defaults.auditLogs);
 
   const [auditSearch, setAuditSearch] = useState("");
   const [auditActionType, setAuditActionType] = useState("");
@@ -216,9 +141,60 @@ export default function AdminSettingsPage() {
     (section) => section.id === activeSection
   );
 
+  const applySettings = (settings: AdminSettingsRecord) => {
+    setGeneral(settings.general);
+    setAcademic(settings.academic);
+    setSecurity(settings.security);
+    setNotificationPrefs(settings.notificationPrefs);
+    setBranding(settings.branding);
+    setAuditLogs(settings.auditLogs);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      setIsLoading(true);
+      try {
+        const payload = await readJson<{ value?: unknown }>(
+          await fetch("/api/admin/settings", {
+            cache: "no-store",
+            headers: {
+              ...authHeaders(),
+            },
+          })
+        );
+        if (cancelled) {
+          return;
+        }
+        applySettings(normalizeAdminSettings(payload.value));
+        setLoadError("");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setLoadError(
+          error instanceof Error ? error.message : "Failed to load settings from the database."
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setAuditPage(1);
+  }, [auditSearch, auditActionType, auditDateFrom, auditDateTo]);
+
   const filteredAuditLogs = useMemo(() => {
     const query = auditSearch.trim().toLowerCase();
-    return AUDIT_LOGS.filter((log) => {
+    return auditLogs.filter((log) => {
       const lookup = `${log.actor} ${log.action} ${log.target}`.toLowerCase();
       if (query && !lookup.includes(query)) return false;
       if (auditActionType && log.actionType !== auditActionType) return false;
@@ -226,40 +202,129 @@ export default function AdminSettingsPage() {
       if (auditDateTo && log.date > auditDateTo) return false;
       return true;
     });
-  }, [auditActionType, auditDateFrom, auditDateTo, auditSearch]);
+  }, [auditActionType, auditDateFrom, auditDateTo, auditLogs, auditSearch]);
 
-  const handleReset = () => {
-    if (activeSection === "general") setGeneral({ ...GENERAL_DEFAULTS });
-    if (activeSection === "academic") setAcademic({ ...ACADEMIC_DEFAULTS });
-    if (activeSection === "security") setSecurity({ ...SECURITY_DEFAULTS });
-    if (activeSection === "notifications") {
-      setNotificationPrefs({ ...NOTIFICATION_DEFAULTS });
-    }
-    if (activeSection === "branding") setBranding({ ...BRANDING_DEFAULTS });
+  const handleReset = async () => {
     if (activeSection === "audit") {
       setAuditSearch("");
       setAuditActionType("");
       setAuditDateFrom("");
       setAuditDateTo("");
+      toast({
+        title: "Filters cleared",
+        message: "Audit filters were cleared.",
+        variant: "info",
+      });
+      return;
     }
-    toast({
-      title: "Reset complete",
-      message: "Settings were restored to demo defaults.",
-      variant: "info",
-    });
+
+    setIsSaving(true);
+    try {
+      const currentUser = readStoredUser();
+      const payload = await readJson<{ value?: unknown }>(
+        await fetch(`/api/admin/settings?section=${encodeURIComponent(activeSection)}`, {
+          method: "DELETE",
+          headers: {
+            ...authHeaders(),
+            "x-user-name": currentUser?.name ?? "",
+          },
+        })
+      );
+      applySettings(normalizeAdminSettings(payload.value));
+      setLoadError("");
+      toast({
+        title: "Reset complete",
+        message: `${activeSectionMeta?.label ?? "Section"} was restored from the database defaults.`,
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message: error instanceof Error ? error.message : "Failed to reset settings.",
+        variant: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
-    window.setTimeout(() => {
-      setIsSaving(false);
+
+    try {
+      const currentUser = readStoredUser();
+      const payload = await readJson<{ value?: unknown }>(
+        await fetch("/api/admin/settings", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+            "x-user-name": currentUser?.name ?? "",
+          },
+          body: JSON.stringify({
+            general,
+            academic,
+            security,
+            notificationPrefs,
+            branding,
+            section: activeSection,
+            actorName: currentUser?.name ?? "",
+          }),
+        })
+      );
+
+      applySettings(normalizeAdminSettings(payload.value));
+      setLoadError("");
       toast({
         title: "Saved",
         message: "Settings updated successfully.",
         variant: "success",
       });
-    }, 600);
+    } catch (error) {
+      toast({
+        title: "Failed",
+        message: error instanceof Error ? error.message : "Failed to save settings.",
+        variant: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExportCsv = () => {
+    if (filteredAuditLogs.length === 0) {
+      toast({
+        title: "Nothing to export",
+        message: "There are no audit rows for the selected filters.",
+        variant: "info",
+      });
+      return;
+    }
+
+    const lines = [
+      ["Timestamp", "Actor", "Action", "Action Type", "Target", "Status"].join(","),
+      ...filteredAuditLogs.map((log) =>
+        [
+          `"${log.timestamp.replace(/"/g, '""')}"`,
+          `"${log.actor.replace(/"/g, '""')}"`,
+          `"${log.action.replace(/"/g, '""')}"`,
+          `"${log.actionType.replace(/"/g, '""')}"`,
+          `"${log.target.replace(/"/g, '""')}"`,
+          `"${log.status.replace(/"/g, '""')}"`,
+        ].join(",")
+      ),
+    ];
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "admin-audit-logs.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const sectionDescription: Record<SettingSection, string> = {
@@ -278,6 +343,14 @@ export default function AdminSettingsPage() {
       (safeAuditPage - 1) * auditPageSize,
       safeAuditPage * auditPageSize
     );
+
+    if (isLoading) {
+      return (
+        <div className="rounded-2xl border border-black/10 bg-[#D9D9D9]/20 px-4 py-6 text-sm text-[#26150F]/70">
+          Loading settings from the database...
+        </div>
+      );
+    }
 
     if (activeSection === "general") {
       return (
@@ -326,6 +399,7 @@ export default function AdminSettingsPage() {
                   }
                   value={general.academicYear}
                 >
+                  <option value="">Not set</option>
                   <option value="2024/2025">2024/2025</option>
                   <option value="2025/2026">2025/2026</option>
                   <option value="2026/2027">2026/2027</option>
@@ -660,10 +734,10 @@ export default function AdminSettingsPage() {
                   className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-black/20 bg-white px-4 text-sm text-[#26150F] transition-colors hover:border-[#0339A6]/55 hover:text-[#0339A6]"
                   htmlFor="logo-upload"
                 >
-                  Upload
+                  Select File
                 </label>
                 <p className="text-xs text-[#26150F]/64">
-                  UI demo only. No file is uploaded to a server.
+                  The selected logo filename is saved to the database. Binary asset upload is not handled on this screen.
                 </p>
               </div>
             </div>
@@ -749,13 +823,7 @@ export default function AdminSettingsPage() {
               />
               <Button
                 className="h-11 rounded-xl border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
-                onClick={() =>
-                  toast({
-                    title: "Export queued",
-                    message: "The audit log CSV export has been queued.",
-                    variant: "info",
-                  })
-                }
+                onClick={handleExportCsv}
                 type="button"
                 variant="secondary"
               >
@@ -837,6 +905,12 @@ export default function AdminSettingsPage() {
         </p>
       </section>
 
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
+
       <section className="rounded-3xl border border-black/15 bg-white shadow-[0_8px_24px_rgba(38,21,15,0.08)]">
         <div className="p-4 md:hidden">
           <label className="text-xs font-semibold uppercase tracking-[0.12em] text-[#26150F]/58">
@@ -904,6 +978,7 @@ export default function AdminSettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-5">
               <Button
                 className="rounded-xl border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
+                disabled={isLoading || isSaving}
                 onClick={handleReset}
                 type="button"
                 variant="secondary"
@@ -913,7 +988,7 @@ export default function AdminSettingsPage() {
               </Button>
               <Button
                 className="rounded-xl bg-[#034AA6] text-[#D9D9D9] hover:bg-[#0339A6]"
-                disabled={isSaving}
+                disabled={isLoading || isSaving}
                 onClick={handleSave}
                 type="button"
               >
