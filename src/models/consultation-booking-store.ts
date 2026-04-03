@@ -1,4 +1,5 @@
 import type { ConsultationBookingStatus } from "@/models/consultation-booking";
+import { isDemoModeEnabled } from "@/models/rbac";
 
 export type ConsultationBookingCancelledByRole =
   | "STUDENT"
@@ -34,38 +35,43 @@ export interface ConsultationBookingWriteInput {
   cancelledReason?: string;
 }
 
-const INITIAL_CONSULTATION_BOOKINGS: ConsultationBookingPersistedRecord[] = [
-  {
-    id: "booking-demo-1",
-    slotId: "slot-lec-rsilva-2026-04-10-0900",
-    lecturerId: "lec-rsilva",
-    studentId: "stu-demo-1",
-    purpose: "Career guidance and internship planning",
-    status: "CONFIRMED",
-    confirmedAt: "2026-04-01T08:00:00.000Z",
-    completedAt: null,
-    cancelledAt: null,
-    cancelledByRole: null,
-    cancelledReason: "",
-    createdAt: "2026-04-01T07:55:00.000Z",
-    updatedAt: "2026-04-01T08:00:00.000Z",
-  },
-  {
-    id: "booking-demo-2",
-    slotId: "slot-lec-kperera-2026-04-03-1030",
-    lecturerId: "lec-kperera",
-    studentId: "stu-demo-1",
-    purpose: "Academic Consultation",
-    status: "CONFIRMED",
-    confirmedAt: "2026-04-02T06:30:00.000Z",
-    completedAt: null,
-    cancelledAt: null,
-    cancelledByRole: null,
-    cancelledReason: "",
-    createdAt: "2026-04-02T06:20:00.000Z",
-    updatedAt: "2026-04-02T06:30:00.000Z",
-  },
-];
+const INITIAL_CONSULTATION_BOOKINGS: ConsultationBookingPersistedRecord[] =
+  isDemoModeEnabled()
+    ? [
+        {
+          id: "booking-demo-1",
+          slotId: "slot-lec-rsilva-2026-04-10-0900",
+          lecturerId: "lec-rsilva",
+          studentId: "stu-demo-1",
+          purpose: "Career guidance and internship planning",
+          status: "CONFIRMED",
+          confirmedAt: "2026-04-01T08:00:00.000Z",
+          completedAt: null,
+          cancelledAt: null,
+          cancelledByRole: null,
+          cancelledReason: "",
+          createdAt: "2026-04-01T07:55:00.000Z",
+          updatedAt: "2026-04-01T08:00:00.000Z",
+        },
+        {
+          id: "booking-demo-2",
+          slotId: "slot-lec-kperera-2026-04-03-1030",
+          lecturerId: "lec-kperera",
+          studentId: "stu-demo-1",
+          purpose: "Academic Consultation",
+          status: "CONFIRMED",
+          confirmedAt: "2026-04-02T06:30:00.000Z",
+          completedAt: null,
+          cancelledAt: null,
+          cancelledByRole: null,
+          cancelledReason: "",
+          createdAt: "2026-04-02T06:20:00.000Z",
+          updatedAt: "2026-04-02T06:30:00.000Z",
+        },
+      ]
+    : [];
+
+const DEMO_CONSULTATION_BOOKING_IDS = new Set(["booking-demo-1", "booking-demo-2"]);
 
 const globalForConsultationBookingStore = globalThis as typeof globalThis & {
   __consultationBookingStore?: ConsultationBookingPersistedRecord[];
@@ -75,6 +81,11 @@ function consultationBookingStore() {
   if (!globalForConsultationBookingStore.__consultationBookingStore) {
     globalForConsultationBookingStore.__consultationBookingStore =
       INITIAL_CONSULTATION_BOOKINGS.map((item) => ({ ...item }));
+  } else if (!isDemoModeEnabled()) {
+    globalForConsultationBookingStore.__consultationBookingStore =
+      globalForConsultationBookingStore.__consultationBookingStore.filter(
+        (item) => !DEMO_CONSULTATION_BOOKING_IDS.has(item.id)
+      );
   }
 
   return globalForConsultationBookingStore.__consultationBookingStore;

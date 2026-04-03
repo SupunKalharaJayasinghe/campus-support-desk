@@ -1,4 +1,4 @@
-import { authHeaders, readStoredUser } from "@/lib/rbac";
+import { authHeaders, isDemoModeEnabled, readStoredUser } from "@/lib/rbac";
 import { getConsultationNotificationTypeLabel, type ConsultationNotificationType } from "@/models/consultation-notification";
 import type { ConsultationSlotMode, ConsultationSlotStatus } from "@/models/consultation-availability";
 import type { ConsultationBookingStatus } from "@/models/consultation-booking";
@@ -101,19 +101,26 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 export function getCurrentConsultationActorIds() {
   const user = readStoredUser();
   const rawId = String(user?.id ?? "").trim();
+  const rawStudentRef = String(user?.studentRef ?? "").trim();
+  const demoMode = isDemoModeEnabled();
 
   return {
     lecturerId:
       user?.role === "LECTURER"
         ? rawId && rawId.startsWith("lec-")
           ? rawId
-          : "lec-kperera"
+          : demoMode
+            ? "lec-kperera"
+            : ""
         : "",
     studentId:
       user?.role === "STUDENT"
-        ? rawId && rawId.startsWith("stu-")
-          ? rawId
-          : "stu-demo-1"
+        ? rawStudentRef ||
+          (rawId && rawId.startsWith("stu-")
+            ? rawId
+            : demoMode
+              ? "stu-demo-1"
+              : "")
         : "",
   };
 }
