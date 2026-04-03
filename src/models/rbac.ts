@@ -1,5 +1,9 @@
-export type AppRole = "SUPER_ADMIN" | "LECTURER" | "LOST_ITEM_STAFF" | "STUDENT";
-export type AcademicStream = "WEEKDAY" | "WEEKEND";
+export type AppRole =
+  | "SUPER_ADMIN"
+  | "LECTURER"
+  | "LOST_ITEM_STAFF"
+  | "STUDENT"
+  | "COMMUNITY_ADMIN";
 
 export interface DemoUser {
   id: string;
@@ -7,15 +11,7 @@ export interface DemoUser {
   role: AppRole;
   username?: string;
   email?: string;
-  studentRef?: string;
-  studentRegistrationNumber?: string;
   mustChangePassword?: boolean;
-  facultyCodes?: string[];
-  degreeProgramIds?: string[];
-  semesterCode?: string;
-  stream?: AcademicStream;
-  subgroup?: string | null;
-  intakeId?: string;
 }
 
 export const ROLE_STORAGE_KEY = "unihub_role";
@@ -26,6 +22,7 @@ export const HOME_BY_ROLE: Record<AppRole, string> = {
   LECTURER: "/lecturer",
   LOST_ITEM_STAFF: "/lost-items",
   STUDENT: "/student",
+  COMMUNITY_ADMIN: "/community-admin",
 };
 
 export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
@@ -33,6 +30,7 @@ export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
   LECTURER: "Lecturer Portal",
   LOST_ITEM_STAFF: "Lost & Found Staff",
   STUDENT: "Student Portal",
+  COMMUNITY_ADMIN: "Community Admin",
 };
 
 export function isDemoModeEnabled() {
@@ -59,7 +57,8 @@ export function isRole(value: string): value is AppRole {
     value === "SUPER_ADMIN" ||
     value === "LECTURER" ||
     value === "LOST_ITEM_STAFF" ||
-    value === "STUDENT"
+    value === "STUDENT" ||
+    value === "COMMUNITY_ADMIN"
   );
 }
 
@@ -81,6 +80,9 @@ export function getExpectedRoleForPath(pathname: string): AppRole | AppRole[] | 
   }
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return "SUPER_ADMIN";
+  }
+  if (pathname === "/community-admin" || pathname.startsWith("/community-admin/")) {
+    return "COMMUNITY_ADMIN";
   }
   return null;
 }
@@ -107,21 +109,6 @@ export function readStoredUser(): DemoUser | null {
 
   try {
     const parsed = JSON.parse(rawUser) as Partial<DemoUser>;
-    const parsedFacultyCodes = Array.isArray(parsed.facultyCodes)
-      ? parsed.facultyCodes
-          .map((value) => String(value ?? "").trim().toUpperCase())
-          .filter(Boolean)
-      : [];
-    const parsedDegreeProgramIds = Array.isArray(parsed.degreeProgramIds)
-      ? parsed.degreeProgramIds
-          .map((value) => String(value ?? "").trim().toUpperCase())
-          .filter(Boolean)
-      : [];
-    const parsedSemesterCode = String(parsed.semesterCode ?? "").trim().toUpperCase();
-    const parsedStream = String(parsed.stream ?? "").trim().toUpperCase();
-    const parsedSubgroup = String(parsed.subgroup ?? "").trim();
-    const parsedIntakeId = String(parsed.intakeId ?? "").trim();
-
     if (
       !parsed ||
       typeof parsed !== "object" ||
@@ -136,25 +123,10 @@ export function readStoredUser(): DemoUser | null {
       role: parsed.role as AppRole,
       username: typeof parsed.username === "string" ? parsed.username : undefined,
       email: typeof parsed.email === "string" ? parsed.email : undefined,
-      studentRef:
-        typeof parsed.studentRef === "string" ? parsed.studentRef : undefined,
-      studentRegistrationNumber:
-        typeof parsed.studentRegistrationNumber === "string"
-          ? parsed.studentRegistrationNumber
-          : undefined,
       mustChangePassword:
         typeof parsed.mustChangePassword === "boolean"
           ? parsed.mustChangePassword
           : false,
-      facultyCodes: parsedFacultyCodes,
-      degreeProgramIds: parsedDegreeProgramIds,
-      semesterCode: parsedSemesterCode || undefined,
-      stream:
-        parsedStream === "WEEKDAY" || parsedStream === "WEEKEND"
-          ? (parsedStream as AcademicStream)
-          : undefined,
-      subgroup: parsedSubgroup || undefined,
-      intakeId: parsedIntakeId || undefined,
     };
   } catch {
     return null;
@@ -198,7 +170,6 @@ export function authHeaders() {
 
   return {
     "x-user-id": user.id,
-    "x-user-role": user.role,
   } as Record<string, string>;
 }
 
@@ -206,9 +177,6 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   const normalized = String(value ?? "").trim().toUpperCase();
   if (normalized === "ADMIN" || normalized === "SUPER_ADMIN") {
     return "SUPER_ADMIN";
-  }
-  if (normalized === "LOST_ITEM_ADMIN" || normalized === "LOST_ITEM_STAFF") {
-    return "LOST_ITEM_STAFF";
   }
   if (normalized === "LECTURER") {
     return "LECTURER";
@@ -218,6 +186,9 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   }
   if (normalized === "STUDENT") {
     return "STUDENT";
+  }
+  if (normalized === "COMMUNITY_ADMIN") {
+    return "COMMUNITY_ADMIN";
   }
   return "LOST_ITEM_STAFF";
 }

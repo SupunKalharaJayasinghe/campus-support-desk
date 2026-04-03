@@ -1,14 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Eye, Flag, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Textarea from "@/components/ui/Textarea";
 import {
   categoryLabel,
+  isClosedToday,
   mapApiReportToRow,
   type ReportedPost,
   type ReportStatus,
@@ -36,8 +37,9 @@ function isLikelyMongoObjectId(value: string) {
   return /^[a-f\d]{24}$/i.test(value.trim());
 }
 
-function CommunityAdminReportedPostsPageContent() {
+export default function CommunityAdminReportedPostsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
@@ -93,7 +95,6 @@ function CommunityAdminReportedPostsPageContent() {
 
   useEffect(() => {
     if (reportsLoading) return;
-    const searchParams = new URLSearchParams(window.location.search);
     const openReport = searchParams.get("openReport");
     const statusParam = searchParams.get("status");
 
@@ -107,13 +108,28 @@ function CommunityAdminReportedPostsPageContent() {
     if (openReport || statusParam) {
       router.replace("/community-admin/reported-posts", { scroll: false });
     }
-  }, [reports, reportsLoading, router]);
+  }, [reports, reportsLoading, router, searchParams]);
 
   /** Open reports only — main queue (use dedicated pages for other statuses). */
   const openReportQueue = useMemo(
     () => reports.filter((r) => r.status === "OPEN"),
     [reports]
   );
+
+  const overviewStats = useMemo(() => {
+    const reportedPostsCount = new Set(
+      reports.map((r) => r.postId.trim()).filter(Boolean)
+    ).size;
+    const openReportsCount = reports.filter((r) => r.status === "OPEN").length;
+    const closedTodayCount = reports.filter(
+      (r) => r.status !== "OPEN" && isClosedToday(r.updatedAt)
+    ).length;
+    return {
+      reportedPostsCount,
+      openReportsCount,
+      closedTodayCount,
+    };
+  }, [reports]);
 
   useEffect(() => {
     if (!detailReportId) return;
@@ -537,6 +553,71 @@ function CommunityAdminReportedPostsPageContent() {
 
   return (
     <div className="space-y-6 pb-6 md:space-y-8">
+      <section
+        aria-labelledby="post-report-overview-title"
+        className="scroll-mt-6 rounded-2xl border border-border/90 bg-gradient-to-br from-slate-50/95 via-sky-50/40 to-slate-50/90 p-5 shadow-sm md:p-6"
+      >
+        <h2
+          className="text-lg font-semibold tracking-tight text-heading md:text-xl"
+          id="post-report-overview-title"
+        >
+          Post & report details
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-text/70">
+          Report volume, open queue size, and reports closed today after moderation.
+        </p>
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <div className="relative overflow-hidden rounded-xl border border-border/85 bg-white p-4 shadow-sm pl-4 before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-full before:bg-gradient-to-b before:from-violet-500 before:to-fuchsia-500">
+            <div className="flex items-start justify-between gap-3 pl-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-heading">Reported posts</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-heading">
+                  {reportsLoading ? "—" : overviewStats.reportedPostsCount}
+                </p>
+              </div>
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600"
+                aria-hidden
+              >
+                <Flag className="h-5 w-5" strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded-xl border border-border/85 bg-white p-4 pl-4 shadow-sm border-l-4 border-l-orange-500">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-heading">Open reports</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-heading">
+                  {reportsLoading ? "—" : overviewStats.openReportsCount}
+                </p>
+              </div>
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-600"
+                aria-hidden
+              >
+                <AlertTriangle className="h-5 w-5" strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded-xl border border-border/85 bg-white p-4 pl-4 shadow-sm border-l-4 border-l-emerald-500">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-heading">Closed today</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-heading">
+                  {reportsLoading ? "—" : overviewStats.closedTodayCount}
+                </p>
+              </div>
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"
+                aria-hidden
+              >
+                <Eye className="h-5 w-5" strokeWidth={2} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="reports" className="scroll-mt-6">
         <Card
           title="Report queue (open reports only)"
@@ -960,27 +1041,5 @@ function CommunityAdminReportedPostsPageContent() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-export default function CommunityAdminReportedPostsPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="space-y-6 pb-6 md:space-y-8">
-          <Card
-            title="Report queue"
-            description="Loading moderation workspace..."
-            className="border-l-[3px] border-l-amber-500 bg-gradient-to-br from-card to-amber-500/[0.04]"
-          >
-            <p className="rounded-2xl border border-dashed border-sky-200/70 bg-sky-50/40 px-4 py-8 text-center text-sm text-slate-600">
-              Loading reports...
-            </p>
-          </Card>
-        </div>
-      }
-    >
-      <CommunityAdminReportedPostsPageContent />
-    </Suspense>
   );
 }

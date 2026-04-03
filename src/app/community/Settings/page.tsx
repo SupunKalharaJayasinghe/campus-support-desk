@@ -23,12 +23,13 @@ import {
     saveCommunityProfileSettings,
     type CommunityProfileSettings,
 } from "@/lib/community-profile";
-import { updateStoredUser } from "@/lib/rbac";
+import { authHeaders, readStoredUser, updateStoredUser } from "@/lib/rbac";
 
 export default function CommunitySettingsPage() {
     const [form, setForm] = useState<CommunityProfileSettings>(() => readCommunityProfileSettings());
     const [isSaving, setIsSaving] = useState(false);
     const [savedAt, setSavedAt] = useState<string>("");
+    const [saveError, setSaveError] = useState<string>("");
 
     const isPublic = form.visibility === "public";
 
@@ -41,22 +42,56 @@ export default function CommunitySettingsPage() {
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (isSaving) return;
         setIsSaving(true);
+        setSaveError("");
 
-        const sanitized = saveCommunityProfileSettings(form);
-        updateStoredUser({
-            name: sanitized.displayName,
-            username: sanitized.username || undefined,
-            email: sanitized.email || undefined,
-        });
+        try {
+            const sanitized = saveCommunityProfileSettings(form);
+            const storedUser = readStoredUser();
+            const userId = storedUser?.id;
+            if (!userId) {
+                throw new Error("You must be logged in to save community profile settings.");
+            }
 
-        window.setTimeout(() => {
+            const res = await fetch("/api/community-profile", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", ...authHeaders() },
+                body: JSON.stringify({
+                    userId,
+                    displayName: sanitized.displayName,
+                    username: sanitized.username,
+                    email: sanitized.email,
+                    bio: sanitized.bio,
+                    faculty: sanitized.faculty,
+                    studyYear: sanitized.studyYear,
+                    visibility: sanitized.visibility,
+                }),
+            });
+
+            const body = (await res.json().catch(() => null)) as
+                | { message?: string }
+                | Record<string, unknown>
+                | null;
+
+            if (!res.ok) {
+                throw new Error((body as { message?: string } | null)?.message || "Failed to save profile.");
+            }
+
+            updateStoredUser({
+                name: sanitized.displayName,
+                username: sanitized.username || undefined,
+                email: sanitized.email || undefined,
+            });
+
             setForm(sanitized);
             setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        } catch (err) {
+            setSaveError(err instanceof Error ? err.message : "Failed to save profile.");
+        } finally {
             setIsSaving(false);
-        }, 450);
+        }
     };
 
     return (
@@ -99,6 +134,9 @@ export default function CommunitySettingsPage() {
                             <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700">
                                 <CheckCircle2 size={14} /> Saved at {savedAt}
                             </p>
+                        ) : null}
+                        {saveError ? (
+                            <p className="mt-2 text-sm font-medium text-red-700">{saveError}</p>
                         ) : null}
                     </div>
 

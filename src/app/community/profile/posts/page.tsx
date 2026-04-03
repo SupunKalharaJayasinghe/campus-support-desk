@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Eye, FileText, MessageSquare, ThumbsUp } from "lucide-react";
 import Card from "@/components/ui/Card";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
+import { readCommunityProfileSettings } from "@/lib/community-profile";
 import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
@@ -13,6 +15,8 @@ type DbCommunityReply = {
   message: string;
   createdAt?: string;
   isAccepted?: boolean;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
 };
 
 type DbCommunityPost = {
@@ -102,12 +106,22 @@ export default function CommunityProfilePostsPage() {
     try {
       setAcceptingReplyId(replyId);
       setError(null);
+      const storedUser = readStoredUser();
+      const settings = readCommunityProfileSettings();
+      const authorName =
+        settings.displayName.trim() || storedUser?.name?.trim() || "Current User";
       const res = await fetch(`/api/community-replies/${encodeURIComponent(replyId)}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ isAccepted: true }),
+        body: JSON.stringify({
+          isAccepted: true,
+          author: storedUser?.id,
+          authorUsername: storedUser?.username,
+          authorEmail: storedUser?.email,
+          authorName,
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -250,7 +264,18 @@ export default function CommunityProfilePostsPage() {
                               : "Mark Accepted"}
                           </button>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        {(reply.message ?? "").trim() ? (
+                          <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        ) : reply.attachmentUrl ? (
+                          <p className="mt-1 text-xs italic text-slate-500">Attachment only</p>
+                        ) : null}
+                        {reply.attachmentUrl ? (
+                          <CommunityReplyAttachment
+                            attachmentUrl={reply.attachmentUrl}
+                            attachmentName={reply.attachmentName ?? undefined}
+                            imageClassName="max-h-32"
+                          />
+                        ) : null}
                       </div>
                     ))}
                   </div>

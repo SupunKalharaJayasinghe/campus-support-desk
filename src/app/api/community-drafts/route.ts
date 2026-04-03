@@ -2,6 +2,11 @@ import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
 import {
+  urgentFeeFieldsForDb,
+  type UrgentLevel,
+  type UrgentPaymentMethod,
+} from "@/lib/community-urgent";
+import {
   dedupeStringsPreserveOrder,
   validateCommunityPostLikeContent,
 } from "@/lib/validate-community-post-body";
@@ -21,6 +26,11 @@ type DraftPayload = {
   authorEmail?: unknown;
   authorName?: unknown;
   authorDisplayName?: unknown;
+  isUrgent?: unknown;
+  urgentLevel?: unknown;
+  urgentPaymentMethod?: unknown;
+  urgentPrepayId?: unknown;
+  urgentCardLast4?: unknown;
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -42,6 +52,14 @@ function normalizeDraft(doc: {
   attachments?: string[];
   pictureUrl?: string | null;
   status?: string;
+  isUrgent?: boolean;
+  urgentLevel?: string | null;
+  urgentFeePoints?: number | null;
+  urgentFeeRs?: number | null;
+  urgentPaymentMethod?: string | null;
+  urgentPrepayId?: unknown;
+  urgentCardLast4?: string | null;
+  urgentCardPaymentRecordId?: unknown;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }) {
@@ -54,6 +72,25 @@ function normalizeDraft(doc: {
     attachments: Array.isArray(doc.attachments) ? doc.attachments : [],
     pictureUrl: typeof doc.pictureUrl === "string" ? doc.pictureUrl : "",
     status: doc.status === "resolved" ? "resolved" : "open",
+    isUrgent: Boolean(doc.isUrgent),
+    urgentLevel:
+      doc.urgentLevel === "2days" || doc.urgentLevel === "5days" || doc.urgentLevel === "7days"
+        ? (doc.urgentLevel as UrgentLevel)
+        : null,
+    urgentFeePoints: typeof doc.urgentFeePoints === "number" ? doc.urgentFeePoints : null,
+    urgentFeeRs: typeof doc.urgentFeeRs === "number" ? doc.urgentFeeRs : null,
+    urgentPaymentMethod:
+      doc.urgentPaymentMethod === "points" || doc.urgentPaymentMethod === "card"
+        ? (doc.urgentPaymentMethod as UrgentPaymentMethod)
+        : null,
+    urgentPrepayId: doc.urgentPrepayId ? String(doc.urgentPrepayId) : null,
+    urgentCardLast4:
+      typeof doc.urgentCardLast4 === "string" && /^\d{4}$/.test(doc.urgentCardLast4)
+        ? doc.urgentCardLast4
+        : null,
+    urgentCardPaymentRecordId: doc.urgentCardPaymentRecordId
+      ? String(doc.urgentCardPaymentRecordId)
+      : null,
     createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
   };
@@ -136,6 +173,36 @@ export async function POST(req: Request) {
       return Response.json({ error: pictureNorm.error }, { status: 400 });
     }
 
+    const isUrgent = Boolean(body.isUrgent);
+    const urgentLevelRaw = toTrimmedString(body.urgentLevel) as UrgentLevel;
+    const urgentLevel: UrgentLevel = urgentLevelRaw === "5days" || urgentLevelRaw === "7days" ? urgentLevelRaw : "2days";
+    const urgentPaymentMethodRaw = toTrimmedString(body.urgentPaymentMethod) as UrgentPaymentMethod;
+    const urgentPaymentMethod: UrgentPaymentMethod =
+      urgentPaymentMethodRaw === "card" ? "card" : "points";
+    const urgentFees = urgentFeeFieldsForDb(
+      isUrgent,
+      isUrgent ? urgentLevel : null,
+      isUrgent ? urgentPaymentMethod : null
+    );
+
+    const urgentPrepayIdRaw = toTrimmedString(body.urgentPrepayId);
+    const urgentPrepayId =
+      urgentPrepayIdRaw && mongoose.Types.ObjectId.isValid(urgentPrepayIdRaw)
+        ? urgentPrepayIdRaw
+        : null;
+
+    const urgentCardLast4Raw = toTrimmedString(body.urgentCardLast4);
+    let urgentCardLast4: string | null = null;
+    if (isUrgent && urgentPaymentMethod === "card") {
+      if (!/^\d{4}$/.test(urgentCardLast4Raw)) {
+        return Response.json(
+          { error: "Enter the last 4 digits of your card to save an urgent card draft." },
+          { status: 400 }
+        );
+      }
+      urgentCardLast4 = urgentCardLast4Raw;
+    }
+
     const draft = await CommunityDraft.create({
       title,
       description,
@@ -145,6 +212,13 @@ export async function POST(req: Request) {
       pictureUrl: pictureNorm.value ?? null,
       status,
       author: authorId,
+      isUrgent,
+      urgentLevel: isUrgent ? urgentLevel : null,
+      urgentFeePoints: urgentFees.urgentFeePoints,
+      urgentFeeRs: urgentFees.urgentFeeRs,
+      urgentPaymentMethod: isUrgent ? urgentPaymentMethod : null,
+      urgentPrepayId: isUrgent && urgentPaymentMethod === "points" ? urgentPrepayId : null,
+      urgentCardLast4: isUrgent && urgentPaymentMethod === "card" ? urgentCardLast4 : null,
     });
 
     return Response.json(normalizeDraft(draft.toObject()), { status: 201 });

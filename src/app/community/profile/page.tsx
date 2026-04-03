@@ -14,28 +14,28 @@ import {
     Eye,
     FilePenLine,
     FileText,
-    Flame,
+    ArrowLeft,
     Home,
-    LogOut,
     Menu,
     MessageSquare,
     Search,
     Settings,
     Settings2,
-    Star,
     ThumbsUp,
     User,
     Users,
     X,
 } from "lucide-react";
 import Card from "@/components/ui/Card";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
 import CommunityPostComposer, {
     type CommunityPostDraftInput,
     type CommunityPostDraft,
 } from "@/components/community/CommunityPostComposer";
 import communityBackground from "@/app/images/community/community2.jpg";
+import { saveCommunityDraftApi } from "@/lib/community-draft-api";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
-import { clearDemoSession, readStoredUser } from "@/lib/rbac";
+import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
     _id: string;
@@ -44,6 +44,8 @@ type DbCommunityReply = {
     message: string;
     createdAt?: string;
     isAccepted?: boolean;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
 };
 
 type DbCommunityPost = {
@@ -59,17 +61,41 @@ type DbCommunityPost = {
     replies?: DbCommunityReply[];
 };
 
-const PROFILE_FALLBACK = {
-    reputation: 1250,
+const PROFILE_FALLBACK: {
+    joined: string;
+    about: string;
+    stats: {
+        posts: number;
+        replies: number;
+    };
+    recentPosts: {
+        id: number;
+        title: string;
+        category: string;
+        time: string;
+        likes: number;
+        replies: number;
+    }[];
+    recentReplies: {
+        id: number;
+        postTitle: string;
+        content: string;
+        time: string;
+    }[];
+    archivedPosts: {
+        id: number;
+        title: string;
+        category: string;
+        time: string;
+        likes: number;
+        replies: number;
+    }[];
+} = {
     joined: "Aug 2024",
     about: "Passionate about helping classmates with coursework, project planning, and campus life tips.",
-    rank: 18,
-    profileViews: 532,
-    streakDays: 23,
     stats: {
         posts: 42,
         replies: 156,
-        helpful: 89,
     },
     recentPosts: [
         { id: 1, title: "How to prepare for Data Structures Exam?", category: "academic_question", time: "2 days ago", likes: 12, replies: 4 },
@@ -89,6 +115,24 @@ function roleToCommunityLabel(role: string | undefined) {
     if (role === "LECTURER") return "Verified Mentor";
     if (role === "LOST_ITEM_STAFF") return "Support Staff";
     return "Student Member";
+}
+
+function pickFiniteNumber(value: unknown, fallback: number): number {
+    if (value === undefined || value === null) return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function formatJoinedFromCreatedAt(createdAt: unknown, fallback: string): string {
+    if (createdAt === undefined || createdAt === null) return fallback;
+    const d =
+        createdAt instanceof Date
+            ? createdAt
+            : typeof createdAt === "string"
+              ? new Date(createdAt)
+              : new Date(String(createdAt));
+    if (Number.isNaN(d.getTime())) return fallback;
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 export default function CommunityProfilePage() {
@@ -114,22 +158,112 @@ export default function CommunityProfilePage() {
     const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
     const [draftActionError, setDraftActionError] = useState<string | null>(null);
 
-    const profileData = useMemo(() => {
+    const [profileData, setProfileData] = useState(() => ({
+        ...PROFILE_FALLBACK,
+        name: "Current User",
+        role: "Student Member",
+        about: PROFILE_FALLBACK.about,
+        username: "-",
+        email: "-",
+        faculty: "Computing",
+        studyYear: "Year 2",
+        points: 0,
+        userId: "",
+    }));
+
+    useEffect(() => {
         const storedUser = readStoredUser();
         const settings = readCommunityProfileSettings();
 
-        return {
+        setProfileData({
             ...PROFILE_FALLBACK,
-            name: settings.displayName || storedUser?.name || storedUser?.username || "Current User",
+            name:
+                settings.displayName ||
+                storedUser?.name ||
+                storedUser?.username ||
+                "Current User",
             role: roleToCommunityLabel(storedUser?.role),
             about: settings.bio || PROFILE_FALLBACK.about,
             username: settings.username || storedUser?.username || "-",
             email: settings.email || storedUser?.email || "-",
             faculty: settings.faculty,
             studyYear: settings.studyYear,
+            points: 0,
             userId: storedUser?.id || "",
-        };
+        });
     }, []);
+
+    const loadDbCommunityProfile = useCallback(async () => {
+        const storedUser = readStoredUser();
+        const userId = storedUser?.id;
+        if (!userId) return;
+        try {
+            const res = await fetch(
+                `/api/community-profile?userId=${encodeURIComponent(userId)}`
+            );
+            if (!res.ok) return;
+            const db = (await res.json().catch(() => null)) as
+                | {
+                      displayName?: string;
+                      username?: string;
+                      email?: string;
+                      bio?: string;
+                      faculty?: string;
+                      studyYear?: string;
+                      status?: "PUBLIC" | "PRIVATE";
+                      points?: unknown;
+                      postsCount?: unknown;
+                      openPostsCount?: unknown;
+                      repliesCount?: unknown;
+                      createdAt?: unknown;
+                  }
+                | null;
+            if (!db) return;
+
+            const ptsRaw = Number(db.points);
+            const pointsFromDb = Number.isFinite(ptsRaw) ? ptsRaw : null;
+
+            setProfileData((prev) => ({
+                ...prev,
+                name:
+                    String(db.displayName ?? "").trim() ||
+                    prev.name ||
+                    storedUser?.name ||
+                    storedUser?.username ||
+                    "Current User",
+                about: String(db.bio ?? "").trim() || prev.about,
+                username: String(db.username ?? "").trim() || prev.username,
+                email: String(db.email ?? "").trim() || prev.email,
+                faculty: String(db.faculty ?? "").trim() || prev.faculty,
+                studyYear: String(db.studyYear ?? "").trim() || prev.studyYear,
+                joined: formatJoinedFromCreatedAt(db.createdAt, prev.joined),
+                stats: {
+                    posts: pickFiniteNumber(
+                        db.openPostsCount !== undefined && db.openPostsCount !== null
+                            ? db.openPostsCount
+                            : db.postsCount,
+                        0
+                    ),
+                    replies: pickFiniteNumber(db.repliesCount, 0),
+                },
+                points: pointsFromDb !== null ? pointsFromDb : prev.points,
+            }));
+        } catch {
+            // ignore — local settings already shown
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadDbCommunityProfile();
+    }, [loadDbCommunityProfile]);
+
+    useEffect(() => {
+        const onVisibility = () => {
+            if (document.visibilityState === "visible") void loadDbCommunityProfile();
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => document.removeEventListener("visibilitychange", onVisibility);
+    }, [loadDbCommunityProfile]);
 
     useEffect(() => {
         let cancelled = false;
@@ -247,6 +381,12 @@ export default function CommunityProfilePage() {
             });
     }, [userPosts, searchQuery]);
 
+    /** Open (current) post count: live from loaded posts when available, else profile API value. */
+    const currentOpenPostsCount = useMemo(() => {
+        if (!userPosts) return profileData.stats.posts;
+        return userPosts.filter((post) => (post.status ?? "open") === "open").length;
+    }, [userPosts, profileData.stats.posts]);
+
     const filteredRecentReplies = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
         if (!q) return profileData.recentReplies;
@@ -256,9 +396,15 @@ export default function CommunityProfilePage() {
         );
     }, [profileData.recentReplies, searchQuery]);
 
-    const handleLogout = () => {
-        clearDemoSession();
-        setIsProfileMenuOpen(false);
+    /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
+    const closeSidebarIfMobile = useCallback(() => {
+        if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+            setSidebarOpen(false);
+        }
+    }, []);
+
+    const handleBackToStudentPage = () => {
+        closeSidebarIfMobile();
         router.push("/student");
     };
 
@@ -299,6 +445,12 @@ export default function CommunityProfilePage() {
             try {
                 setAcceptingReplyId(replyId);
                 setUserPostsError(null);
+                const storedUser = readStoredUser();
+                const settings = readCommunityProfileSettings();
+                const authorName =
+                    settings.displayName.trim() ||
+                    storedUser?.name?.trim() ||
+                    "Current User";
                 const res = await fetch(
                     `/api/community-replies/${encodeURIComponent(replyId)}`,
                     {
@@ -306,7 +458,13 @@ export default function CommunityProfilePage() {
                         headers: {
                             "Content-Type": "application/json",
                         },
-                        body: JSON.stringify({ isAccepted: true }),
+                        body: JSON.stringify({
+                            isAccepted: true,
+                            author: storedUser?.id,
+                            authorUsername: storedUser?.username,
+                            authorEmail: storedUser?.email,
+                            authorName,
+                        }),
                     }
                 );
                 if (!res.ok) {
@@ -350,50 +508,11 @@ export default function CommunityProfilePage() {
 
     const handleDraftSaved = useCallback(
         async (draft: CommunityPostDraftInput) => {
-            const storedUser = readStoredUser();
-            const profileSettings = readCommunityProfileSettings();
-            const authorDisplayName =
-                profileSettings.displayName.trim() ||
-                storedUser?.name?.trim() ||
-                "Current User";
-
-            const payload = {
-                title: draft.title,
-                description: draft.description,
-                category: draft.category,
-                tags: draft.tags,
-                attachments: draft.attachments,
-                pictureUrl: draft.pictureUrl,
-                status: draft.status,
-                author: storedUser?.id,
-                authorName: authorDisplayName,
-                authorUsername: storedUser?.username ?? "",
-                authorEmail: storedUser?.email ?? "",
-                authorDisplayName,
-                userId: storedUser?.id ?? "",
-            };
-
-            const endpoint = draft.id
-                ? `/api/community-drafts/${encodeURIComponent(draft.id)}`
-                : "/api/community-drafts";
-            const method = draft.id ? "PATCH" : "POST";
-
-            const res = await fetch(endpoint, {
-                method,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-
-            if (!res.ok) {
-                const body = (await res.json().catch(() => null)) as
-                    | { error?: string }
-                    | null;
-                const message = body?.error || "Failed to save draft";
+            const savedDraft = await saveCommunityDraftApi(draft).catch((e) => {
+                const message = e instanceof Error ? e.message : "Failed to save draft";
                 setDraftActionError(message);
-                throw new Error(message);
-            }
-
-            const savedDraft = (await res.json()) as CommunityPostDraft;
+                throw e instanceof Error ? e : new Error(message);
+            });
             setDraftPosts((prev) => {
                 const exists = prev.some((item) => item.id === savedDraft.id);
                 const next = exists
@@ -512,6 +631,7 @@ export default function CommunityProfilePage() {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        clientRequestId: draft.id,
                         title: draft.title,
                         description: draft.description,
                         category: draft.category,
@@ -519,6 +639,12 @@ export default function CommunityProfilePage() {
                         attachments: draft.attachments,
                         pictureUrl: draft.pictureUrl,
                         status: draft.status,
+                        isUrgent: draft.isUrgent,
+                        urgentLevel: draft.urgentLevel,
+                        urgentPaymentMethod: draft.urgentPaymentMethod,
+                        urgentPrepayId: draft.urgentPrepayId ?? null,
+                        urgentCardLast4: draft.urgentCardLast4 ?? null,
+                        urgentCardPaymentRecordId: draft.urgentCardPaymentRecordId ?? null,
                         author: storedUser?.id,
                         authorName: authorDisplayName,
                         authorUsername: storedUser?.username ?? "",
@@ -560,13 +686,6 @@ export default function CommunityProfilePage() {
             setDraftPostConfirm(null);
         }
     }, [draftPostConfirm, handleDraftPostNow]);
-
-    /** Only collapse the drawer on small screens; desktop sidebar stays open unless the user uses the menu button. */
-    const closeSidebarIfMobile = useCallback(() => {
-        if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
-            setSidebarOpen(false);
-        }
-    }, []);
 
     return (
         <main
@@ -717,12 +836,11 @@ export default function CommunityProfilePage() {
                             
 
                             <button
-                            type="button"
-                            onClick={handleLogout}
-                            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-200"
-                        >
-                            
-                            <LogOut size={18} /> Logout
+                                type="button"
+                                onClick={handleBackToStudentPage}
+                                className="flex w-full items-center gap-3 rounded-xl bg-red-100 px-3 py-2.5 text-sm font-semibold text-red-900 hover:bg-red-900 hover:text-white"
+                            >
+                                <ArrowLeft size={18} /> Back to student page
                             </button>
                         
                             
@@ -734,7 +852,7 @@ export default function CommunityProfilePage() {
                         <div id="Profile details" className="rounded-2xl border border-blue-200 bg-slate-50/90 p-4 shadow-shadow sm:rounded-3xl md:p-5 lg:p-6">
                             <div className="space-y-5">
                     <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-white to-blue-50 p-6 md:p-7">
-                        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                        <div className="flex flex-col gap-6 md:flex-row md:items-start">
                             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
                                 <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-100 text-blue-700 shadow-inner">
                                     <User size={46} />
@@ -758,39 +876,23 @@ export default function CommunityProfilePage() {
                                     <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">{profileData.about}</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-blue-100 bg-white/90 p-3">
-                                <div className="rounded-xl bg-blue-50 p-3">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</p>
-                                    <p className="mt-1 text-lg font-bold text-slate-800">#{profileData.rank}</p>
-                                </div>
-                                <div className="rounded-xl bg-blue-50 p-3">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Views</p>
-                                    <p className="mt-1 text-lg font-bold text-slate-800">{profileData.profileViews}</p>
-                                </div>
-                                <div className="col-span-2 rounded-xl bg-blue-700 p-3 text-white">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-100">Current Streak</p>
-                                    <p className="mt-1 flex items-center gap-2 text-lg font-bold">
-                                        <Flame size={17} /> {profileData.streakDays} days active
-                                    </p>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
-                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
-                            <p className="mb-2 inline-flex rounded-lg bg-yellow-100 p-2 text-yellow-700">
-                                <Star size={16} />
+                            <p className="mb-2 inline-flex rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                                <Award size={16} />
                             </p>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reputation</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.reputation}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Points</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.points}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-blue-100 p-2 text-blue-700">
                                 <FileText size={16} />
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posts</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.posts}</p>
+                            <p className="mt-1 text-2xl font-bold text-slate-800">{currentOpenPostsCount}</p>
                         </Card>
                         <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
                             <p className="mb-2 inline-flex rounded-lg bg-cyan-100 p-2 text-cyan-700">
@@ -798,13 +900,6 @@ export default function CommunityProfilePage() {
                             </p>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Replies</p>
                             <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.replies}</p>
-                        </Card>
-                        <Card className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
-                            <p className="mb-2 inline-flex rounded-lg bg-green-100 p-2 text-green-700">
-                                <ThumbsUp size={16} />
-                            </p>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Helpful Votes</p>
-                            <p className="mt-1 text-2xl font-bold text-slate-800">{profileData.stats.helpful}</p>
                         </Card>
                     </div>
 
@@ -823,6 +918,7 @@ export default function CommunityProfilePage() {
                             resetAfterDraftSave
                             draftToEdit={null}
                             onDraftSaved={handleDraftSaved}
+                            urgentDoneNavigatesTo="#draft-posts"
                             onDraftDeleted={(draftId) => {
                                 handleDraftDeleted(draftId).catch(() => undefined);
                             }}
@@ -977,9 +1073,24 @@ export default function CommunityProfilePage() {
                                                                             : "Mark Accepted"}
                                                                     </button>
                                                                 </div>
-                                                                <p className="mt-1 whitespace-pre-wrap">
-                                                                    {reply.message}
-                                                                </p>
+                                                                {(reply.message ?? "").trim() ? (
+                                                                    <p className="mt-1 whitespace-pre-wrap">
+                                                                        {reply.message}
+                                                                    </p>
+                                                                ) : reply.attachmentUrl ? (
+                                                                    <p className="mt-1 text-xs italic text-slate-500">
+                                                                        Attachment only
+                                                                    </p>
+                                                                ) : null}
+                                                                {reply.attachmentUrl ? (
+                                                                    <CommunityReplyAttachment
+                                                                        attachmentUrl={reply.attachmentUrl}
+                                                                        attachmentName={
+                                                                            reply.attachmentName ?? undefined
+                                                                        }
+                                                                        imageClassName="max-h-32"
+                                                                    />
+                                                                ) : null}
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1099,9 +1210,24 @@ export default function CommunityProfilePage() {
                                                                         : "Mark Accepted"}
                                                                 </button>
                                                             </div>
-                                                            <p className="mt-1 whitespace-pre-wrap">
-                                                                {reply.message}
-                                                            </p>
+                                                            {(reply.message ?? "").trim() ? (
+                                                                <p className="mt-1 whitespace-pre-wrap">
+                                                                    {reply.message}
+                                                                </p>
+                                                            ) : reply.attachmentUrl ? (
+                                                                <p className="mt-1 text-xs italic text-slate-500">
+                                                                    Attachment only
+                                                                </p>
+                                                            ) : null}
+                                                            {reply.attachmentUrl ? (
+                                                                <CommunityReplyAttachment
+                                                                    attachmentUrl={reply.attachmentUrl}
+                                                                    attachmentName={
+                                                                        reply.attachmentName ?? undefined
+                                                                    }
+                                                                    imageClassName="max-h-32"
+                                                                />
+                                                            ) : null}
                                                         </div>
                                                     ))}
                                                 </div>

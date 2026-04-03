@@ -2,6 +2,7 @@ import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import CommunityPost from "@/models/communityPost";
 import CommunityPostLike from "@/models/communityPostLike";
+import { CommunityProfileModel } from "@/models/CommunityProfile";
 import mongoose from "mongoose";
 
 export async function POST(req: Request) {
@@ -34,10 +35,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const postExists = await CommunityPost.exists({ _id: postId });
-    if (!postExists) {
+    const post = (await CommunityPost.findOne({ _id: postId })
+      .select({ author: 1 })
+      .lean()) as { author?: mongoose.Types.ObjectId | string } | null;
+    if (!post) {
       return Response.json({ error: "Post not found" }, { status: 404 });
     }
+
+    const postAuthorId = post.author ? String(post.author) : null;
 
     const existingLike = await CommunityPostLike.findOne({
       postId,
@@ -48,9 +53,21 @@ export async function POST(req: Request) {
     if (existingLike) {
       await CommunityPostLike.deleteOne({ _id: existingLike._id });
       liked = false;
+      if (postAuthorId && postAuthorId !== validUserId) {
+        await CommunityProfileModel.updateOne(
+          { userRef: postAuthorId, helpfulVotesCount: { $gt: 0 } },
+          { $inc: { helpfulVotesCount: -1 } }
+        );
+      }
     } else {
       await CommunityPostLike.create({ postId, userId: validUserId });
       liked = true;
+      if (postAuthorId && postAuthorId !== validUserId) {
+        await CommunityProfileModel.updateOne(
+          { userRef: postAuthorId },
+          { $inc: { helpfulVotesCount: 1 } }
+        );
+      }
     }
 
     const likesCount = await CommunityPostLike.countDocuments({ postId });

@@ -2,12 +2,6 @@ import mongoose, { Schema } from "mongoose";
 
 const UserSchema = new Schema(
   {
-    fullName: {
-      type: String,
-      trim: true,
-      default: "",
-      maxlength: 160,
-    },
     username: {
       type: String,
       required: true,
@@ -24,7 +18,7 @@ const UserSchema = new Schema(
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LOST_ITEM_ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
+      enum: ["ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT","COMMUNITY_ADMIN"],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },
@@ -61,6 +55,21 @@ const UserSchema = new Schema(
 );
 
 UserSchema.index({ role: 1, status: 1 });
+
+const existingModel = mongoose.models.User as
+  | mongoose.Model<unknown>
+  | undefined;
+
+const existingRoleEnums = existingModel?.schema?.path("role") as
+  | { enumValues?: string[] }
+  | undefined;
+if (
+  existingModel &&
+  Array.isArray(existingRoleEnums?.enumValues) &&
+  !existingRoleEnums.enumValues.includes("COMMUNITY_ADMIN")
+) {
+  delete mongoose.models.User;
+}
 
 const UserModel = mongoose.models.User || mongoose.model("User", UserSchema);
 

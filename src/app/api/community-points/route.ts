@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { connectDB } from "@/lib/mongodb";
+import {
+  applyCommunityProfileInc,
+  COMMUNITY_POINTS_ACCEPTED_ANSWER,
+  COMMUNITY_POINTS_PER_POST,
+  COMMUNITY_POINTS_PER_REPLY,
+} from "@/lib/community-profile-points";
 
-function getLevel(points: number) {
-  if (points >= 500) return "EXPERT";
-  if (points >= 100) return "HELPER";
-  return "BEGINNER";
-}
+const UPVOTE_POINTS = 2;
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,20 +18,24 @@ export async function POST(req: NextRequest) {
 
     let pointsToAdd = 0;
 
-    if (action === "POST") pointsToAdd = 10;
-    if (action === "REPLY") pointsToAdd = 5;
-    if (action === "ACCEPTED") pointsToAdd = 15;
-    if (action === "UPVOTE") pointsToAdd = 2;
+    if (action === "POST") pointsToAdd = COMMUNITY_POINTS_PER_POST;
+    if (action === "REPLY") pointsToAdd = COMMUNITY_POINTS_PER_REPLY;
+    if (action === "ACCEPTED") pointsToAdd = COMMUNITY_POINTS_ACCEPTED_ANSWER;
+    if (action === "UPVOTE") pointsToAdd = UPVOTE_POINTS;
 
-    const profile = await CommunityProfileModel.findOneAndUpdate(
-      { userRef: userId },
-      { $inc: { points: pointsToAdd } },
-      { new: true }
-    );
+    if (!pointsToAdd || typeof userId !== "string" || !userId.trim()) {
+      return NextResponse.json(
+        { error: "userId and a valid action are required" },
+        { status: 400 }
+      );
+    }
 
-    // update level
-    profile.level = getLevel(profile.points);
-    await profile.save();
+    await applyCommunityProfileInc(userId.trim(), { points: pointsToAdd });
+
+    const profile = await CommunityProfileModel.findOne({ userRef: userId.trim() }).lean();
+    if (!profile) {
+      return NextResponse.json({ error: "Community profile not found" }, { status: 404 });
+    }
 
     return NextResponse.json(profile);
   } catch (error) {

@@ -1,8 +1,21 @@
 import { connectDB } from "@/lib/mongodb";
+import {
+  COMMUNITY_PROFILE_REQUIRED_MESSAGE,
+  userHasCommunityProfile,
+} from "@/lib/community-profile-guard";
 import { resolveCommunityActorId } from "@/lib/community-user";
+import {
+  normalizeOptionalReplyAttachmentUrl,
+  normalizeReplyAttachmentName,
+} from "@/lib/community-reply-attachment";
+import { getCommunityMemberFieldsByUserRefs } from "@/lib/community-feed-member-fields";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
+import {
+  applyCommunityProfileInc,
+  COMMUNITY_POINTS_PER_REPLY,
+} from "@/lib/community-profile-points";
 import mongoose from "mongoose";
 
 const MAX_REPLIES_PER_USER_PER_POST = 3;
@@ -20,13 +33,12 @@ export async function POST(req: Request) {
       authorName,
       authorDisplayName,
       message,
+      attachmentUrl,
+      attachmentName,
     } = body;
 
-    if (!postId || !message) {
-      return Response.json(
-        { error: "postId and message are required" },
-        { status: 400 }
-      );
+    if (!postId) {
+      return Response.json({ error: "postId is required" }, { status: 400 });
     }
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
@@ -46,6 +58,10 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!(await userHasCommunityProfile(authorId))) {
+      return Response.json({ error: COMMUNITY_PROFILE_REQUIRED_MESSAGE }, { status: 403 });
+    }
+
     const postExists = await CommunityPost.exists({ _id: postId });
     if (!postExists) {
       return Response.json({ error: "Post not found" }, { status: 404 });
@@ -62,6 +78,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const attachmentNorm = normalizeOptionalReplyAttachmentUrl(attachmentUrl);
+    if (!attachmentNorm.ok) {
+      return Response.json({ error: attachmentNorm.error }, { status: 400 });
+    }
+    const messageTrim = String(message ?? "").trim();
+    if (!messageTrim && !attachmentNorm.value) {
+      return Response.json(
+        { error: "Add a message or attach a file." },
+        { status: 400 }
+      );
+    }
+    const attachmentLabel = normalizeReplyAttachmentName(attachmentName);
+
     const reply = await CommunityReply.create({
       postId,
       author: authorId,
@@ -69,14 +98,28 @@ export async function POST(req: Request) {
         String(authorDisplayName ?? "").trim() ||
         String(authorName ?? "").trim() ||
         "Community User",
-      message: String(message).trim(),
+      message: messageTrim,
+      attachmentUrl: attachmentNorm.value ?? null,
+      attachmentName: attachmentNorm.value ? (attachmentLabel ?? null) : null,
     });
+
+    await applyCommunityProfileInc(authorId, {
+      repliesCount: 1,
+      points: COMMUNITY_POINTS_PER_REPLY,
+    });
+
+    const memberByAuthor = await getCommunityMemberFieldsByUserRefs([authorId]);
+    const member = memberByAuthor.get(String(authorId));
+    const snapshotName = String(reply.authorDisplayName ?? "").trim();
+    const liveName = (member?.displayName ?? "").trim();
 
     return Response.json(
       {
         ...reply.toObject(),
         likesCount: 0,
         likedByCurrentUser: false,
+        authorMemberDisplayName: liveName || snapshotName || "Community User",
+        authorMemberPoints: member != null ? member.points : 0,
       },
       { status: 201 }
     );
@@ -143,12 +186,22 @@ export async function GET(req: Request) {
       likedByViewerRaw.map((row) => String(row.replyId))
     );
 
+    const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
+      replies.map((r) => r.author)
+    );
+
     const enrichedReplies = replies.map((reply) => {
       const replyId = String(reply._id);
+      const authorKey = String(reply.author);
+      const member = memberByAuthor.get(authorKey);
+      const snapshotName = String(reply.authorDisplayName ?? "").trim();
+      const liveName = (member?.displayName ?? "").trim();
       return {
         ...reply,
         likesCount: likeCountByReplyId.get(replyId) ?? 0,
         likedByCurrentUser: likedByViewerSet.has(replyId),
+        authorMemberDisplayName: liveName || snapshotName || "Community User",
+        authorMemberPoints: member != null ? member.points : 0,
       };
     });
 
