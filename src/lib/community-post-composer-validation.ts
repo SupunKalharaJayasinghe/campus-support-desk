@@ -1,5 +1,76 @@
 import { COMMUNITY_POST_BODY_LIMITS } from "@/lib/validate-community-post-body";
 import { getPostTextQualityError } from "@/lib/post-text-quality";
+import { luhnValid, parseCardExpiry } from "@/lib/community-urgent-card-payment-utils";
+
+/** Display format: four groups of four digits, single spaces (e.g. 2434 2424 2424 2424). */
+const URGENT_CARD_DISPLAY_PATTERN = /^\d{4} \d{4} \d{4} \d{4}$/;
+
+export function getUrgentCardNumberFormatError(cardNumber: string): string | null {
+    const t = cardNumber.trim();
+    if (!t) {
+        return "Enter the card number as four groups of four digits (e.g. 2434 2424 2424 2424).";
+    }
+    if (!URGENT_CARD_DISPLAY_PATTERN.test(t)) {
+        return "Card number must look like 2434 2424 2424 2424 — spaces only between the four groups.";
+    }
+    const digits = t.replace(/\s/g, "");
+    if (!luhnValid(digits)) {
+        return "That card number does not pass validation. Check the digits.";
+    }
+    return null;
+}
+
+export function getUrgentCardExpiryDisplayError(expiry: string): string | null {
+    const t = expiry.trim().replace(/\s+/g, "");
+    if (!t) {
+        return "Enter expiry as MM/YY (e.g. 12/28).";
+    }
+    if (!/^\d{2}\/\d{2}$/.test(t)) {
+        return "Expiry must use MM/YY (two digits, slash, two digits).";
+    }
+    const parsed = parseCardExpiry(t);
+    if (!parsed) {
+        return "Expiry must be a valid month/year in the future.";
+    }
+    return null;
+}
+
+export function getUrgentCardCvcThreeDigitsError(cvc: string): string | null {
+    const t = cvc.replace(/\s+/g, "");
+    if (!t) {
+        return "Enter the 3-digit CVC.";
+    }
+    if (!/^\d{3}$/.test(t)) {
+        return "CVC must be exactly 3 digits.";
+    }
+    return null;
+}
+
+/**
+ * When urgent + card: require valid formatted fields unless payment is already on file and all fields are empty.
+ */
+export function getUrgentComposerCardFieldsError(input: {
+    cardNumber: string;
+    cardExpiry: string;
+    cardCvc: string;
+    hasCardPaymentOnFile: boolean;
+}): string | null {
+    const n = input.cardNumber.trim();
+    const e = input.cardExpiry.trim();
+    const c = input.cardCvc.trim();
+    const anyFilled = Boolean(n || e || c);
+    if (!anyFilled && input.hasCardPaymentOnFile) {
+        return null;
+    }
+    if (!anyFilled && !input.hasCardPaymentOnFile) {
+        return "Enter card number (2434 2424 2424 2424), MM/YY, and 3-digit CVC to save.";
+    }
+    return (
+        getUrgentCardNumberFormatError(n) ||
+        getUrgentCardExpiryDisplayError(e) ||
+        getUrgentCardCvcThreeDigitsError(c)
+    );
+}
 
 export function isValidCommunityTag(raw: string): boolean {
     const t = raw.trim();

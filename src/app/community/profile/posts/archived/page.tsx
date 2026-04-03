@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Archive, ChevronLeft, MessageSquare, ThumbsUp } from "lucide-react";
 import Card from "@/components/ui/Card";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
 import { readStoredUser } from "@/lib/rbac";
 
 type DbCommunityReply = {
@@ -12,6 +13,8 @@ type DbCommunityReply = {
   authorDisplayName?: string;
   message: string;
   createdAt?: string;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
 };
 
 type DbCommunityPost = {
@@ -141,7 +144,18 @@ export default function CommunityProfileArchivedPostsPage() {
                             </span>
                           ) : null}
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        {(reply.message ?? "").trim() ? (
+                          <p className="mt-1 whitespace-pre-wrap">{reply.message}</p>
+                        ) : reply.attachmentUrl ? (
+                          <p className="mt-1 text-xs italic text-slate-500">Attachment only</p>
+                        ) : null}
+                        {reply.attachmentUrl ? (
+                          <CommunityReplyAttachment
+                            attachmentUrl={reply.attachmentUrl}
+                            attachmentName={reply.attachmentName ?? undefined}
+                            imageClassName="max-h-32"
+                          />
+                        ) : null}
                       </div>
                     ))}
                   </div>

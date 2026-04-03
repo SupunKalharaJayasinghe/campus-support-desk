@@ -2,8 +2,9 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
+import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { UserModel } from "@/models/User";
-import { connectMongoose } from "@/lib/mongoose";
+import { connectDB } from "@/lib/mongodb";
 
 function formatJoinedAt(value: unknown) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -19,8 +20,9 @@ function formatJoinedAt(value: unknown) {
 }
 
 export async function GET() {
-  const conn = await connectMongoose().catch(() => null);
-  if (!conn) {
+  try {
+    await connectDB();
+  } catch {
     return NextResponse.json({ items: [] satisfies unknown[] });
   }
 
@@ -59,6 +61,36 @@ export async function GET() {
   const postCountByUser = new Map(postGroups.map((g) => [String(g._id), g.count]));
   const replyCountByUser = new Map(replyGroups.map((g) => [String(g._id), g.count]));
 
+  const communityProfileUserIds = new Set<string>();
+  const communityProfilePointsByUserId = new Map<string, number>();
+  const communityProfileDisplayNameByUserId = new Map<string, string>();
+  const adminBonus20UsedByUserId = new Map<string, boolean>();
+  if (userIds.length > 0) {
+    const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
+      .select("userRef points adminBonus20Used displayName")
+      .lean()
+      .exec();
+    for (const doc of profiles) {
+      const lean = doc as unknown as {
+        userRef?: unknown;
+        points?: unknown;
+        adminBonus20Used?: unknown;
+        displayName?: unknown;
+      };
+      const ref = lean?.userRef;
+      if (ref == null) continue;
+      const uid = String(ref);
+      communityProfileUserIds.add(uid);
+      const pts = Number(lean.points);
+      communityProfilePointsByUserId.set(uid, Number.isFinite(pts) ? pts : 0);
+      communityProfileDisplayNameByUserId.set(
+        uid,
+        String(lean.displayName ?? "").trim()
+      );
+      adminBonus20UsedByUserId.set(uid, lean.adminBonus20Used === true);
+    }
+  }
+
   const items = users.map((userRow) => {
     const uid = String(userRow._id);
     const username = String(userRow.username ?? "").trim();
@@ -67,12 +99,18 @@ export async function GET() {
     const accountInactive = userRow.status === "INACTIVE";
     return {
       id: username || uid,
+      userId: uid,
       name: username || uid,
       email: String(userRow.email ?? "").trim().toLowerCase(),
       role: "Student" as const,
       joinedAt: formatJoinedAt(userRow.createdAt),
       contributions: posts + replies,
       status: accountInactive ? ("Suspended" as const) : ("Active" as const),
+      hasCommunityProfile: communityProfileUserIds.has(uid),
+      communityProfilePoints: communityProfilePointsByUserId.get(uid) ?? 0,
+      communityProfileDisplayName:
+        communityProfileDisplayNameByUserId.get(uid) ?? "",
+      adminBonus20Used: adminBonus20UsedByUserId.get(uid) ?? false,
     };
   });
 

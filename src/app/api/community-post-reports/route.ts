@@ -1,4 +1,8 @@
 import { connectDB } from "@/lib/mongodb";
+import {
+  COMMUNITY_PROFILE_REQUIRED_MESSAGE,
+  userHasCommunityProfile,
+} from "@/lib/community-profile-guard";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import {
   buildStoredReportReason,
@@ -55,6 +59,10 @@ export async function POST(req: Request) {
         { error: "Only logged-in users can report posts" },
         { status: 401 }
       );
+    }
+
+    if (!(await userHasCommunityProfile(validUserId))) {
+      return Response.json({ error: COMMUNITY_PROFILE_REQUIRED_MESSAGE }, { status: 403 });
     }
 
     const postExists = await CommunityPost.exists({ _id: postId });

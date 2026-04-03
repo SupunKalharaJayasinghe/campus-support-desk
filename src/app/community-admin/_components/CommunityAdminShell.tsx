@@ -32,6 +32,12 @@ const PRIMARY_NAV: Array<{
     href: "/community-admin/reported-posts",
     match: (p) => p.startsWith("/community-admin/reported-posts"),
   },
+  {
+    id: "urgent-payments",
+    label: "Urgent card payments",
+    href: "/community-admin/urgent-payments",
+    match: (p) => p.startsWith("/community-admin/urgent-payments"),
+  },
 ];
 
 type SubLink = { label: string; hash: string } | { label: string; href: string };
@@ -132,6 +138,13 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
         subtitle: "Inspect the report queue, open a report, and apply moderation decisions.",
       };
     }
+    if (pathname.startsWith("/community-admin/urgent-payments")) {
+      return {
+        title: "Urgent card payments",
+        subtitle:
+          "Recorded urgent fees paid by card: payer, amount, masked card, expiry, and linked draft/post.",
+      };
+    }
     return {
       title: "Community Admin",
       subtitle:
@@ -142,6 +155,7 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
   const subLinks = useMemo(() => {
     if (pathname.startsWith("/community-admin/members")) return SUB_LINKS_MEMBERS;
     if (pathname.startsWith("/community-admin/reported-posts")) return SUB_LINKS_REPORTS;
+    if (pathname.startsWith("/community-admin/urgent-payments")) return [];
     return SUB_LINKS_DASHBOARD;
   }, [pathname]);
 
@@ -239,9 +253,9 @@ export default function CommunityAdminShell({ children }: { children: ReactNode 
           </Card>
           <div className="mt-3 shrink-0 border-t border-border/70 pt-3 md:mt-auto">
             <Button
-              className="h-10 w-full gap-2 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 focus-visible:ring-red-500"
+              className="h-10 w-full gap-2 focus-visible:ring-red-500"
               type="button"
-              variant="secondary"
+              variant="danger"
               onClick={handleLogout}
             >
               <LogOut size={16} aria-hidden />

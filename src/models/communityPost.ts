@@ -61,12 +61,75 @@ const CommunityPostSchema = new Schema(
     enum: ["resolved", "not_resolved"],
     default: "not_resolved",
   },
+
+  /** Optional idempotency key provided by client (prevents duplicate posts on retry). */
+  clientRequestId: {
+    type: String,
+    default: null,
+  },
   
+  // URGENT FEATURE
+isUrgent: {
+  type: Boolean,
+  default: false,
+},
+
+urgentLevel: {
+  type: String,
+  enum: ["2days", "5days", "7days"],
+  default: null,
+},
+
+urgentExpiresAt: {
+  type: Date,
+  default: null,
+},
+
+urgentFeePoints: {
+  type: Number,
+  default: null,
+},
+
+urgentFeeRs: {
+  type: Number,
+  default: null,
+},
+
+urgentPaymentMethod: {
+  type: String,
+  enum: ["points", "card"],
+  default: null,
+},
+
+urgentPaymentStatus: {
+  type: String,
+  enum: ["unpaid", "paid"],
+  default: "unpaid",
+},
+
+urgentPointsUsed: {
+  type: Number,
+  default: 0,
+},
+
+urgentCardPaymentRef: {
+  type: String,
+  default: null,
+},
+
+/** Last 4 digits when urgent was paid by card (demo); mirrors draft storage. */
+urgentCardLast4: {
+  type: String,
+  default: null,
+  maxlength: 4,
+},
 },
 { timestamps: true }
 );
 
 const communityPostModelName = "CommunityPost";
+
+CommunityPostSchema.index({ author: 1, clientRequestId: 1 }, { unique: true, sparse: true });
 
 // Next.js can reuse a cached Mongoose model without new schema fields. Bust cache in dev
 // so `pictureUrl` and other updates are applied. Restart the dev server if issues persist.

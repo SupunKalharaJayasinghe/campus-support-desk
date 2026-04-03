@@ -4,15 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+    ArrowLeft,
+    BookOpen,
     ChevronDown,
     ChevronUp,
     CirclePlus,
     Clock,
-    BookOpen,
+    Flame,
+    FileText,
     Home,
-    LogOut,
     Menu,
     MessageSquare,
+    Paperclip,
     Search,
     Send,
     Settings,
@@ -24,21 +27,28 @@ import {
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
-import { clearDemoSession, readStoredUser } from "@/lib/rbac";
+import CommunityReplyAttachment from "@/components/community/CommunityReplyAttachment";
+import UrgentPostsCarousel from "@/components/community/UrgentPostsCarousel";
+import CommunityInstructionsPanel from "@/components/community/CommunityInstructionsPanel";
+import CommunitySidebarCalendar from "@/components/community/CommunitySidebarCalendar";
+import { readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import {
     COMMUNITY_POST_REPORT_REASONS,
     type CommunityPostReportReasonKey,
 } from "@/lib/community-post-report-reasons";
-import communityBackground from "@/app/images/community/community2.jpg";
 
 type Reply = {
     id: string;
     author: string;
+    /** Present for feed loaded from API; omitted for static demo posts. */
+    authorPoints?: number;
     content: string;
     createdAt: string;
     likes: number;
     likedByCurrentUser: boolean;
+    attachmentUrl?: string;
+    attachmentName?: string;
 };
 
 type Post = {
@@ -47,12 +57,17 @@ type Post = {
     content: string;
     pictureUrl?: string;
     author: string;
+    /** Present for feed loaded from API; omitted for static demo posts. */
+    authorPoints?: number;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
     likes: number;
     likedByCurrentUser: boolean;
     reportedByCurrentUser: boolean;
     replies: Reply[];
+    isUrgent?: boolean;
+    urgentExpiresAt?: string | null;
+    urgentLevel?: "2days" | "5days" | "7days" | null;
 };
 
 type ApiPost = {
@@ -63,21 +78,39 @@ type ApiPost = {
     category: "lost_item" | "study_material" | "academic_question";
     createdAt?: string;
     authorDisplayName?: string;
+    authorMemberDisplayName?: string;
+    authorMemberPoints?: number;
     author?: string | { username?: string; name?: string };
     likesCount?: number;
     likedByCurrentUser?: boolean;
     reportedByCurrentUser?: boolean;
+    isUrgent?: boolean;
+    urgentExpiresAt?: string | null;
+    urgentLevel?: "2days" | "5days" | "7days" | null;
 };
 
 type ApiReply = {
     _id: string;
     postId: string;
     authorDisplayName?: string;
+    authorMemberDisplayName?: string;
+    authorMemberPoints?: number;
     author?: string | { username?: string; name?: string };
     message: string;
     createdAt?: string;
     likesCount?: number;
     likedByCurrentUser?: boolean;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
+};
+
+const isActiveUrgentPost = (post: Pick<Post, "isUrgent" | "urgentExpiresAt">): boolean => {
+    if (!post.isUrgent) return false;
+    const raw = post.urgentExpiresAt;
+    if (raw == null || String(raw).trim() === "") return true;
+    const exp = new Date(raw).getTime();
+    if (Number.isNaN(exp)) return true;
+    return exp > Date.now();
 };
 
 const toTimeAgo = (createdAt?: string): string => {
@@ -94,20 +127,50 @@ const toTimeAgo = (createdAt?: string): string => {
     return `${days} day${days === 1 ? "" : "s"} ago`;
 };
 
-const mapApiReply = (reply: ApiReply): Reply => ({
-    id: reply._id,
-    author:
-        reply.authorDisplayName ||
-        (typeof reply.author === "object"
+const mapApiReply = (reply: ApiReply): Reply => {
+    const live = (reply.authorMemberDisplayName ?? "").trim();
+    const snapshot = (reply.authorDisplayName ?? "").trim();
+    const fallback =
+        typeof reply.author === "object"
             ? reply.author.name || "Current User"
-            : "Current User"),
-    content: reply.message,
-    createdAt: toTimeAgo(reply.createdAt),
-    likes: Number(reply.likesCount ?? 0),
-    likedByCurrentUser: Boolean(reply.likedByCurrentUser),
-});
+            : "Current User";
+    return {
+        id: reply._id,
+        author: live || snapshot || fallback,
+        authorPoints:
+            typeof reply.authorMemberPoints === "number" ? reply.authorMemberPoints : undefined,
+        content: reply.message,
+        createdAt: toTimeAgo(reply.createdAt),
+        likes: Number(reply.likesCount ?? 0),
+        likedByCurrentUser: Boolean(reply.likedByCurrentUser),
+        attachmentUrl: reply.attachmentUrl?.trim() || undefined,
+        attachmentName: reply.attachmentName?.trim() || undefined,
+    };
+};
 
-const CATEGORIES = ["all", "lost_item", "study_material", "academic_question"] as const;
+const MAX_REPLY_ATTACHMENT_FILE_BYTES = 1_850_000;
+
+function readReplyAttachmentFile(file: File): Promise<{ dataUrl: string; name: string }> {
+    return new Promise((resolve, reject) => {
+        if (file.size > MAX_REPLY_ATTACHMENT_FILE_BYTES) {
+            reject(new Error("Attachment is too large (max ~1.8 MB)."));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const r = reader.result;
+            if (typeof r !== "string") {
+                reject(new Error("Could not read file."));
+                return;
+            }
+            resolve({ dataUrl: r, name: file.name });
+        };
+        reader.onerror = () => reject(new Error("Could not read file."));
+        reader.readAsDataURL(file);
+    });
+}
+
+const CATEGORIES = ["all", "urgent", "lost_item", "study_material", "academic_question"] as const;
 
 const INITIAL_POSTS: Post[] = [
     {
@@ -168,25 +231,91 @@ const INITIAL_POSTS: Post[] = [
     },
 ];
 
-const MOCK_MEMBERS = [
-    { id: "1", name: "Sam Jenkins", role: "Core Team" },
-    { id: "2", name: "Priya Singh", role: "Verified Mentor" },
-    { id: "3", name: "IT23123456", role: "Contributor" },
-    { id: "4", name: "Nimal Perera", role: "Contributor" },
-];
-
 const categoryLabel: Record<(typeof CATEGORIES)[number], string> = {
     all: "All",
-    lost_item: "Lost Items",
-    study_material: "Study Material",
-    academic_question: "Academic Questions",
+    urgent: "🔥 Urgent",
+    lost_item: "🎒 Lost Items",
+    study_material: "📂 Study Materials",
+    academic_question: "📘 Academic",
 };
 
-const thumbnailStyle: Record<Post["category"], string> = {
-    lost_item: "from-slate-500/85 to-blue-700/85",
-    study_material: "from-blue-500/85 to-slate-700/85",
-    academic_question: "from-blue-400/85 to-indigo-700/85",
+const postCardLeftAccent: Record<Post["category"], string> = {
+    academic_question: "border-l-blue-600",
+    lost_item: "border-l-orange-500",
+    study_material: "border-l-emerald-600",
 };
+
+const categoryChipStyles: Record<(typeof CATEGORIES)[number], { active: string; inactive: string }> = {
+    all: {
+        active: "bg-slate-700 text-white",
+        inactive: "bg-slate-200 text-slate-700 hover:bg-slate-300",
+    },
+    urgent: {
+        active: "bg-amber-600 text-white",
+        inactive: "bg-amber-100 text-amber-900 hover:bg-amber-200",
+    },
+    academic_question: {
+        active: "bg-blue-600 text-white",
+        inactive: "bg-blue-100 text-blue-900 hover:bg-blue-200",
+    },
+    lost_item: {
+        active: "bg-orange-500 text-white",
+        inactive: "bg-orange-100 text-orange-900 hover:bg-orange-200",
+    },
+    study_material: {
+        active: "bg-emerald-600 text-white",
+        inactive: "bg-emerald-100 text-emerald-900 hover:bg-emerald-200",
+    },
+};
+
+const categoryEmoji: Record<Post["category"], string> = {
+    academic_question: "📘",
+    lost_item: "🎒",
+    study_material: "📂",
+};
+
+type CommunityCategory = (typeof CATEGORIES)[number];
+
+function CommunityCategoryChips({
+    activeCategory,
+    onSelect,
+    className = "",
+}: {
+    activeCategory: CommunityCategory;
+    onSelect: (category: CommunityCategory) => void;
+    className?: string;
+}) {
+    return (
+        <div
+            className={`flex gap-2 overflow-x-auto pb-0.5 ${className}`}
+            role="tablist"
+            aria-label="Filter posts by category"
+        >
+            {CATEGORIES.map((category) => {
+                const chip = categoryChipStyles[category];
+                return (
+                    <button
+                        key={category}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeCategory === category}
+                        onClick={() => onSelect(category)}
+                        className={`whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                            activeCategory === category ? chip.active : chip.inactive
+                        }`}
+                    >
+                        {categoryLabel[category]}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** Matches fixed header height (search row + category chips). */
+const HEADER_TOP_CLASS = "top-28";
+const HEADER_OFFSET_PT = "pt-28";
+const MAIN_SCROLL_HEIGHT = "h-[calc(100vh-7rem)]";
 
 export default function CommunityPage() {
     const router = useRouter();
@@ -197,10 +326,16 @@ export default function CommunityPage() {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMembersVisible, setIsMembersVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
+    const [communityDirectoryMembers, setCommunityDirectoryMembers] = useState<
+        { userId: string; displayName: string; points: number }[]
+    >([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
     const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
     const [newReplyContent, setNewReplyContent] = useState("");
+    const [newReplyAttachment, setNewReplyAttachment] = useState<{ dataUrl: string; name: string } | null>(
+        null
+    );
     const [actionError, setActionError] = useState("");
     const [reportDialogPostId, setReportDialogPostId] = useState<string | null>(null);
     const [reportSelectedReason, setReportSelectedReason] =
@@ -210,9 +345,42 @@ export default function CommunityPage() {
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
     const recentPosts = useMemo(() => posts.slice(0, 5), [posts]);
+    const urgentPostsActive = useMemo(
+        () => posts.filter(isActiveUrgentPost).slice(0, 10),
+        [posts]
+    );
+
+    const urgentCarouselPosts = useMemo(
+        () =>
+            urgentPostsActive.map((post) => {
+                const expiry =
+                    post.urgentExpiresAt && !Number.isNaN(new Date(post.urgentExpiresAt).getTime())
+                        ? `Until ${new Date(post.urgentExpiresAt).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                          })}`
+                        : null;
+                const stripped = post.content.trim();
+                const description =
+                    stripped.length > 110
+                        ? `${stripped.slice(0, 110).trim()}…`
+                        : stripped || "Open the post to read more.";
+                return {
+                    id: post.id,
+                    title: post.title,
+                    description,
+                    metaLine: [post.createdAt, expiry].filter(Boolean).join(" · "),
+                };
+            }),
+        [urgentPostsActive]
+    );
 
     const filteredPosts = useMemo(() => {
-        const byCategory = posts.filter((post) => activeCategory === "all" || post.category === activeCategory);
+        const byCategory = posts.filter((post) => {
+            if (activeCategory === "all") return true;
+            if (activeCategory === "urgent") return isActiveUrgentPost(post);
+            return post.category === activeCategory;
+        });
         const titleQuery = titleSearch.trim().toLowerCase();
         const byTitle =
             titleQuery.length === 0
@@ -278,23 +446,42 @@ export default function CommunityPage() {
                 if (!res.ok) return;
 
                 const data = (await res.json()) as ApiPost[];
-                const mapped: Post[] = data.map((post) => ({
-                    id: post._id,
-                    title: post.title,
-                    content: post.description,
-                    pictureUrl: post.pictureUrl?.trim() || undefined,
-                    author:
-                        post.authorDisplayName ||
-                        (typeof post.author === "object"
+                const mapped: Post[] = data.map((post) => {
+                    const live = (post.authorMemberDisplayName ?? "").trim();
+                    const snapshot = (post.authorDisplayName ?? "").trim();
+                    const fallback =
+                        typeof post.author === "object"
                             ? post.author.name || "Current User"
-                            : "Current User"),
-                    category: mapCategory(post.category),
-                    createdAt: toTimeAgo(post.createdAt),
-                    likes: Number(post.likesCount ?? 0),
-                    likedByCurrentUser: Boolean(post.likedByCurrentUser),
-                    reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
-                    replies: [],
-                }));
+                            : "Current User";
+                    return {
+                        id: post._id,
+                        title: post.title,
+                        content: post.description,
+                        pictureUrl: post.pictureUrl?.trim() || undefined,
+                        author: live || snapshot || fallback,
+                        authorPoints:
+                            typeof post.authorMemberPoints === "number"
+                                ? post.authorMemberPoints
+                                : undefined,
+                        category: mapCategory(post.category),
+                        createdAt: toTimeAgo(post.createdAt),
+                        likes: Number(post.likesCount ?? 0),
+                        likedByCurrentUser: Boolean(post.likedByCurrentUser),
+                        reportedByCurrentUser: Boolean(post.reportedByCurrentUser),
+                        replies: [],
+                        isUrgent: Boolean(post.isUrgent),
+                        urgentExpiresAt:
+                            post.urgentExpiresAt != null && String(post.urgentExpiresAt).length > 0
+                                ? String(post.urgentExpiresAt)
+                                : null,
+                        urgentLevel:
+                            post.urgentLevel === "2days" ||
+                            post.urgentLevel === "5days" ||
+                            post.urgentLevel === "7days"
+                                ? post.urgentLevel
+                                : null,
+                    };
+                });
 
                 setPosts(mapped);
 
@@ -329,6 +516,53 @@ export default function CommunityPage() {
 
         fetchPosts();
     }, [currentUser?.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/community-members");
+                if (!res.ok || cancelled) return;
+                const data = (await res.json()) as {
+                    items?: Array<{
+                        userId?: string;
+                        hasCommunityProfile?: boolean;
+                        communityProfileDisplayName?: string;
+                        communityProfilePoints?: unknown;
+                        name?: string;
+                    }>;
+                };
+                const items = data.items ?? [];
+                const rows = items
+                    .filter((i) => Boolean(i.hasCommunityProfile))
+                    .map((i) => {
+                        const userId = String(i.userId ?? "").trim();
+                        const dn = String(i.communityProfileDisplayName ?? "").trim();
+                        const fallbackName = String(i.name ?? "").trim();
+                        const pts = Number(i.communityProfilePoints ?? 0);
+                        return {
+                            userId,
+                            displayName: dn || fallbackName || userId,
+                            points: Number.isFinite(pts) ? pts : 0,
+                        };
+                    })
+                    .filter((r) => r.userId.length > 0)
+                    .sort(
+                        (a, b) =>
+                            b.points - a.points ||
+                            a.displayName.localeCompare(b.displayName, undefined, {
+                                sensitivity: "base",
+                            })
+                    );
+                if (!cancelled) setCommunityDirectoryMembers(rows);
+            } catch {
+                if (!cancelled) setCommunityDirectoryMembers([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const handleLikePost = async (postId: string) => {
         if (!currentUser?.id) {
@@ -490,7 +724,10 @@ export default function CommunityPage() {
 
     const handleReplySubmit = async (e: React.FormEvent, postId: string) => {
         e.preventDefault();
-        if (!newReplyContent.trim()) return;
+        if (!newReplyContent.trim() && !newReplyAttachment) {
+            setActionError("Add a message or attach a file.");
+            return;
+        }
 
         if (!currentUser?.id) {
             setActionError("Please login to reply.");
@@ -516,6 +753,12 @@ export default function CommunityPage() {
                     // keep server fallback in sync with display name
                     authorName: authorDisplayName,
                     authorDisplayName,
+                    ...(newReplyAttachment
+                        ? {
+                              attachmentUrl: newReplyAttachment.dataUrl,
+                              attachmentName: newReplyAttachment.name,
+                          }
+                        : {}),
                 }),
             });
             if (!res.ok) {
@@ -531,6 +774,7 @@ export default function CommunityPage() {
                 prevPosts.map((post) => (post.id === postId ? { ...post, replies: [mappedReply, ...post.replies] } : post))
             );
             setNewReplyContent("");
+            setNewReplyAttachment(null);
         } catch {
             setActionError("Unable to submit reply right now.");
         }
@@ -539,56 +783,61 @@ export default function CommunityPage() {
     const toggleReplySection = (postId: string) => {
         if (expandedPostId === postId) {
             setExpandedPostId(null);
+            setNewReplyAttachment(null);
             return;
         }
         setExpandedPostId(postId);
         setNewReplyContent("");
+        setNewReplyAttachment(null);
         void loadRepliesForPost(postId);
     };
 
-    const handleLogout = () => {
-        clearDemoSession();
+    const handleBackToStudentPage = () => {
         setIsProfileMenuOpen(false);
         router.push("/student");
     };
 
     return (
-        <main
-            className="relative h-screen overflow-hidden text-[#0f0f0f]"
-            style={{ backgroundImage: `url(${communityBackground.src})`, backgroundSize: "cover", backgroundPosition: "center" }}
-        >
-            <div className="absolute inset-0 bg-slate-100/70" />
-            <div className="relative z-10 h-full">
-            <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
-                <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
-                    <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setSidebarOpen((prev) => !prev)}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-blue-100"
-                            aria-label="Toggle sidebar"
-                        >
-                            <Menu size={22} />
-                        </button>
-                        <div className="flex items-center gap-2">
-                            <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
-                            <span className="text-lg font-bold tracking-tight text-slate-800">Community</span>
+        <main className="relative h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-sky-50 to-blue-50 text-[#0f0f0f]">
+            <div className="relative h-full">
+            <header className="fixed inset-x-0 top-0 z-50 border-b border-blue-200 bg-slate-50/95 backdrop-blur-sm">
+                <div className="flex flex-col gap-2 px-3 py-2 sm:px-5">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex h-10 shrink-0 items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setSidebarOpen((prev) => !prev)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-blue-100"
+                                aria-label="Toggle sidebar"
+                            >
+                                <Menu size={22} />
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-md bg-blue-700 px-2 py-1 text-xs font-bold text-white">UNIHUB</div>
+                                <span className="text-lg font-bold tracking-tight text-slate-800">Community</span>
+                            </div>
                         </div>
-                    </div>
-{/*search bar  */ }
-                    <div className="hidden w-full max-w-2xl items-center gap-2 md:flex">
-                        <div className="flex h-10 flex-1 items-center rounded-full border border-blue-200 bg-white/90 px-4">
-                            <Search size={18} className="text-slate-500" />
-                            <input
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search community post's title"
-                                className="ml-3 w-full bg-transparent text-sm text-slate-700 outline-none"
+
+                    <div className="hidden min-w-0 flex-1 md:flex md:justify-center">
+                        <div className="flex w-full max-w-2xl flex-col gap-2">
+                            <div className="flex h-10 w-full items-center rounded-full border border-blue-200 bg-white/90 px-4">
+                                <Search size={18} className="shrink-0 text-slate-500" />
+                                <input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search community post's title"
+                                    className="ml-3 w-full min-w-0 bg-transparent text-sm text-slate-700 outline-none"
+                                />
+                            </div>
+                            <CommunityCategoryChips
+                                activeCategory={activeCategory}
+                                onSelect={setActiveCategory}
+                                className="w-full px-0.5"
                             />
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex h-10 shrink-0 items-center gap-2 sm:gap-3">
                         <Link
                             href="/community/profile/#create-post"
                             className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-100 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-200 sm:px-4"
@@ -634,20 +883,21 @@ export default function CommunityPage() {
                                         </Link>
                                         <button
                                             type="button"
-                                            onClick={handleLogout}
+                                            onClick={handleBackToStudentPage}
                                             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-blue-50"
                                         >
-                                            <LogOut size={16} /> Logout
+                                            <ArrowLeft size={16} /> Back to student page
                                         </button>
                                     </div>
                                 </>
                             )}
                         </div>
                     </div>
+                    </div>
                 </div>
             </header>
 
-            <div className="flex h-full pt-16">
+            <div className={`flex h-full ${HEADER_OFFSET_PT}`}>
                 {sidebarOpen && (
                     <button
                         type="button"
@@ -658,7 +908,7 @@ export default function CommunityPage() {
                 )}
 
                 <aside
-                    className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:top-16 lg:translate-x-0 ${
+                    className={`fixed left-0 z-40 w-72 border-r border-blue-100 bg-slate-100/95 p-3 transition-transform lg:sticky lg:translate-x-0 ${HEADER_TOP_CLASS} ${MAIN_SCROLL_HEIGHT} ${
                         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:hidden"
                     }`}
                 >
@@ -670,18 +920,14 @@ export default function CommunityPage() {
                             <Link href="/community/profile" className="flex items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white">
                                 <User size={18} /> Profile
                             </Link>
-                            <button
-                                type="button"
-                                onClick={() => setIsInstructionsOpen(true)}
-                                className="flex w-full items-center gap-3 rounded-xl bg-blue-100 px-3 py-2.5 text-left text-sm font-semibold text-blue-900 hover:bg-blue-900 hover:text-white"
-                            >
-                                <BookOpen size={18} /> Instructions
-                            </button>
+                            
                         </div>
 
                         <div className="my-3 h-px bg-blue-100" />
 
                         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+                        <CommunitySidebarCalendar />
+
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
                                 type="button"
@@ -695,20 +941,34 @@ export default function CommunityPage() {
                             </button>
                             {isMembersVisible && (
                                 <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
-                                    {MOCK_MEMBERS.map((member) => (
-                                        <div key={member.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50">
-                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                                                <User size={14} />
+                                    {communityDirectoryMembers.length === 0 ? (
+                                        <p className="text-xs text-slate-500">
+                                            No community profiles yet. Students with a community profile appear here with
+                                            display name and points.
+                                        </p>
+                                    ) : (
+                                        communityDirectoryMembers.map((member) => (
+                                            <div
+                                                key={member.userId}
+                                                className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50"
+                                            >
+                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                                                    <User size={14} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium leading-none text-slate-800">
+                                                        {member.displayName}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500">{member.points} pts</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-medium leading-none text-slate-800">{member.name}</p>
-                                                <p className="mt-1 text-xs text-slate-500">{member.role}</p>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>
+
+                        
 
                         <div className="rounded-xl border border-blue-100 bg-white/95 p-3">
                             <button
@@ -748,29 +1008,20 @@ export default function CommunityPage() {
 
                         <button
                             type="button"
-                            onClick={handleLogout}
-                            className="mt-auto flex items-center gap-3 rounded-xl bg-red-400 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
+                            onClick={handleBackToStudentPage}
+                            className="mt-auto flex items-center gap-3 rounded-xl bg-red-100 px-3 py-2.5 text-sm font-semibold text-red-900 hover:bg-red-900 hover:text-white"
                         >
-                            <LogOut size={18} /> Logout
+                            <ArrowLeft size={18} /> Back to student page
                         </button>
                     </div>
                 </aside>
 
                 <section className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
-                    <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
-                        {CATEGORIES.map((category) => (
-                            <button
-                                key={category}
-                                onClick={() => setActiveCategory(category)}
-                                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                                    activeCategory === category
-                                        ? "bg-blue-700 text-white"
-                                        : "bg-slate-200 text-slate-700 hover:bg-blue-100"
-                                }`}
-                            >
-                                {categoryLabel[category]}
-                            </button>
-                        ))}
+                    <div className="mb-4 md:hidden">
+                        <CommunityCategoryChips
+                            activeCategory={activeCategory}
+                            onSelect={setActiveCategory}
+                        />
                     </div>
                     {actionError ? (
                         <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -788,23 +1039,28 @@ export default function CommunityPage() {
                                 <Card
                                     key={post.id}
                                     id={`post-${post.id}`}
-                                    className="overflow-hidden rounded-2xl border border-blue-100 bg-blue-100 shadow-none"
+                                    className={`relative overflow-hidden rounded-2xl border border-blue-100 border-l-4 bg-blue-100 shadow-none ${postCardLeftAccent[post.category]}`}
                                 >
-                                    <div className={`relative h-5 rounded- bg-gradient-to-r ${thumbnailStyle[post.category]}`}>
-                                    <div className="absolute inset-0 bg-blue-100" />
-                                        <div className="absolute bottom-2 right-2 rounded-md bg-slate-900/80 px-2 py-1 text-xs font-semibold text-white">
-                                            {categoryLabel[post.category]}
-                                        </div>
-                                    </div>
+                                    <span
+                                        className="absolute right-3 top-3 text-2xl leading-none select-none"
+                                        title={categoryLabel[post.category]}
+                                    >
+                                        {categoryEmoji[post.category]}
+                                    </span>
 
-                                    <div className="p-4">
+                                    <div className="p-4 pr-12">
                                         <div className="flex gap-3">
                                             <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
                                                 <User size={16} />
                                             </div>
                                             <div className="min-w-0">
                                                 <h3 className="line-clamp-2 text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
-                                                <p className="mt-1 text-sm text-slate-600">{post.author}</p>
+                                                <p className="mt-1 text-sm text-slate-600">
+                                                    {post.author}
+                                                    {post.authorPoints != null ? (
+                                                        <span className="text-slate-500"> · {post.authorPoints} pts</span>
+                                                    ) : null}
+                                                </p>
                                                 <p className="text-xs text-slate-500">
                                                     {post.createdAt} • {post.replies.length} replies
                                                 </p>
@@ -857,10 +1113,28 @@ export default function CommunityPage() {
                                                     post.replies.map((reply) => (
                                                         <div key={reply.id} className="rounded-xl border border-blue-100 bg-white p-3">
                                                             <div className="flex items-center justify-between">
-                                                                <p className="text-sm font-semibold text-slate-800">{reply.author}</p>
+                                                                <p className="text-sm font-semibold text-slate-800">
+                                                                    {reply.author}
+                                                                    {reply.authorPoints != null ? (
+                                                                        <span className="font-normal text-slate-500">
+                                                                            {" "}
+                                                                            · {reply.authorPoints} pts
+                                                                        </span>
+                                                                    ) : null}
+                                                                </p>
                                                                 <p className="text-xs text-slate-500">{reply.createdAt}</p>
                                                             </div>
-                                                            <p className="mt-1 text-sm text-slate-700">{reply.content}</p>
+                                                            {(reply.content ?? "").trim() ? (
+                                                                <p className="mt-1 text-sm text-slate-700">{reply.content}</p>
+                                                            ) : reply.attachmentUrl ? (
+                                                                <p className="mt-1 text-xs italic text-slate-500">Attachment only</p>
+                                                            ) : null}
+                                                            {reply.attachmentUrl ? (
+                                                                <CommunityReplyAttachment
+                                                                    attachmentUrl={reply.attachmentUrl}
+                                                                    attachmentName={reply.attachmentName}
+                                                                />
+                                                            ) : null}
                                                             <div className="mt-2 flex items-center gap-2">
                                                                 <button
                                                                     type="button"
@@ -881,15 +1155,56 @@ export default function CommunityPage() {
                                                 <Textarea
                                                     value={newReplyContent}
                                                     onChange={(e) => setNewReplyContent(e.target.value)}
-                                                    placeholder="Write a reply..."
+                                                    placeholder="Write a reply… (optional if you attach a file)"
                                                     className="min-h-[90px] border-blue-200 bg-white text-sm"
                                                 />
+                                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-blue-50">
+                                                        <Paperclip size={14} aria-hidden />
+                                                        Attach file
+                                                        <input
+                                                            type="file"
+                                                            className="sr-only"
+                                                            accept=".pdf,.doc,.docx,image/png,image/jpeg,image/gif,image/webp,.txt,text/plain"
+                                                            onChange={async (e) => {
+                                                                const f = e.target.files?.[0];
+                                                                e.target.value = "";
+                                                                if (!f) return;
+                                                                setActionError("");
+                                                                try {
+                                                                    const att = await readReplyAttachmentFile(f);
+                                                                    setNewReplyAttachment(att);
+                                                                } catch (err) {
+                                                                    setActionError(
+                                                                        err instanceof Error
+                                                                            ? err.message
+                                                                            : "Could not attach file."
+                                                                    );
+                                                                }
+                                                            }}
+                                                        />
+                                                    </label>
+                                                    {newReplyAttachment ? (
+                                                        <span className="flex max-w-full items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs text-slate-700">
+                                                            <FileText size={12} className="shrink-0" aria-hidden />
+                                                            <span className="truncate">{newReplyAttachment.name}</span>
+                                                            <button
+                                                                type="button"
+                                                                className="ml-1 shrink-0 rounded px-1 text-slate-500 hover:bg-blue-100 hover:text-slate-800"
+                                                                onClick={() => setNewReplyAttachment(null)}
+                                                                aria-label="Remove attachment"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                                 <div className="mt-3 flex justify-end">
                                                     <Button
                                                         type="submit"
                                                         variant="primary"
                                                         className="gap-2 bg-blue-700 hover:bg-blue-800"
-                                                        disabled={!newReplyContent.trim()}
+                                                        disabled={!newReplyContent.trim() && !newReplyAttachment}
                                                     >
                                                         <Send size={14} /> Reply
                                                     </Button>
@@ -902,6 +1217,42 @@ export default function CommunityPage() {
                         </div>
                     )}
                 </section>
+
+                <aside
+                    id="community-instructions"
+                    className={`hidden shrink-0 border-l border-blue-100 bg-slate-100/95 lg:sticky lg:flex lg:w-80 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:self-start lg:p-4 ${HEADER_TOP_CLASS} ${MAIN_SCROLL_HEIGHT}`}
+                    aria-label="Urgent posts and community instructions"
+                >
+                    <div className="rounded-xl border border-amber-200/80 bg-white/95 p-3">
+                        <div className="flex w-full items-center text-sm font-semibold text-slate-700">
+                            <span className="flex items-center gap-2">
+                                <Flame size={16} className="text-amber-600" aria-hidden />
+                                Urgent posts
+                                {urgentPostsActive.length > 0 ? (
+                                    <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800">
+                                        {urgentPostsActive.length}
+                                    </span>
+                                ) : null}
+                            </span>
+                        </div>
+                        <div className="mt-3 pr-1">
+                            {urgentPostsActive.length === 0 ? (
+                                <p className="text-xs text-slate-500">No active urgent posts right now.</p>
+                            ) : (
+                                <UrgentPostsCarousel
+                                    posts={urgentCarouselPosts}
+                                    baseWidth={260}
+                                    autoplay
+                                    autoplayDelay={3800}
+                                    pauseOnHover
+                                    loop={urgentCarouselPosts.length > 1}
+                                    onSelectPost={handleJumpToPost}
+                                />
+                            )}
+                        </div>
+                    </div>
+                    <CommunityInstructionsPanel className="rounded-xl border border-blue-100 bg-white/95 p-4 shadow-sm" />
+                </aside>
             </div>
             </div>
 
@@ -909,7 +1260,7 @@ export default function CommunityPage() {
                 <>
                     <button
                         type="button"
-                        className="fixed inset-0 z-[62] bg-black/40"
+                        className="fixed inset-0 z-[62] bg-black/40 lg:hidden"
                         aria-label="Close instructions"
                         onClick={() => setIsInstructionsOpen(false)}
                     />
@@ -917,55 +1268,25 @@ export default function CommunityPage() {
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="community-instructions-title"
-                        className="fixed left-1/2 top-1/2 z-[72] w-[min(100%,26rem)] max-h-[min(90vh,36rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-blue-100 bg-white p-5 shadow-xl"
+                        className="fixed left-1/2 top-1/2 z-[72] w-[min(100%,26rem)] max-h-[min(90vh,40rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-blue-100 bg-white p-5 shadow-xl lg:hidden"
                     >
                         <div className="flex items-start justify-between gap-2">
-                            <h2 id="community-instructions-title" className="text-base font-semibold text-slate-800">
-                                Community — demo instructions
+                            <h2 id="community-instructions-title" className="sr-only">
+                                Community instructions
                             </h2>
                             <button
                                 type="button"
                                 onClick={() => setIsInstructionsOpen(false)}
-                                className="rounded-full p-1 text-slate-500 hover:bg-blue-50"
+                                className="ml-auto rounded-full p-1 text-slate-500 hover:bg-blue-50"
                                 aria-label="Close"
                             >
                                 <X size={20} />
                             </button>
                         </div>
-                        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700">
-                            <li>Use the category chips to filter posts (All, Lost Items, Study Material, Academic Questions).</li>
-                            <li>
-                                Search narrows the feed; the header search looks at titles and content in the list view.
-                            </li>
-                            <li>Sign in to like posts, reply, and report content. Guests can still browse.</li>
-                            <li>
-                                Open <strong className="font-semibold text-slate-800">Reply</strong> under a post to read
-                                threads and add a comment.
-                            </li>
-                            <li>
-                                Use <strong className="font-semibold text-slate-800">Create</strong> in the top bar (or your
-                                profile) to add a new community post.
-                            </li>
-                            <li>
-                                <strong className="font-semibold text-slate-800">Report</strong> opens a short form—pick a
-                                reason and, if you choose Other, describe the issue.
-                            </li>
-                            <li>
-                                Expand <strong className="font-semibold text-slate-800">Members Details</strong> and{" "}
-                                <strong className="font-semibold text-slate-800">Recent Posts</strong> in the sidebar when you
-                                need them.
-                            </li>
-                        </ul>
-                        <div className="mt-6 flex justify-end">
-                            <Button
-                                type="button"
-                                variant="primary"
-                                className="bg-blue-700 hover:bg-blue-800"
-                                onClick={() => setIsInstructionsOpen(false)}
-                            >
-                                OK
-                            </Button>
-                        </div>
+                        <CommunityInstructionsPanel
+                            className="-mt-2"
+                            onFinish={() => setIsInstructionsOpen(false)}
+                        />
                     </div>
                 </>
             ) : null}
