@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -12,13 +12,11 @@ import {
   GraduationCap,
   Layers3,
   Megaphone,
-  TrendingUp,
   UserCheck,
   Users,
 } from "lucide-react";
 import PageHeader from "@/components/admin/PageHeader";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import {
   listLatestAnnouncements,
@@ -33,14 +31,6 @@ import LatestNotificationSection from "@/components/notifications/LatestNotifica
 
 type StatIcon = ComponentType<{ size?: number }>;
 
-interface StatisticCard {
-  label: string;
-  value: string;
-  growth: string;
-  growthLabel: string;
-  icon: StatIcon;
-}
-
 interface DistributionItem {
   label: string;
   value: number;
@@ -51,7 +41,7 @@ interface ActivityItem {
   id: string;
   title: string;
   detail: string;
-  time: string;
+  occurredAt: string;
 }
 
 interface AlertItem {
@@ -61,159 +51,251 @@ interface AlertItem {
   level: "High" | "Medium";
 }
 
-const STATISTICS: StatisticCard[] = [
-  {
-    label: "Total Students",
-    value: "1,284",
-    growth: "+4.8%",
-    growthLabel: "vs last intake",
-    icon: Users,
-  },
-  {
-    label: "Total Faculties",
-    value: "5",
-    growth: "+1",
-    growthLabel: "new school added",
-    icon: Building2,
-  },
-  {
-    label: "Degree Programs",
-    value: "12",
-    growth: "+2",
-    growthLabel: "curriculum refreshes",
-    icon: GraduationCap,
-  },
-  {
-    label: "Lecturers / Instructors",
-    value: "86",
-    growth: "+6.2%",
-    growthLabel: "staff capacity",
-    icon: UserCheck,
-  },
-  {
-    label: "Total Modules",
-    value: "94",
-    growth: "+5",
-    growthLabel: "new offerings",
-    icon: BookOpen,
-  },
-  {
-    label: "Active Intakes",
-    value: "6",
-    growth: "+1",
-    growthLabel: "upcoming cycle",
-    icon: CalendarDays,
-  },
-];
+interface DashboardPayload {
+  stats: {
+    totalStudents: number;
+    activeStudents: number;
+    totalFaculties: number;
+    activeFaculties: number;
+    totalDegreePrograms: number;
+    activeDegreePrograms: number;
+    totalLecturers: number;
+    activeLecturers: number;
+    totalModules: number;
+    totalIntakes: number;
+    activeIntakes: number;
+    activeOfferingCount: number;
+    totalSubgroups: number;
+  };
+  currentIntake: {
+    name: string;
+    currentTerm: string;
+  } | null;
+  studentsPerFaculty: DistributionItem[];
+  studentsPerDegree: DistributionItem[];
+  recentActivity: ActivityItem[];
+  alerts: AlertItem[];
+}
 
-const STUDENTS_PER_FACULTY: DistributionItem[] = [
-  { label: "Faculty of Computing", value: 412, meta: "FOC" },
-  { label: "Faculty of Engineering", value: 286, meta: "FOE" },
-  { label: "Faculty of Business", value: 228, meta: "FOB" },
-  { label: "Faculty of Science", value: 204, meta: "FOS" },
-  { label: "Faculty of Design", value: 154, meta: "FOD" },
-];
+interface StatDefinition {
+  key:
+    | "students"
+    | "faculties"
+    | "degreePrograms"
+    | "lecturers"
+    | "modules"
+    | "intakes";
+  label: string;
+  icon: StatIcon;
+}
 
-const STUDENTS_PER_DEGREE: DistributionItem[] = [
-  { label: "Software Engineering", value: 286, meta: "SE" },
-  { label: "Computer Science", value: 248, meta: "CS" },
-  { label: "Information Technology", value: 198, meta: "IT" },
-  { label: "Civil Engineering", value: 142, meta: "CE" },
-  { label: "Business Analytics", value: 118, meta: "BA" },
-];
-
-const RECENT_ACTIVITY: ActivityItem[] = [
-  {
-    id: "act-01",
-    title: "34 new student registrations approved",
-    detail: "FOC / SE / 2026 June intake enrollment sync completed",
-    time: "12 mins ago",
-  },
-  {
-    id: "act-02",
-    title: "Module offering created for SE304",
-    detail: "Advanced Software Project Management opened for Weekday stream",
-    time: "46 mins ago",
-  },
-  {
-    id: "act-03",
-    title: "Lecturer assignment updated",
-    detail: "Dr. A. Fernando assigned as LIC for CS202",
-    time: "1 hr ago",
-  },
-  {
-    id: "act-04",
-    title: "Assignment deadline published",
-    detail: "Database Systems lab submission deadline pushed to subgroup 2.2",
-    time: "2 hrs ago",
-  },
-];
-
-const ALERTS: AlertItem[] = [
-  {
-    id: "alert-01",
-    title: "7 upcoming assignment deadlines",
-    detail: "Deadlines across SE201, CS105, and IT118 close within the next 48 hours.",
-    level: "High",
-  },
-  {
-    id: "alert-02",
-    title: "3 modules without assigned lecturers",
-    detail: "Module offerings in the Faculty of Business still require teaching allocations.",
-    level: "High",
-  },
-  {
-    id: "alert-03",
-    title: "2 subgroups without timetable sessions",
-    detail: "Weekend subgroup scheduling remains incomplete for the active Y1S1 intake.",
-    level: "Medium",
-  },
+const STAT_DEFINITIONS: StatDefinition[] = [
+  { key: "students", label: "Total Students", icon: Users },
+  { key: "faculties", label: "Total Faculties", icon: Building2 },
+  { key: "degreePrograms", label: "Degree Programs", icon: GraduationCap },
+  { key: "lecturers", label: "Lecturers / Instructors", icon: UserCheck },
+  { key: "modules", label: "Total Modules", icon: BookOpen },
+  { key: "intakes", label: "Active Intakes", icon: CalendarDays },
 ];
 
 const QUICK_ACTIONS = [
-  "Add Faculty",
-  "Create Degree Program",
-  "Create Intake",
-  "Add Lecturer",
-  "Publish Announcement",
-];
+  { label: "Add Faculty", href: "/admin/faculty" },
+  { label: "Create Degree Program", href: "/admin/academics/degree-programs" },
+  { label: "Create Intake", href: "/admin/academics/intakes" },
+  { label: "Add Lecturer", href: "/admin/users/lecturers" },
+  { label: "Publish Announcement", href: "/admin/announcements" },
+] as const;
 
-function StatOverviewCard({ growth, growthLabel, icon: Icon, label, value }: StatisticCard) {
-  return (
-    <Card accent className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">{label}</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
-        </div>
-        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          <Icon size={18} />
-        </span>
-      </div>
-      <div className="mt-4 flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/8 px-2.5 py-1 text-xs font-semibold text-primary">
-          <TrendingUp size={12} />
-          {growth}
-        </span>
-        <span className="text-xs text-text/60">{growthLabel}</span>
-      </div>
-    </Card>
-  );
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseDistributionItems(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as DistributionItem[];
+  }
+
+  return value
+    .map((item) => {
+      const row = asObject(item);
+      if (!row) {
+        return null;
+      }
+
+      const label = String(row.label ?? "").trim();
+      const meta = String(row.meta ?? "").trim();
+      const numericValue = Math.max(0, Number(row.value) || 0);
+      if (!label) {
+        return null;
+      }
+
+      return {
+        label,
+        value: numericValue,
+        meta,
+      } satisfies DistributionItem;
+    })
+    .filter((item): item is DistributionItem => Boolean(item));
+}
+
+function parseActivityItems(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as ActivityItem[];
+  }
+
+  return value
+    .map((item) => {
+      const row = asObject(item);
+      if (!row) {
+        return null;
+      }
+
+      const id = String(row.id ?? "").trim();
+      const title = String(row.title ?? "").trim();
+      const detail = String(row.detail ?? "").trim();
+      const occurredAt = String(row.occurredAt ?? "").trim();
+      if (!id || !title || !occurredAt) {
+        return null;
+      }
+
+      return {
+        id,
+        title,
+        detail,
+        occurredAt,
+      } satisfies ActivityItem;
+    })
+    .filter((item): item is ActivityItem => Boolean(item));
+}
+
+function parseAlerts(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as AlertItem[];
+  }
+
+  return value
+    .map((item) => {
+      const row = asObject(item);
+      if (!row) {
+        return null;
+      }
+
+      const id = String(row.id ?? "").trim();
+      const title = String(row.title ?? "").trim();
+      const detail = String(row.detail ?? "").trim();
+      const level = row.level === "High" ? "High" : "Medium";
+      if (!id || !title || !detail) {
+        return null;
+      }
+
+      return { id, title, detail, level } satisfies AlertItem;
+    })
+    .filter((item): item is AlertItem => Boolean(item));
+}
+
+function parseDashboardPayload(value: unknown): DashboardPayload | null {
+  const root = asObject(value);
+  const stats = asObject(root?.stats);
+  if (!root || !stats) {
+    return null;
+  }
+
+  const currentIntakeRow = asObject(root.currentIntake);
+
+  return {
+    stats: {
+      totalStudents: Math.max(0, Number(stats.totalStudents) || 0),
+      activeStudents: Math.max(0, Number(stats.activeStudents) || 0),
+      totalFaculties: Math.max(0, Number(stats.totalFaculties) || 0),
+      activeFaculties: Math.max(0, Number(stats.activeFaculties) || 0),
+      totalDegreePrograms: Math.max(0, Number(stats.totalDegreePrograms) || 0),
+      activeDegreePrograms: Math.max(0, Number(stats.activeDegreePrograms) || 0),
+      totalLecturers: Math.max(0, Number(stats.totalLecturers) || 0),
+      activeLecturers: Math.max(0, Number(stats.activeLecturers) || 0),
+      totalModules: Math.max(0, Number(stats.totalModules) || 0),
+      totalIntakes: Math.max(0, Number(stats.totalIntakes) || 0),
+      activeIntakes: Math.max(0, Number(stats.activeIntakes) || 0),
+      activeOfferingCount: Math.max(0, Number(stats.activeOfferingCount) || 0),
+      totalSubgroups: Math.max(0, Number(stats.totalSubgroups) || 0),
+    },
+    currentIntake:
+      currentIntakeRow && String(currentIntakeRow.currentTerm ?? "").trim()
+        ? {
+            name: String(currentIntakeRow.name ?? "").trim(),
+            currentTerm: String(currentIntakeRow.currentTerm ?? "").trim(),
+          }
+        : null,
+    studentsPerFaculty: parseDistributionItems(root.studentsPerFaculty),
+    studentsPerDegree: parseDistributionItems(root.studentsPerDegree),
+    recentActivity: parseActivityItems(root.recentActivity),
+    alerts: parseAlerts(root.alerts),
+  };
+}
+
+async function readJson<T>(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | T
+    | { message?: string }
+    | null;
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload === "object" && "message" in payload && payload.message
+        ? payload.message
+        : "Request failed"
+    );
+  }
+  return (payload ?? ({} as T)) as T;
+}
+
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
+
+function formatRelativeTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Recently";
+  }
+
+  const diffMs = parsed.getTime() - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+  if (Math.abs(diffMinutes) < 60) {
+    return formatter.format(diffMinutes, "minute");
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) {
+    return formatter.format(diffHours, "hour");
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  return formatter.format(diffDays, "day");
 }
 
 function DistributionList({ items }: { items: DistributionItem[] }) {
-  const maxValue = Math.max(...items.map((item) => item.value));
+  const maxValue = Math.max(1, ...items.map((item) => item.value));
 
   return (
     <div className="space-y-4">
       {items.map((item) => (
-        <div key={item.label}>
+        <div key={`${item.meta}-${item.label}`}>
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-heading">{item.label}</p>
               <p className="mt-0.5 text-xs text-text/60">{item.meta}</p>
             </div>
-            <p className="text-sm font-semibold text-heading">{item.value}</p>
+            <p className="text-sm font-semibold text-heading">
+              {item.value.toLocaleString()}
+            </p>
           </div>
           <div className="mt-2 h-2 rounded-full bg-slate-200/70">
             <div
@@ -227,39 +309,122 @@ function DistributionList({ items }: { items: DistributionItem[] }) {
   );
 }
 
-function formatDateTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
-  }
-  return parsed.toLocaleString();
+function StatOverviewCard({
+  icon: Icon,
+  label,
+  value,
+  meta,
+}: {
+  icon: StatIcon;
+  label: string;
+  value: string;
+  meta: string;
+}) {
+  return (
+    <Card accent className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{meta}</p>
+    </Card>
+  );
 }
 
 export default function AdminDashboardPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
+  const [dashboardError, setDashboardError] = useState("");
   const latestNotification = notifications[0] ?? null;
 
   useEffect(() => {
     let cancelled = false;
     const currentUser = readStoredUser();
-    void Promise.all([
-      listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
-      listNotificationsForUser(currentUser, "SUPER_ADMIN").catch(
-        () => [] as NotificationFeedItem[]
-      ),
-    ]).then(([rows, scopedNotifications]) => {
-      if (cancelled) {
-        return;
+
+    void (async () => {
+      try {
+        const [dashboardPayload, rows, scopedNotifications] = await Promise.all([
+          readJson<unknown>(await fetch("/api/admin/dashboard", { cache: "no-store" })).then(
+            (payload) => parseDashboardPayload(payload)
+          ),
+          listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
+          listNotificationsForUser(currentUser, "SUPER_ADMIN").catch(
+            () => [] as NotificationFeedItem[]
+          ),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setDashboard(dashboardPayload);
+        setDashboardError(
+          dashboardPayload ? "" : "Failed to map admin dashboard data from the database."
+        );
+        setAnnouncements(rows);
+        setNotifications(scopedNotifications.slice(0, 3));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setDashboard(null);
+        setDashboardError(
+          error instanceof Error ? error.message : "Failed to load dashboard data."
+        );
       }
-      setAnnouncements(rows);
-      setNotifications(scopedNotifications.slice(0, 3));
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const statistics = useMemo(() => {
+    const stats = dashboard?.stats;
+    const statMap = {
+      students: {
+        value: stats ? stats.totalStudents.toLocaleString() : "—",
+        meta: stats ? `${stats.activeStudents.toLocaleString()} active records` : "Loading",
+      },
+      faculties: {
+        value: stats ? stats.totalFaculties.toLocaleString() : "—",
+        meta: stats ? `${stats.activeFaculties.toLocaleString()} active faculties` : "Loading",
+      },
+      degreePrograms: {
+        value: stats ? stats.totalDegreePrograms.toLocaleString() : "—",
+        meta: stats
+          ? `${stats.activeDegreePrograms.toLocaleString()} active programs`
+          : "Loading",
+      },
+      lecturers: {
+        value: stats ? stats.totalLecturers.toLocaleString() : "—",
+        meta: stats ? `${stats.activeLecturers.toLocaleString()} active lecturers` : "Loading",
+      },
+      modules: {
+        value: stats ? stats.totalModules.toLocaleString() : "—",
+        meta: stats
+          ? `${stats.activeOfferingCount.toLocaleString()} active offerings`
+          : "Loading",
+      },
+      intakes: {
+        value: stats ? stats.activeIntakes.toLocaleString() : "—",
+        meta: stats ? `${stats.totalIntakes.toLocaleString()} intake records` : "Loading",
+      },
+    } as const;
+
+    return STAT_DEFINITIONS.map((item) => ({
+      ...item,
+      ...statMap[item.key],
+    }));
+  }, [dashboard]);
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -269,14 +434,27 @@ export default function AdminDashboardPage() {
       />
 
       <LatestNotificationSection
-        href="/notifications"
+        href="/admin/notifications"
         item={latestNotification}
         subtitle="Most recent notification targeted to admin users."
       />
 
+      {dashboardError ? (
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-heading">Dashboard data unavailable</p>
+          <p className="mt-1 text-sm text-text/68">{dashboardError}</p>
+        </Card>
+      ) : null}
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        {STATISTICS.map((item) => (
-          <StatOverviewCard key={item.label} {...item} />
+        {statistics.map((item) => (
+          <StatOverviewCard
+            icon={item.icon}
+            key={item.key}
+            label={item.label}
+            meta={item.meta}
+            value={item.value}
+          />
         ))}
       </section>
 
@@ -290,10 +468,14 @@ export default function AdminDashboardPage() {
             <div className="rounded-3xl border border-border bg-card p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-heading">Students per Faculty</p>
-                <Badge variant="neutral">Current intake</Badge>
+                <Badge variant="neutral">Live distribution</Badge>
               </div>
               <div className="mt-5">
-                <DistributionList items={STUDENTS_PER_FACULTY} />
+                {dashboard?.studentsPerFaculty.length ? (
+                  <DistributionList items={dashboard.studentsPerFaculty} />
+                ) : (
+                  <p className="text-sm text-text/68">No enrollment distribution available yet.</p>
+                )}
               </div>
             </div>
 
@@ -304,7 +486,13 @@ export default function AdminDashboardPage() {
                   <Badge variant="neutral">Top programs</Badge>
                 </div>
                 <div className="mt-5">
-                  <DistributionList items={STUDENTS_PER_DEGREE} />
+                  {dashboard?.studentsPerDegree.length ? (
+                    <DistributionList items={dashboard.studentsPerDegree} />
+                  ) : (
+                    <p className="text-sm text-text/68">
+                      No degree-level enrollment distribution available yet.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -316,8 +504,12 @@ export default function AdminDashboardPage() {
                   <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
                     Current Active Term
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-heading">Y1S1</p>
-                  <p className="mt-1 text-sm text-text/60">2026 June Intake</p>
+                  <p className="mt-2 text-2xl font-semibold text-heading">
+                    {dashboard?.currentIntake?.currentTerm || "—"}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {dashboard?.currentIntake?.name || "No active intake found"}
+                  </p>
                 </div>
 
                 <div className="rounded-3xl border border-border bg-card p-5">
@@ -327,8 +519,12 @@ export default function AdminDashboardPage() {
                   <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
                     Total Subgroups
                   </p>
-                  <p className="mt-2 text-2xl font-semibold text-heading">38</p>
-                  <p className="mt-1 text-sm text-text/60">Across weekday and weekend streams</p>
+                  <p className="mt-2 text-2xl font-semibold text-heading">
+                    {dashboard ? dashboard.stats.totalSubgroups.toLocaleString() : "—"}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    Distinct subgroup codes stored in active enrollment data
+                  </p>
                 </div>
               </div>
             </div>
@@ -340,7 +536,7 @@ export default function AdminDashboardPage() {
           title="Announcement Preview"
         >
           <div className="space-y-4">
-            {announcements.length === 0 ? (
+              {announcements.length === 0 ? (
               <div className="rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
                 No announcements available yet.
               </div>
@@ -365,7 +561,7 @@ export default function AdminDashboardPage() {
             )}
             <Link
               className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-              href="/announcements"
+              href="/admin/announcements"
             >
               View All
             </Link>
@@ -379,23 +575,31 @@ export default function AdminDashboardPage() {
           title="Recent Activity"
         >
           <div className="space-y-4">
-            {RECENT_ACTIVITY.map((item, index) => (
-              <div className="flex gap-4" key={item.id}>
-                <div className="flex flex-col items-center">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Clock3 size={16} />
-                  </span>
-                  {index === RECENT_ACTIVITY.length - 1 ? null : (
-                    <span className="mt-2 h-full w-px bg-border" />
-                  )}
+            {dashboard?.recentActivity.length ? (
+              dashboard.recentActivity.map((item, index) => (
+                <div className="flex gap-4" key={item.id}>
+                  <div className="flex flex-col items-center">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Clock3 size={16} />
+                    </span>
+                    {index === dashboard.recentActivity.length - 1 ? null : (
+                      <span className="mt-2 h-full w-px bg-border" />
+                    )}
+                  </div>
+                  <div className="min-w-0 rounded-3xl border border-border bg-card p-4">
+                    <p className="text-sm font-semibold text-heading">{item.title}</p>
+                    <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+                    <p className="mt-3 text-xs font-medium text-text/55">
+                      {formatRelativeTime(item.occurredAt)}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 rounded-3xl border border-border bg-card p-4">
-                  <p className="text-sm font-semibold text-heading">{item.title}</p>
-                  <p className="mt-1 text-sm text-text/68">{item.detail}</p>
-                  <p className="mt-3 text-xs font-medium text-text/55">{item.time}</p>
-                </div>
+              ))
+            ) : (
+              <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                No recent database activity available.
               </div>
-            ))}
+            )}
           </div>
         </Card>
 
@@ -406,14 +610,19 @@ export default function AdminDashboardPage() {
           >
             <div className="grid gap-3">
               {QUICK_ACTIONS.map((item, index) => (
-                <Button
-                  className="justify-between"
-                  key={item}
-                  variant={index === QUICK_ACTIONS.length - 1 ? "primary" : "secondary"}
+                <Link
+                  className={[
+                    "inline-flex items-center justify-between rounded-2xl px-4 py-2 text-sm font-medium transition-all",
+                    index === QUICK_ACTIONS.length - 1
+                      ? "bg-primary text-white hover:bg-primaryHover"
+                      : "border border-border bg-card text-text hover:bg-tint",
+                  ].join(" ")}
+                  href={item.href}
+                  key={item.href}
                 >
-                  {item}
+                  {item.label}
                   <ArrowRight size={14} />
-                </Button>
+                </Link>
               ))}
             </div>
           </Card>
@@ -423,22 +632,30 @@ export default function AdminDashboardPage() {
             title="Important Alerts"
           >
             <div className="space-y-3">
-              {ALERTS.map((item) => (
-                <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-                        <AlertTriangle size={16} />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-heading">{item.title}</p>
-                        <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+              {dashboard?.alerts.length ? (
+                dashboard.alerts.map((item) => (
+                  <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                          <AlertTriangle size={16} />
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-heading">{item.title}</p>
+                          <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+                        </div>
                       </div>
+                      <Badge variant={item.level === "High" ? "warning" : "neutral"}>
+                        {item.level}
+                      </Badge>
                     </div>
-                    <Badge variant={item.level === "High" ? "warning" : "neutral"}>{item.level}</Badge>
                   </div>
+                ))
+              ) : (
+                <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                  No alert conditions detected from current database records.
                 </div>
-              ))}
+              )}
             </div>
           </Card>
 
@@ -473,4 +690,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
