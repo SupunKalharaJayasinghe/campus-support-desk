@@ -19,9 +19,13 @@ import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
+import {
+  isShortAnswerQuizQuestionType,
+  type QuizQuestionType,
+} from "@/lib/quiz-question-types";
 import { resolveCurrentStudentRecord } from "@/lib/student-session";
 
-type QuestionType = "mcq" | "true-false" | "short-answer";
+type QuestionType = QuizQuestionType;
 
 interface StudentLookupRecord {
   id: string;
@@ -79,6 +83,7 @@ interface SubmissionResult {
     answers: Array<{
       questionId: string;
       questionText: string;
+      questionType?: QuestionType | "";
       isCorrect: boolean;
       marksAwarded: number;
       questionMarks: number;
@@ -310,7 +315,7 @@ export default function StudentQuizAttemptPage() {
     return sourceQuestions.reduce((count, question) => {
       const answer = answers[question._id];
       if (!answer) return count;
-      if (question.questionType === "short-answer") {
+      if (isShortAnswerQuizQuestionType(question.questionType)) {
         return collapseSpaces(answer.answerText) ? count + 1 : count;
       }
       return answer.selectedOptionId ? count + 1 : count;
@@ -323,7 +328,7 @@ export default function StudentQuizAttemptPage() {
       .filter((question) => {
         const answer = answers[question._id];
         if (!answer) return true;
-        if (question.questionType === "short-answer") {
+        if (isShortAnswerQuizQuestionType(question.questionType)) {
           return !collapseSpaces(answer.answerText);
         }
         return !answer.selectedOptionId;
@@ -1090,7 +1095,7 @@ export default function StudentQuizAttemptPage() {
                 </div>
 
                 <div className="mt-6">
-                  {currentQuestion.questionType === "short-answer" ? (
+                  {isShortAnswerQuizQuestionType(currentQuestion.questionType) ? (
                     <div className="space-y-2">
                       <textarea
                         className="min-h-[180px] w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-text outline-none transition-colors focus-visible:border-primary focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-focus"
@@ -1176,7 +1181,7 @@ export default function StudentQuizAttemptPage() {
                   {liveQuiz.questions.map((question, index) => {
                     const answer = answers[question._id];
                     const answered =
-                      question.questionType === "short-answer"
+                      isShortAnswerQuizQuestionType(question.questionType)
                         ? Boolean(collapseSpaces(answer?.answerText))
                         : Boolean(answer?.selectedOptionId);
                     return (

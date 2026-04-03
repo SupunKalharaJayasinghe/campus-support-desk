@@ -4,6 +4,7 @@ import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import "@/models/Student";
 import { connectMongoose } from "@/lib/mongoose";
+import { normalizeQuizQuestionType } from "@/lib/quiz-question-types";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { buildStudentName, collapseSpaces, readId, sanitizeQuizForStudent } from "../../../route";
 
@@ -42,6 +43,7 @@ function buildAttemptResults(
     return {
       questionId: readId(answerRow.questionId),
       questionText: collapseSpaces(questionRow.questionText),
+      questionType: normalizeQuizQuestionType(questionRow.questionType) ?? "",
       isCorrect: Boolean(answerRow.isCorrect),
       marksAwarded: Number(answerRow.marksAwarded ?? 0),
       questionMarks: Number(answerRow.questionMarks ?? 0),
@@ -210,6 +212,7 @@ export async function GET(
               answers: results.map((result) => ({
                 questionId: result.questionId,
                 questionText: result.questionText,
+                questionType: result.questionType,
                 isCorrect: result.isCorrect,
                 marksAwarded: result.marksAwarded,
                 questionMarks: result.questionMarks,

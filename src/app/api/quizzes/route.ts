@@ -5,6 +5,10 @@ import "@/models/ModuleOffering";
 import "@/models/Quiz";
 import "@/models/User";
 import { connectMongoose } from "@/lib/mongoose";
+import {
+  normalizeQuizQuestionType,
+  type QuizQuestionType,
+} from "@/lib/quiz-question-types";
 import type { IOption } from "@/models/Quiz";
 import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
@@ -27,7 +31,6 @@ const QUIZ_SORT_FIELDS = [
 ] as const;
 
 type QuizStatus = (typeof QUIZ_STATUS_VALUES)[number];
-type QuestionType = "mcq" | "true-false" | "short-answer";
 
 interface NormalizedModuleMeta {
   code: string;
@@ -37,7 +40,7 @@ interface NormalizedModuleMeta {
 
 interface NormalizedQuestionInput {
   questionText: string;
-  questionType: QuestionType;
+  questionType: QuizQuestionType;
   options: IOption[];
   correctAnswer: string;
   marks: number;
@@ -121,14 +124,6 @@ export function sanitizePositiveInteger(value: unknown, fallback: number) {
   }
 
   return Math.floor(parsed);
-}
-
-function sanitizeQuestionType(value: unknown): QuestionType | null {
-  if (value === "mcq" || value === "true-false" || value === "short-answer") {
-    return value;
-  }
-
-  return null;
 }
 
 export function sanitizeTags(value: unknown) {
@@ -355,7 +350,7 @@ export function normalizeQuestionInputs(rawQuestions: unknown) {
     }
 
     const questionText = collapseSpaces(questionRow.questionText);
-    const questionType = sanitizeQuestionType(questionRow.questionType);
+    const questionType = normalizeQuizQuestionType(questionRow.questionType);
     const marks = Number(questionRow.marks);
     const order = sanitizePositiveInteger(questionRow.order, index + 1);
     const explanation = collapseSpaces(questionRow.explanation);

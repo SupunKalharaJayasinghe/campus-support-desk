@@ -27,6 +27,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/ToastProvider";
+import type { QuizQuestionType } from "@/lib/quiz-question-types";
 import { readStoredUser, type DemoUser } from "@/lib/rbac";
 import {
   collapseValidationWhitespace,
@@ -38,7 +39,7 @@ import {
 
 type PageSize = 10 | 25 | 50 | 100;
 type QuizStatus = "draft" | "published" | "closed" | "archived";
-type QuestionType = "mcq" | "true-false" | "short-answer";
+type QuestionType = QuizQuestionType;
 type SortOption = "newest" | "deadline" | "title";
 type ResultSortKey = "score" | "name" | "time";
 type QuizValidationMode = "draft" | "publish";
@@ -927,6 +928,7 @@ function QuizModalShell({
   children,
   size = "xl",
   immersive = false,
+  renderAsPage = false,
 }: {
   title: string;
   description?: string;
@@ -934,7 +936,61 @@ function QuizModalShell({
   children: React.ReactNode;
   size?: "lg" | "xl" | "full";
   immersive?: boolean;
+  renderAsPage?: boolean;
 }) {
+  if (renderAsPage) {
+    return (
+      <div className="fadein">
+        <div
+          className={cn(
+            "mx-auto w-full rounded-[32px] border border-border bg-white shadow-[0_28px_70px_rgba(15,23,42,0.14)]",
+            immersive &&
+              "rounded-[24px] border-[rgba(180,190,220,0.4)] bg-white/96 shadow-[0_24px_60px_rgba(15,23,42,0.16)]",
+            size === "lg" && "max-w-4xl",
+            size === "xl" && "max-w-6xl",
+            size === "full" && "max-w-[min(1200px,100%)]"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-start justify-between gap-4 border-b border-border bg-white px-6 py-5",
+              immersive && "border-[rgba(180,190,220,0.35)] px-7 py-6"
+            )}
+          >
+            <div>
+              <h2 className="text-2xl font-semibold text-heading">{title}</h2>
+              {description ? (
+                <p className="mt-2 text-sm leading-6 text-text/72">
+                  {description}
+                </p>
+              ) : null}
+            </div>
+            <button
+              aria-label="Close builder"
+              className={cn(
+                "inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/75 transition-colors hover:text-heading",
+                immersive &&
+                  "border-[rgba(180,190,220,0.35)] bg-[rgba(240,242,247,0.72)]"
+              )}
+              onClick={onClose}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div
+            className={cn(
+              "bg-white px-6 py-6",
+              immersive && "bg-[rgba(248,250,255,0.85)] px-7 py-7"
+            )}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -1046,7 +1102,10 @@ export default function AdminQuizzesPage() {
     [builderOpen, form, initialFormSnapshot]
   );
 
-  const isOverlayOpen = builderOpen || Boolean(previewQuiz || resultsData || deleteTarget);
+  const showLecturerBuilderPage = isLecturerView && builderOpen;
+  const isOverlayOpen =
+    (!isLecturerView && builderOpen) ||
+    Boolean(previewQuiz || resultsData || deleteTarget);
   const canSaveDraft =
     !saving &&
     countQuizValidationErrors(draftValidation) === 0 &&
@@ -1666,6 +1725,16 @@ export default function AdminQuizzesPage() {
       Create Quiz
     </Button>
   );
+  const lecturerHeaderAction = showLecturerBuilderPage ? (
+    <Button className="h-11 rounded-2xl px-5" onClick={closeBuilder} variant="secondary">
+      Back to Quizzes
+    </Button>
+  ) : (
+    createQuizAction
+  );
+  const lecturerPageDescription = showLecturerBuilderPage
+    ? "Build the quiz on this page and save it when ready."
+    : pageDescription;
   const publishedQuizCount = quizzes.filter((quiz) => quiz.status === "published").length;
   const draftQuizCount = quizzes.filter((quiz) => quiz.status === "draft").length;
   const closingSoonCount = quizzes.filter((quiz) => {
@@ -1683,15 +1752,15 @@ export default function AdminQuizzesPage() {
         <div className="page-header fadein">
           <div>
             <div className="page-title">{pageTitle}</div>
-            <div className="page-subtitle">{pageDescription}</div>
+            <div className="page-subtitle">{lecturerPageDescription}</div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">{createQuizAction}</div>
+          <div className="flex flex-wrap items-center gap-2">{lecturerHeaderAction}</div>
         </div>
       ) : (
         <PageHeader actions={createQuizAction} description={pageDescription} title={pageTitle} />
       )}
 
-      {isLecturerView && !loading ? (
+      {!showLecturerBuilderPage && isLecturerView && !loading ? (
         <div className="stats-row fadein">
           {[
             { icon: <BarChart3 size={18} />, label: "Total quizzes", value: pagination.total, color: "var(--accent)" },
@@ -1710,7 +1779,7 @@ export default function AdminQuizzesPage() {
         </div>
       ) : null}
 
-      {isLecturerView && !loading && moduleOfferings.length === 0 ? (
+      {!showLecturerBuilderPage && isLecturerView && !loading && moduleOfferings.length === 0 ? (
         <Card className={cn("border-amber-200 bg-amber-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex items-start gap-3">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -1730,7 +1799,7 @@ export default function AdminQuizzesPage() {
         </Card>
       ) : null}
 
-      {error ? (
+      {!showLecturerBuilderPage && error ? (
         <Card className={cn("border-red-200 bg-red-50", isLecturerView && lecturerPanelClass)}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
@@ -1749,9 +1818,9 @@ export default function AdminQuizzesPage() {
         </Card>
       ) : null}
 
-      {loading ? (
+      {!showLecturerBuilderPage && loading ? (
         <LoadingTable immersive={isLecturerView} />
-      ) : (
+      ) : !showLecturerBuilderPage ? (
         <Card
           className={cn(
             "transition-all",
@@ -1969,13 +2038,14 @@ export default function AdminQuizzesPage() {
             totalItems={pagination.total}
           />
         </Card>
-      )}
+      ) : null}
 
       {builderOpen ? (
         <QuizModalShell
           description="Create a quiz, define the settings, and build questions with inline validation before publishing."
           immersive={isLecturerView}
           onClose={closeBuilder}
+          renderAsPage={showLecturerBuilderPage}
           size="full"
           title={editingQuiz ? "Edit Quiz" : "Create Quiz"}
         >

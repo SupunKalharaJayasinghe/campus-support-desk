@@ -3,8 +3,11 @@ import { NextResponse } from "next/server";
 import "@/models/Quiz";
 import "@/models/QuizAttempt";
 import { awardPointsForQuizAttempt } from "@/lib/points-engine";
+import {
+  gradeQuizSubmission,
+  normalizeQuizSubmissionAnswers,
+} from "@/lib/quiz-grading";
 import { connectMongoose } from "@/lib/mongoose";
-import type { IAnswer } from "@/models/QuizAttempt";
 import { QuizModel } from "@/models/Quiz";
 import { QuizAttemptModel } from "@/models/QuizAttempt";
 import { collapseSpaces, readId } from "../../route";
@@ -15,119 +18,6 @@ function asObject(value: unknown): Record<string, unknown> | null {
   }
 
   return value as Record<string, unknown>;
-}
-
-interface SubmissionAnswerInput {
-  questionId: string;
-  selectedOptionId?: string;
-  answerText?: string;
-}
-
-function gradeSubmission(
-  quiz: Record<string, unknown>,
-  answers: SubmissionAnswerInput[]
-) {
-  const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
-  const answersByQuestion = new Map<string, SubmissionAnswerInput>();
-  const results: Array<{
-    questionId: string;
-    questionText: string;
-    isCorrect: boolean;
-    marksAwarded: number;
-    questionMarks: number;
-    correctAnswer?: string;
-    selectedAnswer?: string;
-  }> = [];
-
-  answers.forEach((answer) => {
-    const questionId = collapseSpaces(answer.questionId);
-    if (questionId) {
-      answersByQuestion.set(questionId, answer);
-    }
-  });
-
-  const gradedAnswers: IAnswer[] = questions.map((question) => {
-    const questionRow = asObject(question) ?? {};
-    const questionId = readId(questionRow._id ?? questionRow.id);
-    const questionText = collapseSpaces(questionRow.questionText);
-    const questionType = collapseSpaces(questionRow.questionType);
-    const questionMarks = Number(questionRow.marks ?? 0);
-    const submission = answersByQuestion.get(questionId);
-    const optionRows = Array.isArray(questionRow.options) ? questionRow.options : [];
-
-    let isCorrect = false;
-    let marksAwarded = 0;
-    let selectedOptionId: mongoose.Types.ObjectId | undefined;
-    const answerText = collapseSpaces(submission?.answerText);
-    let selectedAnswer = "";
-    let correctAnswer = "";
-
-    if (questionType === "mcq" || questionType === "true-false") {
-      const selectedId = collapseSpaces(submission?.selectedOptionId);
-      const selectedOption = optionRows.find((option) => {
-        const optionRow = asObject(option);
-        return readId(optionRow?._id ?? optionRow?.id) === selectedId;
-      });
-      const selectedRow = asObject(selectedOption);
-      const correctOption = optionRows.find((option) => Boolean(asObject(option)?.isCorrect));
-      const correctOptionRow = asObject(correctOption);
-
-      if (selectedId && mongoose.Types.ObjectId.isValid(selectedId)) {
-        selectedOptionId = new mongoose.Types.ObjectId(selectedId);
-      }
-
-      selectedAnswer = collapseSpaces(selectedRow?.optionText);
-      correctAnswer =
-        collapseSpaces(correctOptionRow?.optionText) ||
-        collapseSpaces(questionRow.correctAnswer);
-      isCorrect = Boolean(selectedRow?.isCorrect);
-      marksAwarded = isCorrect ? questionMarks : 0;
-    } else {
-      // Short-answer auto grading is exact-match only. Lecturers can manually re-grade later.
-      const normalizedAnswer = answerText.toLowerCase();
-      const normalizedCorrect = collapseSpaces(questionRow.correctAnswer).toLowerCase();
-      correctAnswer = collapseSpaces(questionRow.correctAnswer);
-      selectedAnswer = answerText;
-      isCorrect = Boolean(normalizedAnswer) && normalizedAnswer === normalizedCorrect;
-      marksAwarded = isCorrect ? questionMarks : 0;
-    }
-
-    results.push({
-      questionId,
-      questionText,
-      isCorrect,
-      marksAwarded,
-      questionMarks,
-      correctAnswer,
-      selectedAnswer,
-    });
-
-    return {
-      questionId: new mongoose.Types.ObjectId(questionId),
-      ...(selectedOptionId ? { selectedOptionId } : {}),
-      ...(answerText ? { answerText } : {}),
-      isCorrect,
-      marksAwarded,
-      questionMarks,
-    };
-  });
-
-  const score = gradedAnswers.reduce((sum, answer) => sum + answer.marksAwarded, 0);
-  const totalMarks = Number(quiz.totalMarks ?? 0);
-  const percentage =
-    totalMarks > 0
-      ? Math.round(((score / totalMarks) * 100 + Number.EPSILON) * 100) / 100
-      : 0;
-  const passed = score >= Number(quiz.passingMarks ?? 0);
-
-  return {
-    gradedAnswers,
-    score,
-    totalMarks,
-    percentage,
-    passed,
-    results,
-  };
 }
 
 export async function POST(
@@ -220,33 +110,10 @@ export async function POST(
       );
     }
 
-    const normalizedAnswers = answers
-      .map((answer) => {
-        const row = asObject(answer);
-        if (!row) {
-          return null;
-        }
-
-        const questionId = collapseSpaces(row.questionId);
-        if (!questionId || !mongoose.Types.ObjectId.isValid(questionId)) {
-          return null;
-        }
-
-        const selectedOptionId = collapseSpaces(row.selectedOptionId);
-        return {
-          questionId,
-          ...(selectedOptionId && mongoose.Types.ObjectId.isValid(selectedOptionId)
-            ? { selectedOptionId }
-            : {}),
-          ...(collapseSpaces(row.answerText)
-            ? { answerText: collapseSpaces(row.answerText) }
-            : {}),
-        };
-      })
-      .filter((answer): answer is SubmissionAnswerInput => Boolean(answer));
+    const normalizedAnswers = normalizeQuizSubmissionAnswers(answers);
 
     const quizRow = asObject(quiz) ?? {};
-    const grading = gradeSubmission(quizRow, normalizedAnswers);
+    const grading = gradeQuizSubmission(quizRow, normalizedAnswers);
     const submittedAt = new Date();
     const startedAt = attempt.startedAt instanceof Date ? attempt.startedAt : submittedAt;
     const timeTaken = Math.max(
@@ -324,6 +191,7 @@ export async function POST(
               answers: grading.results.map((result) => ({
                 questionId: result.questionId,
                 questionText: result.questionText,
+                questionType: result.questionType,
                 isCorrect: result.isCorrect,
                 marksAwarded: result.marksAwarded,
                 questionMarks: result.questionMarks,
