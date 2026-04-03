@@ -288,6 +288,26 @@ function calculateEndDateFromWeeks(startDate: string, weeks: number) {
   return addDaysToDateOnly(startDate, sanitizeWeeksCount(weeks) * 7 - 1);
 }
 
+function calculateWeeksFromDateRange(
+  startDate: string,
+  endDate: string,
+  fallbackWeeks = DEFAULT_TERM_WEEKS
+) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  if (!start || !end) {
+    return sanitizeWeeksCount(fallbackWeeks);
+  }
+
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs < 0) {
+    return sanitizeWeeksCount(fallbackWeeks);
+  }
+
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1;
+  return sanitizeWeeksCount(Math.max(1, Math.ceil(days / 7)));
+}
+
 function sanitizeDateValue(value: unknown) {
   if (typeof value !== "string") return "";
   const parsed = parseDateOnly(value);
@@ -377,14 +397,21 @@ function normalizeSchedules(
 
   return TERM_SEQUENCE.map((termCode) => {
     const row = byCode.get(termCode);
-    const weeks = sanitizeWeeksCount(row?.weeks);
     const startDate = sanitizeDateValue(row?.startDate);
+    const rawEndDate = sanitizeDateValue(row?.endDate);
+    const rawWeeks = sanitizeWeeksCount(row?.weeks);
+    const endDate = startDate
+      ? rawEndDate || calculateEndDateFromWeeks(startDate, rawWeeks)
+      : rawEndDate;
+    const weeks =
+      startDate && endDate
+        ? calculateWeeksFromDateRange(startDate, endDate, rawWeeks)
+        : rawWeeks;
+
     return {
       termCode,
       startDate,
-      endDate: startDate
-        ? calculateEndDateFromWeeks(startDate, weeks)
-        : sanitizeDateValue(row?.endDate),
+      endDate,
       weeks,
       notifyBeforeDays: sanitizeNotifyBeforeDays(row?.notifyBeforeDays),
       isManuallyCustomized:
@@ -991,23 +1018,31 @@ export default function IntakesPage() {
       }
 
       const target = previous.termSchedules[index] ?? emptyScheduleRow(termCode);
-      if (getTermScheduleStatus(target, today) === "PAST") {
-        return previous;
-      }
+      const nextValue = sanitizeDateValue(value);
 
-      if (target[key] === value) {
+      if (target[key] === nextValue) {
         return previous;
       }
 
       let nextSchedules = previous.termSchedules.map((row) => ({ ...row }));
       const weeks = sanitizeWeeksCount(nextSchedules[index]?.weeks);
+      const currentStartDate = nextSchedules[index].startDate;
+      const currentEndDate = nextSchedules[index].endDate;
+      const nextStartDate = key === "startDate" ? nextValue : currentStartDate;
+      const nextEndDate = key === "endDate" ? nextValue : currentEndDate;
+      const nextWeeks =
+        key === "endDate"
+          ? calculateWeeksFromDateRange(nextStartDate, nextEndDate, weeks)
+          : weeks;
+
       nextSchedules[index] = {
         ...nextSchedules[index],
-        [key]: value,
+        [key]: nextValue,
+        weeks: nextWeeks,
         endDate:
           key === "startDate"
-            ? calculateEndDateFromWeeks(value, weeks)
-            : nextSchedules[index].endDate,
+            ? calculateEndDateFromWeeks(nextValue, nextWeeks)
+            : nextEndDate,
         isManuallyCustomized: index > 0 ? true : nextSchedules[index].isManuallyCustomized,
         notificationSentAt: "",
       };
@@ -1033,10 +1068,6 @@ export default function IntakesPage() {
       }
 
       const target = previous.termSchedules[index] ?? emptyScheduleRow(termCode);
-      if (getTermScheduleStatus(target, today) === "PAST") {
-        return previous;
-      }
-
       if (target.notifyBeforeDays === value) {
         return previous;
       }
@@ -1061,11 +1092,6 @@ export default function IntakesPage() {
     setForm((previous) => {
       const index = TERM_SEQUENCE.findIndex((term) => term === termCode);
       if (index < 0) {
-        return previous;
-      }
-
-      const target = previous.termSchedules[index] ?? emptyScheduleRow(termCode);
-      if (getTermScheduleStatus(target, today) === "PAST") {
         return previous;
       }
 
@@ -1776,7 +1802,7 @@ export default function IntakesPage() {
                     </p>
                     <p className="mt-1 text-lg font-semibold text-heading">Schedule Editor</p>
                     <p className="mt-1 text-sm text-text/68">
-                      Y1S1 and Y1S2 are shown first. Past rows are locked to preserve history.
+                      Y1S1 and Y1S2 are shown first. You can edit dates and weeks freely before saving.
                     </p>
                   </div>
 
@@ -1824,7 +1850,6 @@ export default function IntakesPage() {
                           form.termSchedules.find((schedule) => schedule.termCode === termCode) ??
                           emptyScheduleRow(termCode);
                         const status = getTermScheduleStatus(row, today);
-                        const isPast = status === "PAST";
 
                         return (
                           <tr className="border-b border-border/70" key={termCode}>
@@ -1841,7 +1866,7 @@ export default function IntakesPage() {
                             <td className="px-4 py-3">
                               <Input
                                 className="h-10"
-                                disabled={isSaving || isPast}
+                                disabled={isSaving}
                                 onChange={(event) =>
                                   updateScheduleDate(termCode, "startDate", event.target.value)
                                 }
@@ -1852,7 +1877,7 @@ export default function IntakesPage() {
                             <td className="px-4 py-3">
                               <Input
                                 className="h-10"
-                                disabled={isSaving || isPast}
+                                disabled={isSaving}
                                 min={1}
                                 onChange={(event) =>
                                   updateScheduleWeeks(termCode, Number(event.target.value))
@@ -1864,7 +1889,10 @@ export default function IntakesPage() {
                             <td className="px-4 py-3">
                               <Input
                                 className="h-10"
-                                disabled
+                                disabled={isSaving}
+                                onChange={(event) =>
+                                  updateScheduleDate(termCode, "endDate", event.target.value)
+                                }
                                 type="date"
                                 value={row.endDate}
                               />
@@ -1872,7 +1900,7 @@ export default function IntakesPage() {
                             <td className="px-4 py-3">
                               <Select
                                 className="h-10"
-                                disabled={isSaving || isPast}
+                                disabled={isSaving}
                                 onChange={(event) =>
                                   updateScheduleNotifyBefore(
                                     termCode,
@@ -1893,9 +1921,6 @@ export default function IntakesPage() {
                                 <Badge variant={termStatusVariant(status)}>
                                   {termStatusLabel(status)}
                                 </Badge>
-                                {isPast ? (
-                                  <span className="text-xs font-semibold text-text/55">Locked</span>
-                                ) : null}
                               </div>
                             </td>
                           </tr>
