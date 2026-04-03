@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { authHeaders } from "@/lib/rbac";
 import { AlertTriangle, Eye, Flag, UserCheck, UserMinus, Users, UserX } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -35,7 +36,7 @@ export default function CommunityAdminDashboardPage() {
     (async () => {
       setMembersLoading(true);
       try {
-        const response = await fetch("/api/community-members");
+        const response = await fetch("/api/community-members", { headers: authHeaders() });
         const data: unknown = await response.json();
         const rawItems =
           data && typeof data === "object" && "items" in data

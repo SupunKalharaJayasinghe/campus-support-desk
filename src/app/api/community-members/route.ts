@@ -1,10 +1,15 @@
 import mongoose from "mongoose";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
+import {
+  normalizeCommunityProfileStatus,
+  shouldExposeCommunityPointsToViewer,
+} from "@/lib/community-profile-visibility";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { UserModel } from "@/models/User";
 import { connectDB } from "@/lib/mongodb";
+import { isCommunityAdminRole, resolveActiveApiUser } from "@/lib/resolve-api-user";
 
 function formatJoinedAt(value: unknown) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -19,12 +24,16 @@ function formatJoinedAt(value: unknown) {
   return parsed.toISOString().slice(0, 10);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await connectDB();
   } catch {
     return NextResponse.json({ items: [] satisfies unknown[] });
   }
+
+  const actor = await resolveActiveApiUser(req);
+  const viewerUserId = actor?.id ?? null;
+  const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
 
   type UserRow = {
     _id: mongoose.Types.ObjectId;
@@ -63,11 +72,12 @@ export async function GET() {
 
   const communityProfileUserIds = new Set<string>();
   const communityProfilePointsByUserId = new Map<string, number>();
+  const communityProfileStatusByUserId = new Map<string, "PUBLIC" | "PRIVATE">();
   const communityProfileDisplayNameByUserId = new Map<string, string>();
   const adminBonus20UsedByUserId = new Map<string, boolean>();
   if (userIds.length > 0) {
     const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
-      .select("userRef points adminBonus20Used displayName")
+      .select("userRef points adminBonus20Used displayName status")
       .lean()
       .exec();
     for (const doc of profiles) {
@@ -76,6 +86,7 @@ export async function GET() {
         points?: unknown;
         adminBonus20Used?: unknown;
         displayName?: unknown;
+        status?: unknown;
       };
       const ref = lean?.userRef;
       if (ref == null) continue;
@@ -83,6 +94,7 @@ export async function GET() {
       communityProfileUserIds.add(uid);
       const pts = Number(lean.points);
       communityProfilePointsByUserId.set(uid, Number.isFinite(pts) ? pts : 0);
+      communityProfileStatusByUserId.set(uid, normalizeCommunityProfileStatus(lean.status));
       communityProfileDisplayNameByUserId.set(
         uid,
         String(lean.displayName ?? "").trim()
@@ -97,6 +109,18 @@ export async function GET() {
     const posts = postCountByUser.get(uid) ?? 0;
     const replies = replyCountByUser.get(uid) ?? 0;
     const accountInactive = userRow.status === "INACTIVE";
+    const hasCommunityProfile = communityProfileUserIds.has(uid);
+    const profileStatus = communityProfileStatusByUserId.get(uid) ?? "PUBLIC";
+    const rawPoints = communityProfilePointsByUserId.get(uid) ?? 0;
+    const showCommunityProfilePoints =
+      !hasCommunityProfile ||
+      shouldExposeCommunityPointsToViewer({
+        profileStatus,
+        profileUserId: uid,
+        viewerUserId,
+        viewerIsCommunityAdmin,
+        memberDirectoryList: true,
+      });
     return {
       id: username || uid,
       userId: uid,
@@ -106,13 +130,16 @@ export async function GET() {
       joinedAt: formatJoinedAt(userRow.createdAt),
       contributions: posts + replies,
       status: accountInactive ? ("Suspended" as const) : ("Active" as const),
-      hasCommunityProfile: communityProfileUserIds.has(uid),
-      communityProfilePoints: communityProfilePointsByUserId.get(uid) ?? 0,
+      hasCommunityProfile,
+      ...(showCommunityProfilePoints ? { communityProfilePoints: rawPoints } : {}),
       communityProfileDisplayName:
         communityProfileDisplayNameByUserId.get(uid) ?? "",
       adminBonus20Used: adminBonus20UsedByUserId.get(uid) ?? false,
     };
   });
 
-  return NextResponse.json({ items });
+  return NextResponse.json(
+    { items },
+    { headers: { "Cache-Control": "private, no-store, max-age=0" } }
+  );
 }

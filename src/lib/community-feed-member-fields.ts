@@ -1,12 +1,14 @@
 import mongoose from "mongoose";
+import { normalizeCommunityProfileStatus } from "@/lib/community-profile-visibility";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 
 export type CommunityMemberFeedFields = {
   displayName: string;
   points: number;
+  status: "PUBLIC" | "PRIVATE";
 };
 
-/** Batch-load public community profile fields for feed authors (display name + points). */
+/** Batch-load community profile fields for feed authors (display name, points, visibility). */
 export async function getCommunityMemberFieldsByUserRefs(
   userRefs: unknown[]
 ): Promise<Map<string, CommunityMemberFeedFields>> {
@@ -23,7 +25,7 @@ export async function getCommunityMemberFieldsByUserRefs(
 
   const objectIds = [...idSet].map((id) => new mongoose.Types.ObjectId(id));
   const profiles = await CommunityProfileModel.find({ userRef: { $in: objectIds } })
-    .select({ userRef: 1, displayName: 1, points: 1 })
+    .select({ userRef: 1, displayName: 1, points: 1, status: 1 })
     .lean()
     .exec();
 
@@ -32,6 +34,7 @@ export async function getCommunityMemberFieldsByUserRefs(
     map.set(String(p.userRef), {
       displayName: String(p.displayName ?? "").trim(),
       points: Number(p.points ?? 0),
+      status: normalizeCommunityProfileStatus((p as { status?: unknown }).status),
     });
   }
   return map;

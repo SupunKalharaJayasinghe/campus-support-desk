@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
     ArrowLeft,
     BookOpen,
@@ -31,7 +31,7 @@ import CommunityReplyAttachment from "@/components/community/CommunityReplyAttac
 import UrgentPostsCarousel from "@/components/community/UrgentPostsCarousel";
 import CommunityInstructionsPanel from "@/components/community/CommunityInstructionsPanel";
 import CommunitySidebarCalendar from "@/components/community/CommunitySidebarCalendar";
-import { readStoredUser } from "@/lib/rbac";
+import { authHeaders, readStoredUser } from "@/lib/rbac";
 import { readCommunityProfileSettings } from "@/lib/community-profile";
 import {
     COMMUNITY_POST_REPORT_REASONS,
@@ -319,6 +319,7 @@ const MAIN_SCROLL_HEIGHT = "h-[calc(100vh-7rem)]";
 
 export default function CommunityPage() {
     const router = useRouter();
+    const pathname = usePathname();
     const currentUser = useMemo(() => readStoredUser(), []);
     const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
     const [activeCategory, setActiveCategory] = useState<(typeof CATEGORIES)[number]>("all");
@@ -327,7 +328,7 @@ export default function CommunityPage() {
     const [isMembersVisible, setIsMembersVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
     const [communityDirectoryMembers, setCommunityDirectoryMembers] = useState<
-        { userId: string; displayName: string; points: number }[]
+        { userId: string; displayName: string; points?: number }[]
     >([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
@@ -403,7 +404,9 @@ export default function CommunityPage() {
             if (currentUser?.id) {
                 params.set("viewerId", currentUser.id);
             }
-            const res = await fetch(`/api/community-replies?${params.toString()}`);
+            const res = await fetch(`/api/community-replies?${params.toString()}`, {
+                headers: authHeaders(),
+            });
             if (!res.ok) return;
             const data = (await res.json()) as ApiReply[];
             const mappedReplies = data.map(mapApiReply);
@@ -442,7 +445,9 @@ export default function CommunityPage() {
                     params.set("viewerId", currentUser.id);
                 }
                 const query = params.toString();
-                const res = await fetch(query ? `/api/community-posts?${query}` : "/api/community-posts");
+                const res = await fetch(query ? `/api/community-posts?${query}` : "/api/community-posts", {
+                    headers: authHeaders(),
+                });
                 if (!res.ok) return;
 
                 const data = (await res.json()) as ApiPost[];
@@ -492,7 +497,9 @@ export default function CommunityPage() {
                             if (currentUser?.id) {
                                 replyParams.set("viewerId", currentUser.id);
                             }
-                            const replyRes = await fetch(`/api/community-replies?${replyParams.toString()}`);
+                            const replyRes = await fetch(`/api/community-replies?${replyParams.toString()}`, {
+                                headers: authHeaders(),
+                            });
                             if (!replyRes.ok) return [post.id, [] as Reply[]] as const;
                             const replyData = (await replyRes.json()) as ApiReply[];
                             return [post.id, replyData.map(mapApiReply)] as const;
@@ -518,10 +525,15 @@ export default function CommunityPage() {
     }, [currentUser?.id]);
 
     useEffect(() => {
+        if (pathname !== "/community") return;
+
         let cancelled = false;
         (async () => {
             try {
-                const res = await fetch("/api/community-members");
+                const res = await fetch("/api/community-members", {
+                    headers: authHeaders(),
+                    cache: "no-store",
+                });
                 if (!res.ok || cancelled) return;
                 const data = (await res.json()) as {
                     items?: Array<{
@@ -539,17 +551,19 @@ export default function CommunityPage() {
                         const userId = String(i.userId ?? "").trim();
                         const dn = String(i.communityProfileDisplayName ?? "").trim();
                         const fallbackName = String(i.name ?? "").trim();
-                        const pts = Number(i.communityProfilePoints ?? 0);
+                        const rawPts = i.communityProfilePoints;
+                        const pts =
+                            typeof rawPts === "number" && Number.isFinite(rawPts) ? rawPts : undefined;
                         return {
                             userId,
                             displayName: dn || fallbackName || userId,
-                            points: Number.isFinite(pts) ? pts : 0,
+                            ...(pts !== undefined ? { points: pts } : {}),
                         };
                     })
                     .filter((r) => r.userId.length > 0)
                     .sort(
                         (a, b) =>
-                            b.points - a.points ||
+                            (b.points ?? -1) - (a.points ?? -1) ||
                             a.displayName.localeCompare(b.displayName, undefined, {
                                 sensitivity: "base",
                             })
@@ -562,7 +576,7 @@ export default function CommunityPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [pathname]);
 
     const handleLikePost = async (postId: string) => {
         if (!currentUser?.id) {
@@ -944,7 +958,8 @@ export default function CommunityPage() {
                                     {communityDirectoryMembers.length === 0 ? (
                                         <p className="text-xs text-slate-500">
                                             No community profiles yet. Students with a community profile appear here with
-                                            display name and points.
+                                            display name and points (points hidden when a member sets their profile to
+                                            private).
                                         </p>
                                     ) : (
                                         communityDirectoryMembers.map((member) => (
@@ -959,7 +974,9 @@ export default function CommunityPage() {
                                                     <p className="truncate text-sm font-medium leading-none text-slate-800">
                                                         {member.displayName}
                                                     </p>
-                                                    <p className="mt-1 text-xs text-slate-500">{member.points} pts</p>
+                                                    {member.points != null ? (
+                                                        <p className="mt-1 text-xs text-slate-500">{member.points} pts</p>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                         ))

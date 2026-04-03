@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   Eye,
-  FileText,
   MessageSquare,
   ThumbsUp,
   Trash2,
@@ -39,11 +39,10 @@ type DbCommunityPost = {
   replies?: DbCommunityReply[];
 };
 
-export default function CommunityProfilePostsPage() {
+export default function CommunityProfileResolvedPostsPage() {
   const user = useMemo(() => readStoredUser(), []);
   const [posts, setPosts] = useState<DbCommunityPost[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resolvingPostId, setResolvingPostId] = useState<string | null>(null);
   const [acceptingReplyId, setAcceptingReplyId] = useState<string | null>(null);
   const [postDeleteConfirm, setPostDeleteConfirm] = useState<{
     id: string;
@@ -51,8 +50,8 @@ export default function CommunityProfilePostsPage() {
   } | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [expandedPostReplies, setExpandedPostReplies] = useState<Record<string, boolean>>({});
-  const openPosts = useMemo(
-    () => (posts ?? []).filter((post) => (post.status ?? "open") === "open"),
+  const resolvedPosts = useMemo(
+    () => (posts ?? []).filter((post) => post.status === "resolved"),
     [posts]
   );
 
@@ -127,35 +126,6 @@ export default function CommunityProfilePostsPage() {
     }));
   }, []);
 
-  const handleMarkResolved = useCallback(async (postId: string) => {
-    try {
-      setResolvingPostId(postId);
-      setError(null);
-      const res = await fetch(`/api/community-posts/${encodeURIComponent(postId)}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: "resolved" }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || "Failed to mark post as resolved");
-      }
-      setPosts((prev) =>
-        prev
-          ? prev.map((post) =>
-              post._id === postId ? { ...post, status: "resolved" } : post
-            )
-          : prev
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to mark post as resolved");
-    } finally {
-      setResolvingPostId(null);
-    }
-  }, []);
-
   const handleMarkReplyAccepted = useCallback(async (postId: string, replyId: string) => {
     try {
       setAcceptingReplyId(replyId);
@@ -207,15 +177,15 @@ export default function CommunityProfilePostsPage() {
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-5 space-y-3">
           <Link
-            href="/community/profile#current-posts"
-            className="inline-flex items-center gap-1 rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            href="/community/profile#resolved-posts"
+            className="inline-flex items-center gap-1 rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
           >
             <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
             Back to profile
           </Link>
           <div className="flex items-center gap-2">
-            <FileText size={20} className="text-blue-700" />
-            <h1 className="text-xl font-bold text-slate-800">All your current posts</h1>
+            <CheckCircle2 size={22} className="text-green-600" />
+            <h1 className="text-xl font-bold text-slate-800">All your resolved posts</h1>
           </div>
         </div>
 
@@ -226,23 +196,26 @@ export default function CommunityProfilePostsPage() {
         )}
 
         {posts === null ? (
-          <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+          <Card className="rounded-2xl border border-green-100 bg-white p-4 text-sm text-slate-600 shadow-none">
             Loading…
           </Card>
         ) : posts.length === 0 ? (
-          <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+          <Card className="rounded-2xl border border-green-100 bg-white p-4 text-sm text-slate-600 shadow-none">
             No posts yet.
           </Card>
-        ) : openPosts.length === 0 ? (
-          <Card className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-slate-600 shadow-none">
-            No open posts right now.
+        ) : resolvedPosts.length === 0 ? (
+          <Card className="rounded-2xl border border-green-100 bg-white p-4 text-sm text-slate-600 shadow-none">
+            No resolved posts yet.
           </Card>
         ) : (
           <div className="space-y-4">
-            {openPosts.map((post) => (
-              <Card key={post._id} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-none">
+            {resolvedPosts.map((post) => (
+              <Card
+                key={post._id}
+                className="rounded-2xl border border-green-100 bg-white p-4 shadow-none"
+              >
                 <div className="mb-3 flex items-start justify-between gap-2">
-                  <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                  <span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-green-700">
                     {String(post.category).replace("_", " ")}
                   </span>
                   <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
@@ -264,28 +237,10 @@ export default function CommunityProfilePostsPage() {
                 </div>
 
                 <h2 className="text-base font-semibold leading-snug text-slate-800">{post.title}</h2>
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                      post.status === "resolved"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    {post.status === "resolved" ? "Resolved" : "Open"}
+                <div className="mt-2">
+                  <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-green-700">
+                    Resolved
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleMarkResolved(post._id)}
-                    disabled={post.status === "resolved" || resolvingPostId === post._id}
-                    className="rounded-full bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {resolvingPostId === post._id
-                      ? "Updating..."
-                      : post.status === "resolved"
-                        ? "Resolved"
-                        : "Mark Resolved"}
-                  </button>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{post.description}</p>
 
@@ -309,7 +264,7 @@ export default function CommunityProfilePostsPage() {
                     />
                   </button>
                   <span className="inline-flex items-center gap-1.5 text-slate-500">
-                    <Eye size={14} /> {post.status || "open"}
+                    <Eye size={14} /> resolved
                   </span>
                 </div>
 
@@ -383,10 +338,10 @@ export default function CommunityProfilePostsPage() {
             className="relative z-10 w-full max-w-md rounded-2xl border border-blue-200 bg-white p-6 shadow-xl"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="posts-page-delete-confirm-title"
+            aria-labelledby="resolved-posts-delete-confirm-title"
           >
             <h2
-              id="posts-page-delete-confirm-title"
+              id="resolved-posts-delete-confirm-title"
               className="text-lg font-semibold text-slate-800"
             >
               Delete this post?
@@ -421,4 +376,3 @@ export default function CommunityProfilePostsPage() {
     </main>
   );
 }
-

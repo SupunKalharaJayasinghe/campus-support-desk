@@ -11,7 +11,10 @@ function toTrimmedString(value: unknown) {
 }
 
 function toVisibilityStatus(visibility: unknown) {
-  return visibility === "private" ? "PRIVATE" : "PUBLIC";
+  const normalized = String(visibility ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "private" ? "PRIVATE" : "PUBLIC";
 }
 
 // CREATE PROFILE

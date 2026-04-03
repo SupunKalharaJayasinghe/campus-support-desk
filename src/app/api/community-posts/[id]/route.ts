@@ -40,13 +40,25 @@ export async function DELETE(
       return Response.json({ error: "Invalid post id" }, { status: 400 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const userIdRaw = searchParams.get("userId");
+    const userId = typeof userIdRaw === "string" ? userIdRaw.trim() : "";
+
+    const filter: { _id: string; author?: string } = { _id: params.id };
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return Response.json({ error: "Valid userId is required" }, { status: 400 });
+      }
+      filter.author = userId;
+    }
+
     await Promise.all([
       CommunityPostReport.deleteMany({ postId: params.id }),
       CommunityPostLike.deleteMany({ postId: params.id }),
       CommunityReply.deleteMany({ postId: params.id }),
     ]);
 
-    const deleted = await CommunityPost.findByIdAndDelete(params.id);
+    const deleted = await CommunityPost.findOneAndDelete(filter);
 
     if (!deleted) {
       return Response.json({ error: "Post not found" }, { status: 404 });
