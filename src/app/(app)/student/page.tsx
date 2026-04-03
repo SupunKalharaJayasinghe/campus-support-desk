@@ -15,7 +15,11 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
-import { authHeaders, updateStoredUser } from "@/models/rbac";
+import {
+  getStudentPortalSessionUser,
+  resolveCurrentStudentRecord,
+  type StudentPortalEnrollment,
+} from "@/lib/student-session";
 import {
   listLatestAnnouncements,
   type AnnouncementRecord,
@@ -25,10 +29,19 @@ import {
   listNotificationsForUser,
   type NotificationFeedItem,
 } from "@/models/notification-center";
-import {
-  getStudentPortalSessionUser,
-  resolveCurrentStudentRecord,
-} from "@/lib/student-session";
+import { authHeaders, updateStoredUser } from "@/models/rbac";
+
+interface DashboardRiskModule {
+  gradeId: string;
+  moduleCode: string;
+  moduleName: string;
+  caMarks: number;
+  finalExamMarks: number;
+  totalMarks: number;
+  academicYear: string;
+  semester: number;
+  action: string;
+}
 
 interface DashboardPerformanceData {
   student: {
@@ -39,9 +52,54 @@ interface DashboardPerformanceData {
     cumulativeGPA: number;
     progressPercentage: number;
     classification: string;
+    academicStanding: {
+      standing: string;
+      level: string;
+      color: string;
+      message: string;
+      recommendations: string[];
+    };
     totalCreditsCompleted: number;
+    totalCreditsRequired: number;
+    totalModulesTaken: number;
+    totalModulesPassed: number;
+    totalModulesFailed: number;
+    totalProRata: number;
+    totalRepeat: number;
+    trend: string;
   };
+  semesterBreakdown: Array<{
+    academicYear: string;
+    semester: number;
+    semesterGPA: number;
+    modules: Array<{
+      gradeId: string;
+      moduleCode: string;
+      moduleName: string;
+      caMarks: number;
+      finalExamMarks: number;
+      totalMarks: number;
+      gradeLetter: string;
+      gradePoint: number;
+      status: string;
+      gradedBy: string | null;
+      gradedAt: string | null;
+    }>;
+    summary: {
+      totalModules: number;
+      passCount: number;
+      failCount: number;
+      proRataCount: number;
+      repeatCount: number;
+      averageMarks: number;
+      highestMarks: number;
+      lowestMarks: number;
+    };
+  }>;
   atRiskModules: {
+    proRataModules: DashboardRiskModule[];
+    repeatModules: DashboardRiskModule[];
+    failedModules: DashboardRiskModule[];
     totalAtRisk: number;
     hasAnyRisk: boolean;
   };
@@ -88,6 +146,7 @@ interface DashboardCommunityPost {
 interface DashboardState {
   studentName: string;
   registrationNumber: string;
+  latestEnrollment: StudentPortalEnrollment | null;
   performance: DashboardPerformanceData | null;
   points: DashboardPointsData | null;
   quizzes: DashboardQuizData | null;
@@ -143,28 +202,98 @@ async function fetchOptionalPosts(userId: string) {
   }
 }
 
+function formatFriendlyDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Recently";
+  }
+
+  return parsed.toLocaleString();
+}
+
+function describeCurrentTerm(value: string | null | undefined) {
+  const normalized = collapseSpaces(value).toUpperCase();
+  const match = normalized.match(/^Y(\d+)S(\d+)$/i);
+
+  if (!match) {
+    return {
+      code: normalized || "Not set",
+      yearLabel: normalized ? `Based on ${normalized}` : "Year not set",
+      semesterLabel: normalized || "Semester not set",
+    };
+  }
+
+  const [, year, semester] = match;
+  return {
+    code: `Y${year}S${semester}`,
+    yearLabel: `Year ${year}`,
+    semesterLabel: `Semester ${semester}`,
+  };
+}
+
+function formatTrend(value: string | null | undefined) {
+  const normalized = collapseSpaces(value).toLowerCase();
+  if (!normalized) {
+    return "Trend unavailable";
+  }
+
+  if (normalized === "up") {
+    return "Improving";
+  }
+
+  if (normalized === "down") {
+    return "Needs attention";
+  }
+
+  if (normalized === "stable") {
+    return "Stable";
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function getStandingClasses(level: string | null | undefined) {
+  const normalized = collapseSpaces(level).toLowerCase();
+
+  if (normalized === "critical") {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
+  if (normalized === "warning") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-52" />
-        <Skeleton className="h-4 w-72" />
-      </div>
+      <Card className="overflow-hidden border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,0.94),rgba(255,255,255,0.98))]">
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="mt-4 h-12 w-72" />
+        <Skeleton className="mt-3 h-4 w-full max-w-2xl" />
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton className="h-20 rounded-3xl" key={index} />
+          ))}
+        </div>
+      </Card>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <Card key={index}>
             <Skeleton className="h-4 w-24" />
-            <Skeleton className="mt-2 h-8 w-20" />
-            <Skeleton className="mt-2 h-4 w-32" />
+            <Skeleton className="mt-2 h-8 w-24" />
+            <Skeleton className="mt-3 h-4 w-36" />
           </Card>
         ))}
       </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]">
         <Card>
-          <Skeleton className="h-40 w-full rounded-3xl" />
+          <Skeleton className="h-64 w-full rounded-3xl" />
         </Card>
         <Card>
-          <Skeleton className="h-40 w-full rounded-3xl" />
+          <Skeleton className="h-64 w-full rounded-3xl" />
         </Card>
       </div>
     </div>
@@ -333,6 +462,7 @@ export default function StudentDashboardPage() {
       setDashboard({
         studentName: student.fullName,
         registrationNumber: student.studentId,
+        latestEnrollment: student.latestEnrollment,
         performance,
         points,
         quizzes,
@@ -347,9 +477,7 @@ export default function StudentDashboardPage() {
       setRecentAlerts([]);
       setAnnouncements([]);
       setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Failed to load your dashboard."
+        loadError instanceof Error ? loadError.message : "Failed to load your dashboard."
       );
     } finally {
       setLoading(false);
@@ -399,62 +527,12 @@ export default function StudentDashboardPage() {
       setConfirmPassword("");
     } catch (updateError) {
       setSecurityError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Failed to update password"
+        updateError instanceof Error ? updateError.message : "Failed to update password"
       );
     } finally {
       setIsUpdatingPassword(false);
     }
   };
-
-  const metricCards = [
-    {
-      label: "Current GPA",
-      value:
-        dashboard?.performance !== null && dashboard?.performance !== undefined
-          ? dashboard.performance.overview.cumulativeGPA.toFixed(2)
-          : "—",
-      hint: dashboard?.performance?.overview.classification ?? "Performance data unavailable",
-      icon: BarChart3,
-    },
-    {
-      label: "Study Progress",
-      value:
-        dashboard?.performance !== null && dashboard?.performance !== undefined
-          ? `${dashboard.performance.overview.progressPercentage.toFixed(1)}%`
-          : "—",
-      hint:
-        dashboard?.performance !== null && dashboard?.performance !== undefined
-          ? `${dashboard.performance.overview.totalCreditsCompleted} credits completed`
-          : "Progress data unavailable",
-      icon: BookOpen,
-    },
-    {
-      label: "Available Quizzes",
-      value:
-        dashboard?.quizzes !== null && dashboard?.quizzes !== undefined
-          ? String(dashboard.quizzes.summary.totalAvailable)
-          : "—",
-      hint:
-        dashboard?.quizzes !== null && dashboard?.quizzes !== undefined
-          ? `${dashboard.quizzes.summary.totalInProgress} in progress`
-          : "Quiz data unavailable",
-      icon: AlertTriangle,
-    },
-    {
-      label: "Total XP",
-      value:
-        dashboard?.points !== null && dashboard?.points !== undefined
-          ? String(dashboard.points.totalXP)
-          : "—",
-      hint:
-        dashboard?.points !== null && dashboard?.points !== undefined
-          ? `${dashboard.points.activityCount} activity records`
-          : "XP data unavailable",
-      icon: Sparkles,
-    },
-  ];
 
   if (loading) {
     return <LoadingSkeleton />;
@@ -485,32 +563,246 @@ export default function StudentDashboardPage() {
     );
   }
 
+  if (!dashboard) {
+    return null;
+  }
+
+  const performance = dashboard.performance;
+  const points = dashboard.points;
+  const quizzes = dashboard.quizzes;
+  const trophies = dashboard.trophies;
+  const currentTerm = describeCurrentTerm(dashboard.latestEnrollment?.currentTerm);
+  const semesterBreakdown = performance?.semesterBreakdown ?? [];
+  const latestSemester =
+    semesterBreakdown.length > 0 ? semesterBreakdown[semesterBreakdown.length - 1] : null;
+  const currentModules = latestSemester?.modules.slice(0, 4) ?? [];
+  const repeatModules = performance?.atRiskModules.repeatModules.slice(0, 4) ?? [];
+  const proRataModules = performance?.atRiskModules.proRataModules.slice(0, 4) ?? [];
+  const progressValue = Math.max(
+    0,
+    Math.min(100, performance?.overview.progressPercentage ?? 0)
+  );
+
+  const metricCards = [
+    {
+      label: "Current GPA",
+      value: performance ? performance.overview.cumulativeGPA.toFixed(2) : "—",
+      hint: performance?.overview.classification ?? "Performance data unavailable",
+      icon: BarChart3,
+      className:
+        "border-sky-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(240,249,255,0.95))]",
+    },
+    {
+      label: "Study Progress",
+      value: performance ? `${performance.overview.progressPercentage.toFixed(1)}%` : "—",
+      hint: performance
+        ? `${performance.overview.totalCreditsCompleted}/${performance.overview.totalCreditsRequired} credits`
+        : "Progress data unavailable",
+      icon: BookOpen,
+      className:
+        "border-emerald-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(236,253,245,0.95))]",
+    },
+    {
+      label: "Current Term",
+      value: dashboard.latestEnrollment?.currentTerm || "—",
+      hint: dashboard.latestEnrollment
+        ? `${currentTerm.yearLabel} • ${currentTerm.semesterLabel}`
+        : "Enrollment details unavailable",
+      icon: Sparkles,
+      className:
+        "border-violet-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(245,243,255,0.95))]",
+    },
+    {
+      label: "Academic Flags",
+      value: performance
+        ? String(performance.overview.totalRepeat + performance.overview.totalProRata)
+        : "—",
+      hint: performance
+        ? `${performance.overview.totalRepeat} repeat • ${performance.overview.totalProRata} pro-rata`
+        : "Risk data unavailable",
+      icon: AlertTriangle,
+      className:
+        "border-amber-200/80 bg-[linear-gradient(160deg,rgba(255,255,255,0.98),rgba(255,251,235,0.95))]",
+    },
+  ];
+
+  const academicFacts = [
+    {
+      label: "Degree Program",
+      value: dashboard.latestEnrollment?.degreeProgramName || "Not available",
+    },
+    {
+      label: "Faculty",
+      value: dashboard.latestEnrollment?.facultyName || "Not available",
+    },
+    {
+      label: "Intake",
+      value: dashboard.latestEnrollment?.intakeName || "Not available",
+    },
+    {
+      label: "Current Year",
+      value: currentTerm.yearLabel,
+    },
+    {
+      label: "Current Term",
+      value: dashboard.latestEnrollment?.currentTerm || "Not available",
+    },
+    {
+      label: "Stream / Subgroup",
+      value: [
+        dashboard.latestEnrollment?.stream || "Stream not set",
+        dashboard.latestEnrollment?.subgroup || "No subgroup",
+      ].join(" / "),
+    },
+  ];
+
+  const activityItems = [
+    {
+      label: "Community Posts",
+      hint: "Posts linked to your user account",
+      value: dashboard.communityPosts ? String(dashboard.communityPosts.length) : "—",
+      icon: MessageSquare,
+    },
+    {
+      label: "Available Quizzes",
+      hint: quizzes ? `${quizzes.summary.totalInProgress} in progress` : "Quiz data unavailable",
+      value: quizzes ? String(quizzes.summary.totalAvailable) : "—",
+      icon: BookOpen,
+    },
+    {
+      label: "Completed Quizzes",
+      hint: quizzes ? "Best-attempt record count" : "Quiz data unavailable",
+      value: quizzes ? String(quizzes.summary.totalCompleted) : "—",
+      icon: BookOpen,
+    },
+    {
+      label: "Total XP",
+      hint: points ? `${points.activityCount} activity records` : "XP data unavailable",
+      value: points ? String(points.totalXP) : "—",
+      icon: Sparkles,
+    },
+    {
+      label: "Trophies Earned",
+      hint: trophies ? "Unlocked achievement count" : "Trophy data unavailable",
+      value: trophies ? String(trophies.trophies.totalEarned) : "—",
+      icon: Trophy,
+    },
+  ];
+
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-heading">Student Dashboard</h1>
-          <p className="mt-2 text-sm text-text/75">
-            Live academic and engagement snapshot for{" "}
-            <span className="font-medium text-heading">
-              {dashboard?.studentName || "your account"}
-            </span>
-            {dashboard?.registrationNumber
-              ? ` • ${dashboard.registrationNumber}`
-              : ""}
-            .
-          </p>
+    <div className="space-y-6 pb-2">
+      <section className="relative overflow-hidden rounded-[36px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(37,99,235,0.12),transparent_32%),linear-gradient(145deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96),rgba(239,246,255,0.96))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:p-8">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-6 top-8 hidden h-44 w-60 rotate-6 rounded-[30px] border border-white/80 bg-white/50 shadow-[0_18px_38px_rgba(15,23,42,0.08)] backdrop-blur md:block"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-20 top-14 hidden h-44 w-60 -rotate-6 rounded-[30px] border border-white/70 bg-white/65 shadow-[0_14px_34px_rgba(15,23,42,0.06)] backdrop-blur xl:block"
+        />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-sky-700 backdrop-blur">
+              <BookOpen size={14} />
+              Student workspace
+            </div>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-heading sm:text-[2.8rem]">
+              Student Dashboard
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-700">
+              Academic overview for{" "}
+              <span className="font-semibold text-heading">{dashboard.studentName}</span>
+              {dashboard.registrationNumber ? ` • ${dashboard.registrationNumber}` : ""}. Keep
+              track of your current term, modules, progression, and attention items from one place.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Current term
+                </p>
+                <p className="mt-1 text-base font-semibold text-heading">{currentTerm.code}</p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)] backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Current year
+                </p>
+                <p className="mt-1 text-base font-semibold text-heading">{currentTerm.yearLabel}</p>
+              </div>
+              <div
+                className={cn(
+                  "rounded-2xl border px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)]",
+                  getStandingClasses(performance?.overview.academicStanding.level)
+                )}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">
+                  Academic standing
+                </p>
+                <p className="mt-1 text-base font-semibold">
+                  {performance?.overview.academicStanding.standing ?? "Unavailable"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-[1] flex w-full max-w-sm flex-col gap-3">
+            <div className="rounded-[28px] border border-white/80 bg-white/80 p-5 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Study sheet
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-heading">
+                    {dashboard.latestEnrollment?.degreeProgramName || "Student record"}
+                  </p>
+                </div>
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                  <BarChart3 size={18} />
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Credits
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-heading">
+                    {performance
+                      ? `${performance.overview.totalCreditsCompleted}/${performance.overview.totalCreditsRequired}`
+                      : "—"}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Repetition
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-heading">
+                    {performance ? performance.overview.totalRepeat : "—"}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Pro-rata
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-heading">
+                    {performance ? performance.overview.totalProRata : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              className="gap-2 self-start rounded-2xl border-white/80 bg-white/85 px-5 text-heading shadow-[0_14px_30px_rgba(15,23,42,0.06)] hover:bg-white"
+              disabled={refreshing}
+              onClick={() => void loadDashboard(true)}
+              variant="secondary"
+            >
+              <RefreshCw className={cn(refreshing && "animate-spin")} size={16} />
+              Refresh
+            </Button>
+          </div>
         </div>
-        <Button
-          className="gap-2"
-          disabled={refreshing}
-          onClick={() => void loadDashboard(true)}
-          variant="secondary"
-        >
-          <RefreshCw className={cn(refreshing && "animate-spin")} size={16} />
-          Refresh
-        </Button>
-      </div>
+      </section>
 
       {unavailableSources.length > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -518,18 +810,21 @@ export default function StudentDashboardPage() {
         </div>
       ) : null}
 
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metricCards.map((card) => {
           const Icon = card.icon;
           return (
-            <Card accent key={card.label}>
+            <Card
+              className={cn("shadow-[0_16px_34px_rgba(15,23,42,0.06)]", card.className)}
+              key={card.label}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm text-text/72">{card.label}</p>
+                  <p className="text-sm font-medium text-slate-600">{card.label}</p>
                   <p className="mt-2 text-3xl font-semibold text-heading">{card.value}</p>
-                  <p className="mt-2 text-sm text-text/65">{card.hint}</p>
+                  <p className="mt-3 text-sm text-slate-600">{card.hint}</p>
                 </div>
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-heading shadow-[0_10px_18px_rgba(15,23,42,0.08)]">
                   <Icon size={18} />
                 </span>
               </div>
@@ -538,23 +833,248 @@ export default function StudentDashboardPage() {
         })}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]">
-        <Card title="Recent Alerts">
-          {recentAlerts.length === 0 ? (
-            <p className="text-sm text-text/70">No student alerts available yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {recentAlerts.map((item) => (
-                <div className="rounded-2xl bg-tint px-4 py-3" key={item.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-heading">{item.title}</p>
-                      <p className="mt-1 text-xs text-text/72">{item.message}</p>
-                      <p className="mt-2 text-[11px] text-text/60">
-                        {item.targetLabel} • {new Date(item.publishedAt).toLocaleString()}
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Academic summary
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-heading">Student file</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Current enrollment details, progression, and module focus for this student.
+              </p>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              Trend: {formatTrend(performance?.overview.trend)}
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {academicFacts.map((fact) => (
+              <div
+                className="rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3"
+                key={fact.label}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {fact.label}
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-heading">{fact.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-[28px] border border-slate-200/80 bg-[linear-gradient(145deg,rgba(241,245,249,0.85),rgba(255,255,255,0.9))] p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Credit completion
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-heading">
+                  {performance
+                    ? `${performance.overview.totalCreditsCompleted} of ${performance.overview.totalCreditsRequired} credits`
+                    : "Progress unavailable"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-3 text-sm text-slate-600">
+                {performance
+                  ? `${performance.overview.totalModulesPassed} passed / ${performance.overview.totalModulesFailed} needing attention`
+                  : "Module summary unavailable"}
+              </div>
+            </div>
+
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-200/80">
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,#0ea5e9,#2563eb)]"
+                style={{ width: `${progressValue}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Current modules
+                </p>
+                <p className="mt-2 text-lg font-semibold text-heading">
+                  {latestSemester
+                    ? `${latestSemester.academicYear} • Semester ${latestSemester.semester}`
+                    : "No module records yet"}
+                </p>
+              </div>
+              {latestSemester ? (
+                <p className="text-sm text-slate-600">
+                  {latestSemester.summary.totalModules} modules in the latest recorded semester
+                </p>
+              ) : null}
+            </div>
+
+            {currentModules.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+                No semester modules are available yet for this student.
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {currentModules.map((module) => (
+                  <div
+                    className="rounded-2xl border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                    key={module.gradeId || `${module.moduleCode}-${module.moduleName}`}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">
+                      {module.moduleCode || "Module"}
+                    </p>
+                    <p className="mt-2 text-base font-semibold text-heading">{module.moduleName}</p>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {collapseSpaces(module.status) || "Status unavailable"}
+                      {module.gradeLetter ? ` • Grade ${module.gradeLetter}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,250,245,0.95))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Attention board
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-heading">Progress notes</h2>
+            </div>
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <AlertTriangle size={18} />
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-[28px] border border-amber-200 bg-[linear-gradient(145deg,rgba(255,251,235,0.96),rgba(255,255,255,0.94))] p-5">
+            <p className="text-sm leading-6 text-slate-700">
+              {performance?.overview.academicStanding.message ??
+                performance?.riskReport.summary ??
+                "Risk summary is not available right now."}
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-700">
+                Current repetition
+              </p>
+              <p className="mt-2 text-3xl font-semibold text-heading">
+                {performance ? performance.overview.totalRepeat : "—"}
+              </p>
+              <p className="mt-2 text-sm text-rose-800/80">Modules marked for repeat.</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                Pro-rata details
+              </p>
+              <p className="mt-2 text-3xl font-semibold text-heading">
+                {performance ? performance.overview.totalProRata : "—"}
+              </p>
+              <p className="mt-2 text-sm text-amber-800/80">Modules carrying pro-rata status.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-heading">Repeat modules</p>
+                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+                  {repeatModules.length}
+                </span>
+              </div>
+              {repeatModules.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-600">No repeat modules recorded.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {repeatModules.map((module) => (
+                    <div
+                      className="rounded-2xl bg-rose-50/80 px-3 py-3"
+                      key={module.gradeId || `${module.moduleCode}-${module.academicYear}`}
+                    >
+                      <p className="text-sm font-semibold text-heading">
+                        {module.moduleCode} - {module.moduleName}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {module.academicYear} Semester {module.semester} • {module.action}
                       </p>
                     </div>
-                    <p className="text-[11px] text-text/60">{item.time}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-heading">Pro-rata modules</p>
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  {proRataModules.length}
+                </span>
+              </div>
+              {proRataModules.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-600">No pro-rata modules recorded.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {proRataModules.map((module) => (
+                    <div
+                      className="rounded-2xl bg-amber-50/85 px-3 py-3"
+                      key={module.gradeId || `${module.moduleCode}-${module.academicYear}`}
+                    >
+                      <p className="text-sm font-semibold text-heading">
+                        {module.moduleCode} - {module.moduleName}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {module.academicYear} Semester {module.semester} • {module.action}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Inbox
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-heading">Recent alerts</h2>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              {recentAlerts.length} latest
+            </span>
+          </div>
+
+          {recentAlerts.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+              No student alerts available yet.
+            </div>
+          ) : (
+            <div className="mt-5 space-y-3">
+              {recentAlerts.map((item) => (
+                <div
+                  className="rounded-[26px] border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                  key={item.id}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">
+                          For you
+                        </span>
+                        <p className="text-sm font-semibold text-heading">{item.title}</p>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-700">{item.message}</p>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {item.targetLabel} • {formatFriendlyDateTime(item.publishedAt)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-[11px] font-medium text-slate-500">{item.time}</p>
                   </div>
                 </div>
               ))}
@@ -562,89 +1082,98 @@ export default function StudentDashboardPage() {
           )}
         </Card>
 
-        <Card title="Activity Snapshot">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
-                  <MessageSquare size={18} />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-heading">Community Posts</p>
-                  <p className="text-xs text-text/65">Posts linked to your user account</p>
-                </div>
-              </div>
-              <p className="text-xl font-semibold text-heading">
-                {dashboard?.communityPosts ? dashboard.communityPosts.length : "—"}
-              </p>
-            </div>
+        <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,248,255,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Engagement
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-heading">Activity snapshot</h2>
+          </div>
 
-            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
-                  <BookOpen size={18} />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-heading">Completed Quizzes</p>
-                  <p className="text-xs text-text/65">Best-attempt record count</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {activityItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  className="rounded-[24px] border border-slate-200/80 bg-white/92 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                  key={item.label}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-heading">
+                      <Icon size={18} />
+                    </span>
+                    <p className="text-2xl font-semibold text-heading">{item.value}</p>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-heading">{item.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{item.hint}</p>
                 </div>
-              </div>
-              <p className="text-xl font-semibold text-heading">
-                {dashboard?.quizzes ? dashboard.quizzes.summary.totalCompleted : "—"}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between rounded-2xl bg-tint px-4 py-3">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-heading shadow-sm">
-                  <Trophy size={18} />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-heading">Trophies Earned</p>
-                  <p className="text-xs text-text/65">Unlocked achievement count</p>
-                </div>
-              </div>
-              <p className="text-xl font-semibold text-heading">
-                {dashboard?.trophies ? dashboard.trophies.trophies.totalEarned : "—"}
-              </p>
-            </div>
+              );
+            })}
           </div>
         </Card>
       </section>
 
-      <Card title="Latest Announcements">
+      <Card className="border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Broadcasts
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-heading">Latest announcements</h2>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            All-user updates
+          </span>
+        </div>
+
         {announcements.length === 0 ? (
-          <p className="text-sm text-text/70">No announcements available yet.</p>
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+            No announcements available yet.
+          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="mt-5 grid gap-3">
             {announcements.map((item) => (
-              <div className="rounded-2xl bg-tint px-4 py-3" key={item.id}>
-                <p className="text-sm font-semibold text-heading">{item.title}</p>
-                <p className="mt-1 text-xs text-text/72">{item.message}</p>
-                <p className="mt-1 text-[11px] text-text/60">
-                  {item.targetLabel} • {new Date(item.createdAt).toLocaleString()}
+              <div
+                className="rounded-[26px] border border-slate-200/80 bg-white/92 px-5 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                key={item.id}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">
+                    All
+                  </span>
+                  <p className="text-base font-semibold text-heading">{item.title}</p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{item.message}</p>
+                <p className="mt-3 text-xs text-slate-500">
+                  {item.targetLabel} • {formatFriendlyDateTime(item.createdAt)}
                 </p>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-4">
+
+        <div className="mt-5">
           <Link
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+            className="inline-flex h-11 items-center justify-center rounded-2xl border border-border bg-white px-4 text-sm font-medium text-heading shadow-[0_10px_22px_rgba(15,23,42,0.04)] hover:bg-tint"
             href="/student/announcements"
           >
             View All
           </Link>
         </div>
       </Card>
-
-      <Card title="Security Settings">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-text/75">
-            Keep your account secure by changing your password regularly.
-          </p>
+      <Card className="border-sky-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.96),rgba(255,255,255,0.98))] shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+              Account protection
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-heading">Security settings</h2>
+            <p className="mt-2 text-sm text-slate-700">
+              Keep your account secure by changing your password regularly.
+            </p>
+          </div>
           <Button
-            className="h-11 min-w-[160px] bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+            className="h-11 min-w-[170px] bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
             onClick={() => setIsSecurityModalOpen(true)}
           >
             Change Password
