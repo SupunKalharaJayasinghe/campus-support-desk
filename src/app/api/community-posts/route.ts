@@ -461,7 +461,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const viewerId = toTrimmedString(searchParams.get("viewerId"));
 
-    const posts = await CommunityPost.find({})
+    const posts = await CommunityPost.find({
+      status: { $ne: "resolved" },
+    })
       .sort({ createdAt: -1 })
       .lean();
 
