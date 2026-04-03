@@ -2,6 +2,9 @@ import { readStoredUser } from "@/lib/rbac";
 
 export type ProfileVisibility = "public" | "private";
 
+/** Max stored characters (data URLs / long https URLs) for community profile avatars. */
+export const COMMUNITY_PROFILE_AVATAR_MAX_CHARS = 1_000_000;
+
 export type CommunityProfileSettings = {
   displayName: string;
   username: string;
@@ -10,6 +13,7 @@ export type CommunityProfileSettings = {
   faculty: string;
   studyYear: string;
   visibility: ProfileVisibility;
+  avatarUrl: string;
 };
 
 const LEGACY_SETTINGS_STORAGE_KEY = "community_profile_settings";
@@ -22,11 +26,16 @@ const DEFAULT_SETTINGS: CommunityProfileSettings = {
   faculty: "Computing",
   studyYear: "Year 2",
   visibility: "public",
+  avatarUrl: "",
 };
 
 function normalizeSettings(
   input: Partial<CommunityProfileSettings> | null | undefined
 ): CommunityProfileSettings {
+  const rawAvatar = String(input?.avatarUrl ?? "").trim();
+  const avatarUrl =
+    rawAvatar.length > COMMUNITY_PROFILE_AVATAR_MAX_CHARS ? "" : rawAvatar;
+
   return {
     ...DEFAULT_SETTINGS,
     ...input,
@@ -38,6 +47,7 @@ function normalizeSettings(
     studyYear:
       String(input?.studyYear ?? DEFAULT_SETTINGS.studyYear).trim() || DEFAULT_SETTINGS.studyYear,
     visibility: input?.visibility === "private" ? "private" : "public",
+    avatarUrl,
   };
 }
 
@@ -69,6 +79,19 @@ export function getCommunityProfileSettingsStorageKey(userId?: string | null) {
     return LEGACY_SETTINGS_STORAGE_KEY;
   }
   return `${LEGACY_SETTINGS_STORAGE_KEY}:${id}`;
+}
+
+/**
+ * Baseline for the first React paint so SSR and the browser match.
+ * Skips localStorage and skips the signed-in user — both exist only on the client and would mismatch the server.
+ * Real values are applied in `useEffect` via {@link readCommunityProfileSettings}.
+ */
+export function getCommunityProfileSettingsHydrationBaseline(): CommunityProfileSettings {
+  return normalizeSettings({
+    displayName: DEFAULT_SETTINGS.displayName,
+    username: "",
+    email: "",
+  });
 }
 
 export function readCommunityProfileSettings(): CommunityProfileSettings {

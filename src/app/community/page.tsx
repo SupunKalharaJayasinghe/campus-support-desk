@@ -328,7 +328,12 @@ export default function CommunityPage() {
     const [isMembersVisible, setIsMembersVisible] = useState(false);
     const [isRecentVisible, setIsRecentVisible] = useState(false);
     const [communityDirectoryMembers, setCommunityDirectoryMembers] = useState<
-        { userId: string; displayName: string; points?: number }[]
+        {
+            userId: string;
+            displayName: string;
+            avatarUrl: string;
+            points?: number;
+        }[]
     >([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [titleSearch, setTitleSearch] = useState("");
@@ -345,6 +350,8 @@ export default function CommunityPage() {
     const [reportDialogError, setReportDialogError] = useState("");
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+    /** Community profile photo for header (next to Create); filled after mount from settings + API. */
+    const [headerAvatarUrl, setHeaderAvatarUrl] = useState("");
     const recentPosts = useMemo(() => posts.slice(0, 5), [posts]);
     const urgentPostsActive = useMemo(
         () => posts.filter(isActiveUrgentPost).slice(0, 10),
@@ -525,6 +532,39 @@ export default function CommunityPage() {
     }, [currentUser?.id]);
 
     useEffect(() => {
+        let cancelled = false;
+        const fromLocal = () => String(readCommunityProfileSettings().avatarUrl ?? "").trim();
+
+        setHeaderAvatarUrl(fromLocal());
+
+        const userId = currentUser?.id;
+        if (!userId) {
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        void (async () => {
+            try {
+                const res = await fetch(
+                    `/api/community-profile?userId=${encodeURIComponent(userId)}`
+                );
+                if (!res.ok || cancelled) return;
+                const data = (await res.json().catch(() => null)) as { avatarUrl?: string } | null;
+                if (!data || cancelled) return;
+                const dbUrl = String(data.avatarUrl ?? "").trim();
+                if (!cancelled) setHeaderAvatarUrl(dbUrl || fromLocal());
+            } catch {
+                if (!cancelled) setHeaderAvatarUrl(fromLocal());
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentUser?.id]);
+
+    useEffect(() => {
         if (pathname !== "/community") return;
 
         let cancelled = false;
@@ -541,6 +581,7 @@ export default function CommunityPage() {
                         hasCommunityProfile?: boolean;
                         communityProfileDisplayName?: string;
                         communityProfilePoints?: unknown;
+                        communityProfileAvatarUrl?: string;
                         name?: string;
                     }>;
                 };
@@ -554,9 +595,11 @@ export default function CommunityPage() {
                         const rawPts = i.communityProfilePoints;
                         const pts =
                             typeof rawPts === "number" && Number.isFinite(rawPts) ? rawPts : undefined;
+                        const avatarUrl = String(i.communityProfileAvatarUrl ?? "").trim();
                         return {
                             userId,
                             displayName: dn || fallbackName || userId,
+                            avatarUrl,
                             ...(pts !== undefined ? { points: pts } : {}),
                         };
                     })
@@ -866,10 +909,23 @@ export default function CommunityPage() {
 
                         <div className="relative">
                             <button
+                                type="button"
                                 onClick={() => setIsProfileMenuOpen((prev) => !prev)}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-700 text-white"
+                                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-blue-200/80 ${
+                                    headerAvatarUrl ? "bg-slate-100" : "bg-blue-700 text-white"
+                                }`}
+                                aria-label="Account menu"
                             >
-                                <User size={18} />
+                                {headerAvatarUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- data URLs / user avatars
+                                    <img
+                                        src={headerAvatarUrl}
+                                        alt=""
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                ) : (
+                                    <User size={18} className="relative z-10" aria-hidden />
+                                )}
                             </button>
 
                             {isProfileMenuOpen && (
@@ -957,9 +1013,9 @@ export default function CommunityPage() {
                                 <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1">
                                     {communityDirectoryMembers.length === 0 ? (
                                         <p className="text-xs text-slate-500">
-                                            No community profiles yet. Students with a community profile appear here with
-                                            display name and points (points hidden when a member sets their profile to
-                                            private).
+                                            No community profiles yet. Students added to the community with a profile
+                                            appear here with photo and display name; points show only when the member sets
+                                            their profile to public.
                                         </p>
                                     ) : (
                                         communityDirectoryMembers.map((member) => (
@@ -967,15 +1023,24 @@ export default function CommunityPage() {
                                                 key={member.userId}
                                                 className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-blue-50"
                                             >
-                                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                                                    <User size={14} />
+                                                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-blue-100 text-blue-700">
+                                                    {member.avatarUrl ? (
+                                                        // eslint-disable-next-line @next/next/no-img-element -- API may return data URLs
+                                                        <img
+                                                            src={member.avatarUrl}
+                                                            alt=""
+                                                            className="absolute inset-0 h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <User size={15} className="relative z-0" aria-hidden />
+                                                    )}
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-medium leading-none text-slate-800">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium leading-snug text-slate-800">
                                                         {member.displayName}
                                                     </p>
                                                     {member.points != null ? (
-                                                        <p className="mt-1 text-xs text-slate-500">{member.points} pts</p>
+                                                        <p className="mt-0.5 text-xs text-slate-500">{member.points} pts</p>
                                                     ) : null}
                                                 </div>
                                             </div>
