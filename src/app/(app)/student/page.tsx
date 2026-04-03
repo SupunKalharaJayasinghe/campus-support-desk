@@ -21,6 +21,11 @@ import {
   type AnnouncementRecord,
 } from "@/models/announcement-center";
 import {
+  isAllAudienceNotification,
+  listNotificationsForUser,
+  type NotificationFeedItem,
+} from "@/models/notification-center";
+import {
   getStudentPortalSessionUser,
   resolveCurrentStudentRecord,
 } from "@/lib/student-session";
@@ -90,41 +95,12 @@ interface DashboardState {
   communityPosts: DashboardCommunityPost[] | null;
 }
 
-interface DashboardAlert {
-  id: string;
-  title: string;
-  message: string;
-  time?: string;
-  tone: "neutral" | "warning" | "success";
-}
-
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function formatRelativeTime(date: string | null | undefined) {
-  if (!date) {
-    return "Recently";
-  }
-
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Recently";
-  }
-
-  const diffMs = Date.now() - parsed.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins} min ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 }
 
 async function readJson<T>(response: Response) {
@@ -165,83 +141,6 @@ async function fetchOptionalPosts(userId: string) {
   } catch {
     return null;
   }
-}
-
-function buildAlerts(data: DashboardState | null): DashboardAlert[] {
-  if (!data) {
-    return [];
-  }
-
-  const alerts: DashboardAlert[] = [];
-
-  if (data.performance?.atRiskModules.hasAnyRisk) {
-    alerts.push({
-      id: "risk",
-      title: "Academic attention needed",
-      message:
-        data.performance.atRiskModules.totalAtRisk === 1
-          ? "You have 1 module that needs attention."
-          : `You have ${data.performance.atRiskModules.totalAtRisk} modules that need attention.`,
-      tone: "warning",
-    });
-  }
-
-  if ((data.quizzes?.summary.totalInProgress ?? 0) > 0) {
-    alerts.push({
-      id: "quiz-in-progress",
-      title: "Quiz in progress",
-      message:
-        data.quizzes?.summary.totalInProgress === 1
-          ? "You have 1 quiz ready to resume."
-          : `You have ${data.quizzes?.summary.totalInProgress ?? 0} quizzes ready to resume.`,
-      tone: "warning",
-    });
-  }
-
-  if ((data.quizzes?.summary.totalAvailable ?? 0) > 0) {
-    alerts.push({
-      id: "quiz-available",
-      title: "New quiz opportunities",
-      message:
-        data.quizzes?.summary.totalAvailable === 1
-          ? "1 quiz is currently available."
-          : `${data.quizzes?.summary.totalAvailable ?? 0} quizzes are currently available.`,
-      tone: "neutral",
-    });
-  }
-
-  const recentTrophy = data.trophies?.trophies.recentlyEarned[0];
-  if (recentTrophy) {
-    alerts.push({
-      id: "recent-trophy",
-      title: "New trophy earned",
-      message: recentTrophy.trophyName,
-      time: formatRelativeTime(recentTrophy.earnedAt),
-      tone: "success",
-    });
-  }
-
-  const recentXp = data.points?.recentActivity[0];
-  if (recentXp) {
-    alerts.push({
-      id: "recent-xp",
-      title: "Latest XP activity",
-      message: `${recentXp.reason} (${recentXp.xpPoints > 0 ? "+" : ""}${recentXp.xpPoints} XP)`,
-      time: formatRelativeTime(recentXp.createdAt),
-      tone: "neutral",
-    });
-  }
-
-  if (alerts.length === 0) {
-    alerts.push({
-      id: "healthy",
-      title: "All clear",
-      message: "No urgent academic or activity alerts right now.",
-      tone: "success",
-    });
-  }
-
-  return alerts.slice(0, 4);
 }
 
 function LoadingSkeleton() {
@@ -307,6 +206,7 @@ export default function StudentDashboardPage() {
   const [error, setError] = useState("");
   const [profileMissing, setProfileMissing] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardState | null>(null);
+  const [recentAlerts, setRecentAlerts] = useState<NotificationFeedItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -332,7 +232,6 @@ export default function StudentDashboardPage() {
     };
   }, [isSecurityModalOpen]);
 
-  const alerts = useMemo(() => buildAlerts(dashboard), [dashboard]);
   const unavailableSources = useMemo(() => {
     if (!dashboard) {
       return [];
@@ -395,12 +294,21 @@ export default function StudentDashboardPage() {
       const student = await resolveCurrentStudentRecord(sessionUser);
       if (!student) {
         setDashboard(null);
+        setRecentAlerts([]);
         setAnnouncements([]);
         setProfileMissing(true);
         return;
       }
 
-      const [performance, points, quizzes, trophies, communityPosts, latestAnnouncements] = await Promise.all([
+      const [
+        performance,
+        points,
+        quizzes,
+        trophies,
+        communityPosts,
+        studentNotifications,
+        latestAnnouncements,
+      ] = await Promise.all([
         fetchOptionalApiData<DashboardPerformanceData>(
           `/api/performance/${encodeURIComponent(student.id)}`
         ),
@@ -414,7 +322,12 @@ export default function StudentDashboardPage() {
           `/api/gamification/trophies/${encodeURIComponent(student.id)}`
         ),
         fetchOptionalPosts(sessionUser.id),
-        listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
+        listNotificationsForUser(sessionUser, "STUDENT")
+          .then((items) =>
+            items.filter((item) => !isAllAudienceNotification(item)).slice(0, 4)
+          )
+          .catch(() => [] as NotificationFeedItem[]),
+        listLatestAnnouncements(4).catch(() => [] as AnnouncementRecord[]),
       ]);
 
       setDashboard({
@@ -426,10 +339,12 @@ export default function StudentDashboardPage() {
         trophies,
         communityPosts,
       });
+      setRecentAlerts(studentNotifications);
       setAnnouncements(latestAnnouncements);
     } catch (loadError) {
       setProfileMissing(false);
       setDashboard(null);
+      setRecentAlerts([]);
       setAnnouncements([]);
       setError(
         loadError instanceof Error
@@ -625,31 +540,26 @@ export default function StudentDashboardPage() {
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]">
         <Card title="Recent Alerts">
-          <ul className="space-y-3">
-            {alerts.map((item) => (
-              <li
-                className={cn(
-                  "rounded-2xl border px-4 py-3",
-                  item.tone === "warning"
-                    ? "border-amber-200 bg-amber-50"
-                    : item.tone === "success"
-                      ? "border-emerald-200 bg-emerald-50"
-                      : "border-slate-200 bg-slate-50"
-                )}
-                key={item.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-text">{item.title}</p>
-                    <p className="mt-1 text-sm text-text/72">{item.message}</p>
+          {recentAlerts.length === 0 ? (
+            <p className="text-sm text-text/70">No student alerts available yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {recentAlerts.map((item) => (
+                <div className="rounded-2xl bg-tint px-4 py-3" key={item.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="mt-1 text-xs text-text/72">{item.message}</p>
+                      <p className="mt-2 text-[11px] text-text/60">
+                        {item.targetLabel} • {new Date(item.publishedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <p className="text-[11px] text-text/60">{item.time}</p>
                   </div>
-                  {item.time ? (
-                    <p className="text-xs text-text/60">{item.time}</p>
-                  ) : null}
                 </div>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card title="Activity Snapshot">
