@@ -1,7 +1,7 @@
 import type { UrgentLevel } from "@/lib/community-urgent";
 import { getUrgentConfig } from "@/lib/community-urgent";
 
-/** Luhn check for card numbers (digits only). */
+/** Luhn check for card numbers (digits only). Not applied to community urgent demo checkout. */
 export function luhnValid(digits: string): boolean {
   if (!/^\d+$/.test(digits) || digits.length < 12) return false;
   let sum = 0;
@@ -17,6 +17,21 @@ export function luhnValid(digits: string): boolean {
     double = !double;
   }
   return sum % 10 === 0;
+}
+
+/**
+ * True when the whole PAN is just one short digit group repeated (e.g. all one digit,
+ * 232323…, 1234123412341234). Catches obvious fake/demo numbers that may still pass Luhn.
+ */
+export function isTrivialRepeatingPan(digits: string): boolean {
+  if (!/^\d+$/.test(digits) || digits.length < 2) return false;
+  const L = digits.length;
+  for (let period = 1; period <= L / 2; period++) {
+    if (L % period !== 0) continue;
+    const unit = digits.slice(0, period);
+    if (unit.repeat(L / period) === digits) return true;
+  }
+  return false;
 }
 
 export function parseCardExpiry(mmYy: string): { month: number; year: number } | null {

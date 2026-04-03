@@ -1,21 +1,24 @@
 import { COMMUNITY_POST_BODY_LIMITS } from "@/lib/validate-community-post-body";
 import { getPostTextQualityError } from "@/lib/post-text-quality";
-import { luhnValid, parseCardExpiry } from "@/lib/community-urgent-card-payment-utils";
+import {
+    isTrivialRepeatingPan,
+    parseCardExpiry,
+} from "@/lib/community-urgent-card-payment-utils";
 
-/** Display format: four groups of four digits, single spaces (e.g. 2434 2424 2424 2424). */
+/** Display format: four groups of four digits, single spaces (e.g. 4111 1111 1111 1111). */
 const URGENT_CARD_DISPLAY_PATTERN = /^\d{4} \d{4} \d{4} \d{4}$/;
 
 export function getUrgentCardNumberFormatError(cardNumber: string): string | null {
     const t = cardNumber.trim();
     if (!t) {
-        return "Enter the card number as four groups of four digits (e.g. 2434 2424 2424 2424).";
+        return "Enter the card number as four groups of four digits (e.g. 4111 1111 1111 1111).";
     }
     if (!URGENT_CARD_DISPLAY_PATTERN.test(t)) {
-        return "Card number must look like 2434 2424 2424 2424 — spaces only between the four groups.";
+        return "Card number must look like 4111 1111 1111 1111 — spaces only between the four groups.";
     }
     const digits = t.replace(/\s/g, "");
-    if (!luhnValid(digits)) {
-        return "That card number does not pass validation. Check the digits.";
+    if (isTrivialRepeatingPan(digits)) {
+        return "That number repeats the same digit group (for example 2323… or 1111…). Enter a more varied 16-digit card number.";
     }
     return null;
 }
@@ -63,7 +66,7 @@ export function getUrgentComposerCardFieldsError(input: {
         return null;
     }
     if (!anyFilled && !input.hasCardPaymentOnFile) {
-        return "Enter card number (2434 2424 2424 2424), MM/YY, and 3-digit CVC to save.";
+        return "Enter card number (4111 1111 1111 1111), MM/YY, and 3-digit CVC to save.";
     }
     return (
         getUrgentCardNumberFormatError(n) ||

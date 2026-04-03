@@ -2,7 +2,7 @@ import { connectDB } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import {
   amountRsForUrgentLevel,
-  luhnValid,
+  isTrivialRepeatingPan,
   maskCardDisplay,
   parseCardExpiry,
   validateCvc,
@@ -62,8 +62,11 @@ export async function POST(req: Request) {
     if (digits.length < 12 || digits.length > 19) {
       return Response.json({ error: "Enter a valid card number." }, { status: 400 });
     }
-    if (!luhnValid(digits)) {
-      return Response.json({ error: "Card number failed validation." }, { status: 400 });
+    if (isTrivialRepeatingPan(digits)) {
+      return Response.json(
+        { error: "Card number cannot be an all-repeating digit pattern." },
+        { status: 400 }
+      );
     }
 
     const expiry = parseCardExpiry(toTrimmedString(body.cardExpiry));

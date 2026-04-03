@@ -943,7 +943,7 @@ export default function CommunityPostComposer({
             }
             if (!urgentCardLast4Resolved) {
                 setCardError(
-                    "Enter the full card number (2434 2424 2424 2424), or use the card already saved on this draft."
+                    "Enter the full card number (4111 1111 1111 1111), or use the card already saved on this draft."
                 );
                 return;
             }
@@ -1662,7 +1662,8 @@ export default function CommunityPostComposer({
                                     <p className="mt-1 text-xs text-slate-600">
                                         Card number must be{" "}
                                         <span className="font-medium text-slate-800">four groups of four digits</span>{" "}
-                                        with spaces (e.g. 4111 1111 1111 1111), expiry{" "}
+                                        with spaces (demo checkout — not charged; obvious repeating patterns are
+                                        rejected). Example: 4111 1111 1111 1111. Expiry{" "}
                                         <span className="font-medium text-slate-800">MM/YY</span> in the future, and a{" "}
                                         <span className="font-medium text-slate-800">3-digit</span> CVC. Details are
                                         saved for admin review; full card number is encrypted when{" "}
@@ -1671,7 +1672,7 @@ export default function CommunityPostComposer({
                                     </p>
                                     <div className="mt-2 grid gap-2 sm:grid-cols-3">
                                         <Input
-                                            placeholder="2434 2424 2424 2424"
+                                            placeholder="4111 1111 1111 1111"
                                             inputMode="numeric"
                                             autoComplete="cc-number"
                                             value={cardNumber}
