@@ -52,8 +52,33 @@ export interface NotificationViewer {
   subgroup?: string | null;
 }
 
+const ALL_AUDIENCE_ROLES: AppRole[] = [
+  "SUPER_ADMIN",
+  "LECTURER",
+  "LOST_ITEM_STAFF",
+  "STUDENT",
+];
+
+const ALL_USER_ROLE_CODES = [
+  "ADMIN",
+  "SUPER_ADMIN",
+  "LOST_ITEM_ADMIN",
+  "LOST_ITEM_STAFF",
+  "LECTURER",
+  "LAB_ASSISTANT",
+  "STUDENT",
+];
+
 function normalizeCode(value: string) {
   return value.trim().toUpperCase();
+}
+
+function toUpperSet(values: readonly string[] | undefined) {
+  return new Set(
+    (values ?? [])
+      .map((value) => String(value ?? "").trim().toUpperCase())
+      .filter(Boolean)
+  );
 }
 
 function asStringArray(value: unknown) {
@@ -306,6 +331,28 @@ async function listNotificationFeed() {
   return rows
     .map((row, index) => normalizeFeedItem(row, index))
     .filter((row): row is NotificationFeedItem => Boolean(row));
+}
+
+export function isAllAudienceNotification(item: NotificationFeedItem) {
+  const hasScopedAudience =
+    (item.audience.facultyCodes?.length ?? 0) > 0 ||
+    (item.audience.degreeCodes?.length ?? 0) > 0 ||
+    (item.audience.semesterCodes?.length ?? 0) > 0 ||
+    (item.audience.streamCodes?.length ?? 0) > 0 ||
+    (item.audience.intakeIds?.length ?? 0) > 0 ||
+    (item.audience.subgroupCodes?.length ?? 0) > 0;
+
+  if (hasScopedAudience) {
+    return false;
+  }
+
+  const roleSet = toUpperSet(item.audience.roles);
+  if (!ALL_AUDIENCE_ROLES.every((role) => roleSet.has(role))) {
+    return false;
+  }
+
+  const userRoleSet = toUpperSet(item.audience.userRoles);
+  return userRoleSet.size === 0 || ALL_USER_ROLE_CODES.every((role) => userRoleSet.has(role));
 }
 
 export function resolveNotificationsForViewer(

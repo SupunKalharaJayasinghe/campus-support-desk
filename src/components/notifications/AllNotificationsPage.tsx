@@ -15,7 +15,20 @@ interface NotificationPortalConfig {
 
 const NOTIFICATIONS_LINK = { label: "Notifications", href: "/notifications" };
 
-const CONFIG_BY_ROLE: Record<AppRole, NotificationPortalConfig> = {
+const STUDENT_NOTIFICATION_CONFIG: NotificationPortalConfig = {
+  homeHref: "/student",
+  links: [
+    { label: "Dashboard", href: "/student" },
+    NOTIFICATIONS_LINK,
+    { label: "Book Lecturer", href: "/student/booking" },
+    { label: "Report Lost Item", href: "/student/lost-items" },
+    { label: "Announcements", href: "/student/announcements" },
+    { label: "Help Requests", href: "/student/support" },
+  ],
+  subtitle: "All notifications targeted to your student profile.",
+};
+
+const CONFIG_BY_ROLE: { [K in AppRole]?: NotificationPortalConfig } = {
   SUPER_ADMIN: {
     homeHref: "/admin",
     links: [
@@ -47,24 +60,13 @@ const CONFIG_BY_ROLE: Record<AppRole, NotificationPortalConfig> = {
     ],
     subtitle: "All notifications targeted to Lost & Found operations.",
   },
-  STUDENT: {
-    homeHref: "/student",
-    links: [
-      { label: "Dashboard", href: "/student" },
-      NOTIFICATIONS_LINK,
-      { label: "Book Lecturer", href: "/student/booking" },
-      { label: "Report Lost Item", href: "/student/lost-items" },
-      { label: "Announcements", href: "/announcements" },
-      { label: "Help Requests", href: "/student/support" },
-    ],
-    subtitle: "All notifications targeted to your student profile.",
-  },
+  STUDENT: STUDENT_NOTIFICATION_CONFIG,
 };
 
 export default function AllNotificationsPage() {
   const user = useMemo(() => readStoredUser(), []);
   const role = user?.role ?? "STUDENT";
-  const config = CONFIG_BY_ROLE[role] ?? CONFIG_BY_ROLE.STUDENT;
+  const config = CONFIG_BY_ROLE[role] ?? STUDENT_NOTIFICATION_CONFIG;
 
   return (
     <div className="min-h-screen bg-bg">

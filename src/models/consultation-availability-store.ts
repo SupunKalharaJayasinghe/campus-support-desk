@@ -2,6 +2,7 @@ import {
   type ConsultationSlotMode,
   type ConsultationSlotStatus,
 } from "@/models/consultation-availability";
+import { isDemoModeEnabled } from "@/models/rbac";
 
 export interface ConsultationAvailabilitySlotPersistedRecord {
   id: string;
@@ -31,83 +32,94 @@ export interface ConsultationAvailabilitySlotWriteInput {
   bookingId?: string | null;
 }
 
-const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersistedRecord[] = [
-  {
-    id: "slot-lec-kperera-2026-04-08-0900",
-    lecturerId: "lec-kperera",
-    date: "2026-04-08",
-    startTime: "09:00",
-    endTime: "09:30",
-    sessionType: "Academic Consultation",
-    mode: "IN_PERSON",
-    location: "Main Office",
-    status: "AVAILABLE",
-    bookingId: null,
-    createdAt: "2026-03-31T08:00:00.000Z",
-    updatedAt: "2026-03-31T08:00:00.000Z",
-    isDeleted: false,
-  },
-  {
-    id: "slot-lec-kperera-2026-04-08-1030",
-    lecturerId: "lec-kperera",
-    date: "2026-04-08",
-    startTime: "10:30",
-    endTime: "11:00",
-    sessionType: "Project Feedback",
-    mode: "ONLINE",
-    location: "",
-    status: "AVAILABLE",
-    bookingId: null,
-    createdAt: "2026-03-31T08:05:00.000Z",
-    updatedAt: "2026-03-31T08:05:00.000Z",
-    isDeleted: false,
-  },
-  {
-    id: "slot-lec-rsilva-2026-04-09-1400",
-    lecturerId: "lec-rsilva",
-    date: "2026-04-09",
-    startTime: "14:00",
-    endTime: "14:30",
-    sessionType: "Thesis Review",
-    mode: "HYBRID",
-    location: "Room 203",
-    status: "AVAILABLE",
-    bookingId: null,
-    createdAt: "2026-03-31T09:00:00.000Z",
-    updatedAt: "2026-03-31T09:00:00.000Z",
-    isDeleted: false,
-  },
-  {
-    id: "slot-lec-rsilva-2026-04-10-0900",
-    lecturerId: "lec-rsilva",
-    date: "2026-04-10",
-    startTime: "09:00",
-    endTime: "09:30",
-    sessionType: "Career Guidance",
-    mode: "IN_PERSON",
-    location: "Faculty Lounge",
-    status: "BOOKED",
-    bookingId: "booking-demo-1",
-    createdAt: "2026-03-31T09:10:00.000Z",
-    updatedAt: "2026-03-31T09:10:00.000Z",
-    isDeleted: false,
-  },
-  {
-    id: "slot-lec-kperera-2026-04-03-1030",
-    lecturerId: "lec-kperera",
-    date: "2026-04-03",
-    startTime: "10:30",
-    endTime: "11:00",
-    sessionType: "Academic Consultation",
-    mode: "ONLINE",
-    location: "",
-    status: "BOOKED",
-    bookingId: "booking-demo-2",
-    createdAt: "2026-04-01T10:00:00.000Z",
-    updatedAt: "2026-04-01T10:00:00.000Z",
-    isDeleted: false,
-  },
-];
+const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersistedRecord[] =
+  isDemoModeEnabled()
+    ? [
+        {
+          id: "slot-lec-kperera-2026-04-08-0900",
+          lecturerId: "lec-kperera",
+          date: "2026-04-08",
+          startTime: "09:00",
+          endTime: "09:30",
+          sessionType: "Academic Consultation",
+          mode: "IN_PERSON",
+          location: "Main Office",
+          status: "AVAILABLE",
+          bookingId: null,
+          createdAt: "2026-03-31T08:00:00.000Z",
+          updatedAt: "2026-03-31T08:00:00.000Z",
+          isDeleted: false,
+        },
+        {
+          id: "slot-lec-kperera-2026-04-08-1030",
+          lecturerId: "lec-kperera",
+          date: "2026-04-08",
+          startTime: "10:30",
+          endTime: "11:00",
+          sessionType: "Project Feedback",
+          mode: "ONLINE",
+          location: "",
+          status: "AVAILABLE",
+          bookingId: null,
+          createdAt: "2026-03-31T08:05:00.000Z",
+          updatedAt: "2026-03-31T08:05:00.000Z",
+          isDeleted: false,
+        },
+        {
+          id: "slot-lec-rsilva-2026-04-09-1400",
+          lecturerId: "lec-rsilva",
+          date: "2026-04-09",
+          startTime: "14:00",
+          endTime: "14:30",
+          sessionType: "Thesis Review",
+          mode: "HYBRID",
+          location: "Room 203",
+          status: "AVAILABLE",
+          bookingId: null,
+          createdAt: "2026-03-31T09:00:00.000Z",
+          updatedAt: "2026-03-31T09:00:00.000Z",
+          isDeleted: false,
+        },
+        {
+          id: "slot-lec-rsilva-2026-04-10-0900",
+          lecturerId: "lec-rsilva",
+          date: "2026-04-10",
+          startTime: "09:00",
+          endTime: "09:30",
+          sessionType: "Career Guidance",
+          mode: "IN_PERSON",
+          location: "Faculty Lounge",
+          status: "BOOKED",
+          bookingId: "booking-demo-1",
+          createdAt: "2026-03-31T09:10:00.000Z",
+          updatedAt: "2026-03-31T09:10:00.000Z",
+          isDeleted: false,
+        },
+        {
+          id: "slot-lec-kperera-2026-04-03-1030",
+          lecturerId: "lec-kperera",
+          date: "2026-04-03",
+          startTime: "10:30",
+          endTime: "11:00",
+          sessionType: "Academic Consultation",
+          mode: "ONLINE",
+          location: "",
+          status: "BOOKED",
+          bookingId: "booking-demo-2",
+          createdAt: "2026-04-01T10:00:00.000Z",
+          updatedAt: "2026-04-01T10:00:00.000Z",
+          isDeleted: false,
+        },
+      ]
+    : [];
+
+const DEMO_CONSULTATION_AVAILABILITY_SLOT_IDS = new Set([
+  "slot-lec-kperera-2026-04-08-0900",
+  "slot-lec-kperera-2026-04-08-1030",
+  "slot-lec-rsilva-2026-04-09-1400",
+  "slot-lec-rsilva-2026-04-10-0900",
+  "slot-lec-kperera-2026-04-03-1030",
+]);
 
 const globalForConsultationAvailabilityStore = globalThis as typeof globalThis & {
   __consultationAvailabilityStore?: ConsultationAvailabilitySlotPersistedRecord[];
@@ -117,6 +129,11 @@ function consultationAvailabilityStore() {
   if (!globalForConsultationAvailabilityStore.__consultationAvailabilityStore) {
     globalForConsultationAvailabilityStore.__consultationAvailabilityStore =
       INITIAL_CONSULTATION_AVAILABILITY_SLOTS.map((item) => ({ ...item }));
+  } else if (!isDemoModeEnabled()) {
+    globalForConsultationAvailabilityStore.__consultationAvailabilityStore =
+      globalForConsultationAvailabilityStore.__consultationAvailabilityStore.filter(
+        (item) => !DEMO_CONSULTATION_AVAILABILITY_SLOT_IDS.has(item.id)
+      );
   }
 
   return globalForConsultationAvailabilityStore.__consultationAvailabilityStore;
