@@ -46,8 +46,8 @@ export default function CommunitySettingsPage() {
     const isPublic = form.visibility === "public";
 
     const visibilityLabel = useMemo(() => {
-        if (isPublic) return "Your profile is visible to all community members.";
-        return "Your profile is only visible to you and moderators.";
+        if (isPublic) return "Your points are visible to other members.";
+        return "Your points are only visible to you.";
     }, [isPublic]);
 
     const setField = <K extends keyof CommunityProfileSettings>(key: K, value: CommunityProfileSettings[K]) => {
@@ -332,51 +332,7 @@ export default function CommunitySettingsPage() {
                         </Card>
 
                         <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
-                            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
-                                <Shield size={18} className="text-blue-700" />
-                                Profile Visibility
-                            </h2>
-                            <p className="mt-1 text-sm text-slate-600">Choose who can view your profile activity.</p>
-
-                            <div className="mt-4 space-y-3">
-                                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
-                                    <input
-                                        type="radio"
-                                        name="profile_visibility"
-                                        checked={form.visibility === "public"}
-                                        onChange={() => setField("visibility", "public")}
-                                        className="mt-1 h-4 w-4 border-blue-300 text-blue-700 focus:ring-blue-400"
-                                    />
-                                    <div>
-                                        <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                                            <Eye size={15} className="text-blue-700" /> Public
-                                        </p>
-                                        <p className="mt-1 text-xs text-slate-600">Everyone in the community can view your profile.</p>
-                                    </div>
-                                </label>
-
-                                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-blue-200 bg-white p-3">
-                                    <input
-                                        type="radio"
-                                        name="profile_visibility"
-                                        checked={form.visibility === "private"}
-                                        onChange={() => setField("visibility", "private")}
-                                        className="mt-1 h-4 w-4 border-blue-300 text-blue-700 focus:ring-blue-400"
-                                    />
-                                    <div>
-                                        <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                                            <EyeOff size={15} className="text-blue-700" /> Private
-                                        </p>
-                                        <p className="mt-1 text-xs text-slate-600">Only you and moderators can view profile details.</p>
-                                    </div>
-                                </label>
-                            </div>
-
-                            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-100/70 p-3 text-xs text-blue-900">
-                                {visibilityLabel}
-                            </div>
-
-                            <div className="mt-5 rounded-xl bg-slate-50 p-3">
+                            <div className="rounded-xl bg-slate-50 p-3">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
                                 <div className="mt-2 flex items-start gap-3">
                                     {form.avatarUrl ? (
@@ -399,6 +355,62 @@ export default function CommunitySettingsPage() {
                                         </p>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-100/70 p-3 text-xs text-blue-900">
+                                {visibilityLabel}
+                            </div>
+
+                            <h2 className="mt-5 flex items-center gap-2 text-base font-semibold text-slate-800">
+                                <Shield size={18} className="text-blue-700" />
+                                Profile Visibility
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-600">Choose who can view your profile activity.</p>
+
+                            <div className="mt-4 space-y-3">
+                                <label
+                                    className={
+                                        form.visibility === "public"
+                                            ? "flex cursor-pointer items-start gap-3 rounded-xl border-2 border-blue-600 bg-blue-50 p-3 shadow-sm transition-colors"
+                                            : "flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300"
+                                    }
+                                >
+                                    <input
+                                        type="radio"
+                                        name="profile_visibility"
+                                        checked={form.visibility === "public"}
+                                        onChange={() => setField("visibility", "public")}
+                                        className="mt-1 h-4 w-4 border-blue-300 text-blue-700 focus:ring-blue-400"
+                                    />
+                                    <div>
+                                        <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                                            <Eye size={15} className="text-blue-700" /> Public
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-600">Everyone in the community can view your profile.</p>
+                                    </div>
+                                </label>
+
+                                <label
+                                    className={
+                                        form.visibility === "private"
+                                            ? "flex cursor-pointer items-start gap-3 rounded-xl border-2 border-blue-600 bg-blue-50 p-3 shadow-sm transition-colors"
+                                            : "flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300"
+                                    }
+                                >
+                                    <input
+                                        type="radio"
+                                        name="profile_visibility"
+                                        checked={form.visibility === "private"}
+                                        onChange={() => setField("visibility", "private")}
+                                        className="mt-1 h-4 w-4 border-blue-300 text-blue-700 focus:ring-blue-400"
+                                    />
+                                    <div>
+                                        <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                                            <EyeOff size={15} className="text-blue-700" /> Private
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-600">Only you and moderators can view profile details.</p>
+                                    </div>
+                                </label>
                             </div>
                         </Card>
                     </div>

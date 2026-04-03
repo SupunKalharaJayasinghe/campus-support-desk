@@ -1387,7 +1387,7 @@ export default function CommunityPostComposer({
                         </p>
                     ) : (
                         <p className="mt-1 text-xs text-slate-500">
-                            Http or https links only. Up to {COMMUNITY_POST_BODY_LIMITS.maxAttachments} links.
+                            Up to {COMMUNITY_POST_BODY_LIMITS.maxAttachments} links.
                         </p>
                     )}
                     {attachments.length > 0 && (
@@ -1781,7 +1781,7 @@ export default function CommunityPostComposer({
                             </div>
                             <Button
                                 type="button"
-                                className="rounded-full border border-slate-300 bg-white px-6 text-slate-700 hover:bg-slate-100 sm:self-auto"
+                                className="rounded-full border border-slate-500 bg-gray-600 px-6 text-amber-50 hover:bg-red-400 sm:self-auto"
                                 onClick={handleComposerCancel}
                                 disabled={isSubmitting}
                             >
