@@ -5,6 +5,7 @@ export interface DemoUser {
   id: string;
   name: string;
   role: AppRole;
+  userRole?: string;
   username?: string;
   email?: string;
   studentRef?: string;
@@ -121,6 +122,7 @@ export function readStoredUser(): DemoUser | null {
     const parsedStream = String(parsed.stream ?? "").trim().toUpperCase();
     const parsedSubgroup = String(parsed.subgroup ?? "").trim();
     const parsedIntakeId = String(parsed.intakeId ?? "").trim();
+    const parsedUserRole = String(parsed.userRole ?? "").trim().toUpperCase();
 
     if (
       !parsed ||
@@ -134,6 +136,7 @@ export function readStoredUser(): DemoUser | null {
       id: parsed.id,
       name: typeof parsed.name === "string" ? parsed.name : "User",
       role: parsed.role as AppRole,
+      userRole: parsedUserRole || undefined,
       username: typeof parsed.username === "string" ? parsed.username : undefined,
       email: typeof parsed.email === "string" ? parsed.email : undefined,
       studentRef:

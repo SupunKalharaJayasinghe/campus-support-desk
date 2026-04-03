@@ -43,6 +43,12 @@ export default function LoginPage() {
         id: trimmedId || `demo-${role.toLowerCase()}-${Date.now()}`,
         name: displayName,
         role,
+        userRole:
+          role === "SUPER_ADMIN"
+            ? "ADMIN"
+            : role === "LOST_ITEM_STAFF"
+              ? "LOST_ITEM_ADMIN"
+              : role,
         username: demoStudentRegistration,
         studentRegistrationNumber: demoStudentRegistration,
         mustChangePassword: false,
@@ -75,6 +81,7 @@ export default function LoginPage() {
           user?: {
               id: string;
               role: AppRole;
+              userRole?: string;
               name: string;
               username?: string;
               email?: string;
@@ -105,6 +112,7 @@ export default function LoginPage() {
         id: String(user.id),
         name: String(user.name || user.username || "User"),
         role: user.role,
+        userRole: typeof user.userRole === "string" ? user.userRole : undefined,
         username: user.username,
         email: user.email,
         studentRef: user.studentRef,

@@ -25,9 +25,10 @@ import {
   type AnnouncementRecord,
 } from "@/models/announcement-center";
 import {
-  listNotificationsForRole,
+  listNotificationsForUser,
   type NotificationFeedItem,
 } from "@/models/notification-center";
+import { readStoredUser } from "@/models/rbac";
 import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
 
 type StatIcon = ComponentType<{ size?: number }>;
@@ -241,9 +242,10 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const currentUser = readStoredUser();
     void Promise.all([
       listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
-      listNotificationsForRole("SUPER_ADMIN").catch(
+      listNotificationsForUser(currentUser, "SUPER_ADMIN").catch(
         () => [] as NotificationFeedItem[]
       ),
     ]).then(([rows, scopedNotifications]) => {

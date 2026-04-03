@@ -20,10 +20,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 import {
-  DEGREES_BY_FACULTY,
-  FACULTIES,
   STREAM_OPTIONS,
-  SUBGROUP_OPTIONS,
   TERM_OPTIONS,
 } from "@/components/admin/AdminContext";
 import {
@@ -37,7 +34,7 @@ import type {
   SemesterCode,
   StreamCode,
 } from "@/models/notification-center";
-import type { AppRole } from "@/models/rbac";
+import { authHeaders, type AppRole } from "@/models/rbac";
 
 type MainTab = "sent" | "inbox";
 type PageSize = 10 | 25 | 50 | 100;
@@ -54,10 +51,14 @@ interface Announcement {
   audienceType: AudienceType;
   audienceLabel: string;
   targeting?: NotificationTargeting;
+  audience?: NotificationAudience;
+  tracking?: AnnouncementDeliveryTracking;
+  deliveryError?: string;
   channel: ChannelType;
   status: AnnouncementStatus;
   priority: PriorityType;
   deliveryAt: string;
+  publishedAt?: string;
 }
 
 interface InboxNotification {
@@ -139,29 +140,93 @@ interface IntakesApiResponse {
   }>;
 }
 
-const ROLE_OPTIONS = [
-  "Student",
-  "Lecturer",
-  "Lecture Incharge",
-  "Lecture Supporter",
-  "Lost Item Officer",
-  "Administrator",
+interface FacultyOption {
+  code: string;
+  label: string;
+}
+
+interface DegreeOption {
+  code: string;
+  label: string;
+}
+
+interface DegreeProgramsApiResponse {
+  items?: Array<{
+    code?: string;
+    name?: string;
+    status?: string;
+    isDeleted?: boolean;
+  }>;
+}
+
+interface IntakeSubgroupApiResponse {
+  items?: Array<{
+    code?: string;
+    count?: number;
+  }>;
+}
+
+interface RoleTargetOption {
+  label: string;
+  appRoles: AppRole[];
+  userRoles: string[];
+}
+
+interface NotificationAudienceRecipient {
+  userId: string;
+  appRole: AppRole;
+  userRole: string;
+  name: string;
+  primaryEmail: string;
+  optionalEmail: string;
+}
+
+interface AnnouncementDeliveryRecipient {
+  userId: string;
+  appRole: AppRole;
+  userRole: string;
+  name: string;
+  primaryEmail: string;
+  optionalEmail: string;
+  emailTargets: string[];
+}
+
+interface AnnouncementDeliveryTracking {
+  resolvedAt: string;
+  totalRecipients: number;
+  webRecipientCount: number;
+  emailRecipientCount: number;
+  totalEmailAddresses: number;
+  recipients: AnnouncementDeliveryRecipient[];
+}
+
+const ROLE_OPTIONS: RoleTargetOption[] = [
+  {
+    label: "Student",
+    appRoles: ["STUDENT"],
+    userRoles: ["STUDENT"],
+  },
+  {
+    label: "Lecturer",
+    appRoles: ["LECTURER"],
+    userRoles: ["LECTURER"],
+  },
+  {
+    label: "Lab Assistant",
+    appRoles: ["LECTURER"],
+    userRoles: ["LAB_ASSISTANT"],
+  },
+  {
+    label: "Lost Item Officer",
+    appRoles: ["LOST_ITEM_STAFF"],
+    userRoles: ["LOST_ITEM_ADMIN", "LOST_ITEM_STAFF"],
+  },
+  {
+    label: "Administrator",
+    appRoles: ["SUPER_ADMIN"],
+    userRoles: ["ADMIN", "SUPER_ADMIN"],
+  },
 ];
-
-const ACADEMIC_FACULTY_OPTIONS = FACULTIES.map((faculty) => ({
-  code: faculty.code,
-  label: faculty.label,
-}));
-
-const DEGREE_OPTIONS_BY_FACULTY = Object.fromEntries(
-  Object.entries(DEGREES_BY_FACULTY).map(([facultyCode, options]) => [
-    facultyCode,
-    options.map((degree) => ({
-      code: degree.code,
-      label: degree.label,
-    })),
-  ])
-) as Record<string, Array<{ code: string; label: string }>>;
 
 const SEMESTER_OPTIONS = ["ALL", ...TERM_OPTIONS] as const;
 
@@ -218,6 +283,24 @@ function inboxTypeClasses(type: InboxType) {
   return "border border-black/15 bg-white text-[#26150F]/75";
 }
 
+function channelLabel(channel: ChannelType) {
+  if (channel === "In-app") {
+    return "Notification";
+  }
+  if (channel === "Both") {
+    return "Email + Notification";
+  }
+  return "Email";
+}
+
+function trackingSummary(announcement: Announcement) {
+  const tracking = announcement.tracking;
+  if (!tracking) {
+    return "Tracking not resolved";
+  }
+  return `Users ${tracking.totalRecipients} | Web ${tracking.webRecipientCount} | Emails ${tracking.totalEmailAddresses}`;
+}
+
 function currentTimestamp() {
   return new Date().toLocaleString("en-US", {
     month: "short",
@@ -228,49 +311,177 @@ function currentTimestamp() {
   });
 }
 
-function mapRoleTargetToRoles(roleTarget: string): AppRole[] {
-  const normalized = roleTarget.trim().toLowerCase();
-  if (normalized === "student") {
-    return ["STUDENT"];
+function normalizeUpper(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
   }
-  if (
-    normalized === "lecturer" ||
-    normalized === "lecture incharge" ||
-    normalized === "lecture supporter"
-  ) {
-    return ["LECTURER"];
+  return value as Record<string, unknown>;
+}
+
+const LEGACY_FACULTY_LABEL_MAP: Record<string, string> = {
+  "FACULTY OF COMPUTING": "FOC",
+  "FACULTY OF ENGINEERING": "FOE",
+  "FACULTY OF BUSINESS": "FOB",
+  "FACULTY OF SCIENCE": "FOS",
+};
+
+function resolveFacultyCode(value: unknown) {
+  const raw = String(value ?? "").trim();
+  const upper = raw.toUpperCase();
+  if (/^[A-Z]{2,6}$/.test(upper)) {
+    return upper;
   }
-  if (normalized === "lost item officer") {
-    return ["LOST_ITEM_STAFF"];
+
+  const token = upper.match(/\b[A-Z]{2,6}\b/)?.[0] ?? "";
+  if (token && token !== "OF") {
+    return token;
   }
-  if (normalized === "administrator") {
-    return ["SUPER_ADMIN"];
+
+  return LEGACY_FACULTY_LABEL_MAP[upper] ?? "";
+}
+
+function normalizeEmail(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function uniqueStringList(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function resolveRoleTargetOption(roleTarget: string) {
+  const normalized = normalizeUpper(roleTarget);
+  return (
+    ROLE_OPTIONS.find((item) => normalizeUpper(item.label) === normalized) ?? null
+  );
+}
+
+function mapRoleTargetToAudience(roleTarget: string): NotificationAudience {
+  const matched = resolveRoleTargetOption(roleTarget);
+  if (matched) {
+    return {
+      roles: matched.appRoles,
+      userRoles: matched.userRoles,
+    };
   }
-  return ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"];
+
+  return {
+    roles: ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"],
+    userRoles: [
+      "ADMIN",
+      "SUPER_ADMIN",
+      "LOST_ITEM_ADMIN",
+      "LOST_ITEM_STAFF",
+      "LECTURER",
+      "LAB_ASSISTANT",
+      "STUDENT",
+    ],
+  };
+}
+
+function supportsWebNotification(channel: ChannelType) {
+  return channel === "In-app" || channel === "Both";
+}
+
+function supportsEmailNotification(channel: ChannelType) {
+  return channel === "Email" || channel === "Both";
+}
+
+async function resolveAudienceRecipients(audience: NotificationAudience) {
+  const response = await fetch("/api/notifications/audience", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ audience }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { recipients?: NotificationAudienceRecipient[]; message?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.message || "Failed to resolve audience recipients");
+  }
+
+  const rows = Array.isArray(payload?.recipients) ? payload.recipients : [];
+  return rows.map((row) => ({
+    userId: String(row.userId ?? "").trim(),
+    appRole: (String(row.appRole ?? "").trim().toUpperCase() as AppRole) || "STUDENT",
+    userRole: normalizeUpper(row.userRole),
+    name: String(row.name ?? "").trim() || "User",
+    primaryEmail: normalizeEmail(row.primaryEmail),
+    optionalEmail: normalizeEmail(row.optionalEmail),
+  }));
+}
+
+function buildAnnouncementDeliveryTracking(
+  recipients: NotificationAudienceRecipient[],
+  channel: ChannelType
+): AnnouncementDeliveryTracking {
+  const deliverEmail = supportsEmailNotification(channel);
+  const deliverWeb = supportsWebNotification(channel);
+
+  const deliveryRecipients: AnnouncementDeliveryRecipient[] = recipients.map((row) => ({
+    ...row,
+    emailTargets: deliverEmail
+      ? uniqueStringList([normalizeEmail(row.primaryEmail), normalizeEmail(row.optionalEmail)])
+      : [],
+  }));
+
+  const emailRecipientCount = deliverEmail
+    ? deliveryRecipients.filter((row) => row.emailTargets.length > 0).length
+    : 0;
+  const totalEmailAddresses = deliverEmail
+    ? deliveryRecipients.reduce((total, row) => total + row.emailTargets.length, 0)
+    : 0;
+
+  return {
+    resolvedAt: new Date().toISOString(),
+    totalRecipients: deliveryRecipients.length,
+    webRecipientCount: deliverWeb ? deliveryRecipients.length : 0,
+    emailRecipientCount,
+    totalEmailAddresses,
+    recipients: deliveryRecipients,
+  };
 }
 
 function buildNotificationAudience(announcement: Announcement): NotificationAudience {
   if (announcement.audienceType === "All") {
     return {
       roles: ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"],
+      userRoles: [
+        "ADMIN",
+        "SUPER_ADMIN",
+        "LOST_ITEM_ADMIN",
+        "LOST_ITEM_STAFF",
+        "LECTURER",
+        "LAB_ASSISTANT",
+        "STUDENT",
+      ],
     };
   }
 
   if (announcement.audienceType === "Role") {
-    return { roles: mapRoleTargetToRoles(announcement.audienceLabel) };
+    return mapRoleTargetToAudience(announcement.audienceLabel);
   }
 
   if (announcement.audienceType === "Faculty") {
-    const facultyCode =
-      ACADEMIC_FACULTY_OPTIONS.find(
-        (item) =>
-          item.code === announcement.audienceLabel ||
-          item.label === announcement.audienceLabel
-      )?.code ??
-      announcement.audienceLabel.trim().toUpperCase();
+    const facultyCode = resolveFacultyCode(announcement.audienceLabel);
+    if (!facultyCode) {
+      return {
+        roles: ["STUDENT", "LECTURER"],
+        userRoles: ["STUDENT", "LECTURER", "LAB_ASSISTANT"],
+      };
+    }
 
     return {
       roles: ["STUDENT", "LECTURER"],
+      userRoles: ["STUDENT", "LECTURER", "LAB_ASSISTANT"],
       facultyCodes: [facultyCode],
     };
   }
@@ -278,13 +489,17 @@ function buildNotificationAudience(announcement: Announcement): NotificationAudi
   if (announcement.audienceType === "Semester") {
     const semester = announcement.audienceLabel.trim().toUpperCase();
     return semester === "ALL SEMESTER"
-      ? { roles: ["STUDENT"] }
-      : { roles: ["STUDENT"], semesterCodes: [semester as SemesterCode] };
+      ? { roles: ["STUDENT"], userRoles: ["STUDENT"] }
+      : {
+          roles: ["STUDENT"],
+          userRoles: ["STUDENT"],
+          semesterCodes: [semester as SemesterCode],
+        };
   }
 
   const targeting = announcement.targeting;
   if (!targeting) {
-    return { roles: ["STUDENT"] };
+    return { roles: ["STUDENT"], userRoles: ["STUDENT"] };
   }
 
   const semester = targeting.semester.trim().toUpperCase();
@@ -292,6 +507,7 @@ function buildNotificationAudience(announcement: Announcement): NotificationAudi
 
   return {
     roles: ["STUDENT"],
+    userRoles: ["STUDENT"],
     facultyCodes: targeting.facultyCode
       ? [targeting.facultyCode.trim().toUpperCase()]
       : [],
@@ -314,7 +530,13 @@ function toNotificationFeedItem(
     return null;
   }
 
-  const publishedAt = new Date().toISOString();
+  if (!supportsWebNotification(announcement.channel)) {
+    return null;
+  }
+
+  const publishedAt = announcement.publishedAt || new Date().toISOString();
+  const tracking = announcement.tracking;
+  const audience = announcement.audience ?? buildNotificationAudience(announcement);
 
   return {
     id: `notification-${announcement.id}-${index + 1}`,
@@ -325,7 +547,10 @@ function toNotificationFeedItem(
     publishedAt,
     unread: true,
     targetLabel: announcement.audienceLabel || "All Users",
-    audience: buildNotificationAudience(announcement),
+    audience,
+    channel: announcement.channel,
+    recipientUserIds: tracking?.recipients.map((item) => item.userId) ?? [],
+    recipientCount: tracking?.totalRecipients ?? 0,
   };
 }
 
@@ -347,6 +572,73 @@ function resolveNextAnnouncementCounter(rows: Announcement[]) {
   });
 
   return maxValue;
+}
+
+function normalizeChannel(value: unknown): ChannelType {
+  const normalized = normalizeUpper(value);
+  if (normalized === "EMAIL") {
+    return "Email";
+  }
+  if (normalized === "BOTH") {
+    return "Both";
+  }
+  return "In-app";
+}
+
+function normalizeRoleTargetLabel(value: string) {
+  const normalized = normalizeUpper(value);
+  if (
+    normalized === "LECTURE INCHARGE" ||
+    normalized === "LECTURE SUPPORTER" ||
+    normalized === "LECTURER INCHARGE" ||
+    normalized === "LECTURER SUPPORT"
+  ) {
+    return "Lecturer";
+  }
+  return value;
+}
+
+function normalizeAnnouncementRecord(value: Announcement): Announcement {
+  const nextAudienceLabel =
+    value.audienceType === "Role"
+      ? normalizeRoleTargetLabel(String(value.audienceLabel ?? "").trim())
+      : String(value.audienceLabel ?? "").trim();
+  const normalizedChannel = normalizeChannel(value.channel);
+  const audience = value.audience ?? buildNotificationAudience({ ...value, audienceLabel: nextAudienceLabel });
+
+  return {
+    ...value,
+    audienceLabel: nextAudienceLabel,
+    channel: normalizedChannel,
+    publishedAt:
+      value.status === "Sent"
+        ? String(value.publishedAt ?? "").trim() || new Date().toISOString()
+        : undefined,
+    audience,
+    tracking: value.tracking
+      ? {
+          ...value.tracking,
+          recipients: Array.isArray(value.tracking.recipients)
+            ? value.tracking.recipients.map((recipient) => ({
+                ...recipient,
+                userId: String(recipient.userId ?? "").trim(),
+                appRole:
+                  (String(recipient.appRole ?? "").trim().toUpperCase() as AppRole) ||
+                  "STUDENT",
+                userRole: normalizeUpper(recipient.userRole),
+                name: String(recipient.name ?? "").trim() || "User",
+                primaryEmail: normalizeEmail(recipient.primaryEmail),
+                optionalEmail: normalizeEmail(recipient.optionalEmail),
+                emailTargets: uniqueStringList(
+                  Array.isArray(recipient.emailTargets)
+                    ? recipient.emailTargets.map((email) => normalizeEmail(email))
+                    : []
+                ),
+              }))
+            : [],
+        }
+      : undefined,
+  };
 }
 
 export default function AdminNotificationsPage() {
@@ -380,10 +672,20 @@ export default function AdminNotificationsPage() {
     null
   );
   const [selectedInboxId, setSelectedInboxId] = useState<string | null>(null);
+  const [facultyOptions, setFacultyOptions] = useState<FacultyOption[]>([]);
+  const [degreeOptions, setDegreeOptions] = useState<DegreeOption[]>([]);
   const [availableIntakes, setAvailableIntakes] = useState<IntakeOption[]>([]);
+  const [availableSubgroupOptions, setAvailableSubgroupOptions] = useState<string[]>([]);
+  const [isLoadingFaculties, setIsLoadingFaculties] = useState(false);
+  const [facultyLoadError, setFacultyLoadError] = useState("");
+  const [isLoadingDegrees, setIsLoadingDegrees] = useState(false);
+  const [degreeLoadError, setDegreeLoadError] = useState("");
   const [isLoadingIntakes, setIsLoadingIntakes] = useState(false);
+  const [isLoadingSubgroups, setIsLoadingSubgroups] = useState(false);
   const [intakeLoadError, setIntakeLoadError] = useState("");
+  const [subgroupLoadError, setSubgroupLoadError] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isComposeSubmitting, setIsComposeSubmitting] = useState(false);
 
   useEffect(() => {
     if (!rowMenuAnnouncementId) return;
@@ -400,7 +702,7 @@ export default function AdminNotificationsPage() {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isComposeSubmitting) {
         setComposeOpen(false);
         setComposeErrors({});
       }
@@ -410,7 +712,83 @@ export default function AdminNotificationsPage() {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [composeOpen]);
+  }, [composeOpen, isComposeSubmitting]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+    setIsLoadingFaculties(true);
+    setFacultyLoadError("");
+
+    fetch("/api/faculties", {
+      signal: controller.signal,
+      headers: {
+        ...authHeaders(),
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load faculties.");
+        }
+
+        const payload = (await response.json().catch(() => [])) as unknown;
+        const rows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(asRecord(payload)?.items)
+            ? ((asRecord(payload)?.items as unknown[]) ?? [])
+            : [];
+
+        const normalized = rows
+          .map((row) => asRecord(row))
+          .filter((row): row is Record<string, unknown> => Boolean(row))
+          .map((row) => {
+            const code = resolveFacultyCode(row.code);
+            const label =
+              String(row.name ?? row.label ?? row.code ?? "").trim() || code;
+            const status = normalizeUpper(row.status || "ACTIVE");
+            if (!code || !label || row.isDeleted === true || status === "INACTIVE") {
+              return null;
+            }
+
+            return {
+              code,
+              label,
+            } as FacultyOption;
+          })
+          .filter((row): row is FacultyOption => row !== null)
+          .sort((left, right) => left.code.localeCompare(right.code));
+
+        if (cancelled) {
+          return;
+        }
+        setFacultyOptions(normalized);
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          (error as { name?: string }).name === "AbortError"
+        ) {
+          return;
+        }
+        if (cancelled) {
+          return;
+        }
+        setFacultyOptions([]);
+        setFacultyLoadError("Unable to load faculties.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingFaculties(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -423,10 +801,17 @@ export default function AdminNotificationsPage() {
         return;
       }
 
-      setSentAnnouncements(savedAnnouncements);
-      setInboxNotifications(savedInbox);
-      setSelectedInboxId(savedInbox[0]?.id ?? null);
-      idCounter.current = resolveNextAnnouncementCounter(savedAnnouncements);
+      const announcementRows = Array.isArray(savedAnnouncements)
+        ? savedAnnouncements
+        : [];
+      const inboxRows = Array.isArray(savedInbox) ? savedInbox : [];
+      const normalizedAnnouncements = announcementRows.map((item) =>
+        normalizeAnnouncementRecord(item)
+      );
+      setSentAnnouncements(normalizedAnnouncements);
+      setInboxNotifications(inboxRows);
+      setSelectedInboxId(inboxRows[0]?.id ?? null);
+      idCounter.current = resolveNextAnnouncementCounter(normalizedAnnouncements);
       setIsHydrated(true);
     });
 
@@ -499,12 +884,112 @@ export default function AdminNotificationsPage() {
   const previewAnnouncement =
     sentAnnouncements.find((item) => item.id === previewAnnouncementId) ?? null;
 
-  const availableDegreeOptions = useMemo(() => {
-    if (!composeForm.degreeFacultyCode) {
-      return [] as Array<{ code: string; label: string }>;
+  useEffect(() => {
+    const facultyCode = resolveFacultyCode(composeForm.degreeFacultyCode);
+    if (!facultyCode) {
+      setDegreeOptions([]);
+      setIsLoadingDegrees(false);
+      setDegreeLoadError("");
+      return;
     }
 
-    return DEGREE_OPTIONS_BY_FACULTY[composeForm.degreeFacultyCode] ?? [];
+    const controller = new AbortController();
+    let cancelled = false;
+    setIsLoadingDegrees(true);
+    setDegreeLoadError("");
+
+    const query = new URLSearchParams({
+      faculty: facultyCode,
+      page: "1",
+      pageSize: "100",
+      sort: "az",
+      status: "ACTIVE",
+    });
+
+    fetch(`/api/degree-programs?${query.toString()}`, {
+      signal: controller.signal,
+      headers: {
+        ...authHeaders(),
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load degree programs.");
+        }
+
+        const payload = (await response.json().catch(() => null)) as
+          | DegreeProgramsApiResponse
+          | null;
+        const rows = Array.isArray(payload?.items) ? payload.items : [];
+        const normalized = rows
+          .map((row) => {
+            const code = normalizeUpper(row.code);
+            const label = String(row.name ?? "").trim();
+            const status = normalizeUpper(row.status || "ACTIVE");
+            if (!code || !label || row.isDeleted === true || status !== "ACTIVE") {
+              return null;
+            }
+
+            return {
+              code,
+              label,
+            } as DegreeOption;
+          })
+          .filter((row): row is DegreeOption => row !== null)
+          .sort((left, right) => left.code.localeCompare(right.code));
+
+        if (cancelled) {
+          return;
+        }
+
+        setDegreeOptions(normalized);
+        setComposeForm((previous) => {
+          if (!previous.degreeCodeTarget) {
+            return previous;
+          }
+          const hasSelected = normalized.some(
+            (item) => item.code === previous.degreeCodeTarget
+          );
+          if (hasSelected) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            degreeCodeTarget: "",
+            semesterTarget: "ALL",
+            allIntakes: true,
+            intakeTargets: [],
+            allSubgroups: true,
+            subgroupTargets: [],
+          };
+        });
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          (error as { name?: string }).name === "AbortError"
+        ) {
+          return;
+        }
+        if (cancelled) {
+          return;
+        }
+        setDegreeOptions([]);
+        setDegreeLoadError("Unable to load degrees for selected faculty.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingDegrees(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [composeForm.degreeFacultyCode]);
 
   const semesterFilteredIntakes = useMemo(() => {
@@ -532,22 +1017,7 @@ export default function AdminNotificationsPage() {
     () => new Map(availableIntakes.map((item) => [item.id, item.name])),
     [availableIntakes]
   );
-
-  const availableSubgroupOptions = useMemo(() => {
-    if (composeForm.audienceType !== "Degree Program") {
-      return [] as string[];
-    }
-
-    if (composeForm.allIntakes) {
-      return [...SUBGROUP_OPTIONS];
-    }
-
-    if (composeForm.intakeTargets.length === 0) {
-      return [] as string[];
-    }
-
-    return [...SUBGROUP_OPTIONS];
-  }, [composeForm.audienceType, composeForm.allIntakes, composeForm.intakeTargets]);
+  const availableDegreeOptions = degreeOptions;
 
   useEffect(() => {
     if (
@@ -555,10 +1025,15 @@ export default function AdminNotificationsPage() {
       !composeForm.degreeFacultyCode ||
       !composeForm.degreeCodeTarget
     ) {
+      setAvailableIntakes([]);
+      setIsLoadingIntakes(false);
+      setIntakeLoadError("");
       return;
     }
 
     const controller = new AbortController();
+    setIsLoadingIntakes(true);
+    setIntakeLoadError("");
     const query = new URLSearchParams({
       faculty: composeForm.degreeFacultyCode,
       degree: composeForm.degreeCodeTarget,
@@ -628,6 +1103,134 @@ export default function AdminNotificationsPage() {
     composeForm.degreeFacultyCode,
   ]);
 
+  useEffect(() => {
+    if (
+      composeForm.audienceType !== "Degree Program" ||
+      !composeForm.degreeFacultyCode ||
+      !composeForm.degreeCodeTarget
+    ) {
+      setAvailableSubgroupOptions([]);
+      setIsLoadingSubgroups(false);
+      setSubgroupLoadError("");
+      return;
+    }
+
+    const filteredIntakeIds = composeForm.allIntakes
+      ? semesterFilteredIntakes.map((item) => item.id)
+      : composeForm.intakeTargets.filter((intakeId) =>
+          semesterFilteredIntakes.some((item) => item.id === intakeId)
+        );
+
+    if (filteredIntakeIds.length === 0) {
+      setAvailableSubgroupOptions([]);
+      setIsLoadingSubgroups(false);
+      setSubgroupLoadError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    setIsLoadingSubgroups(true);
+    setSubgroupLoadError("");
+
+    void Promise.all(
+      filteredIntakeIds.map(async (intakeId) => {
+        const query = new URLSearchParams({
+          facultyId: composeForm.degreeFacultyCode,
+          degreeProgramId: composeForm.degreeCodeTarget,
+          status: "ACTIVE",
+        });
+        if (composeForm.streamTarget !== "ALL") {
+          query.set("stream", composeForm.streamTarget);
+        }
+
+        const response = await fetch(
+          `/api/intakes/${encodeURIComponent(intakeId)}/subgroups?${query.toString()}`,
+          {
+            signal: controller.signal,
+            headers: {
+              ...authHeaders(),
+            },
+          }
+        );
+        if (!response.ok) {
+          throw new Error("Failed to load subgroups.");
+        }
+
+        const payload = (await response.json().catch(() => null)) as
+          | IntakeSubgroupApiResponse
+          | null;
+        const rows = Array.isArray(payload?.items) ? payload.items : [];
+        return rows
+          .map((row) => String(row.code ?? "").trim())
+          .filter(Boolean);
+      })
+    )
+      .then((allSubgroups) => {
+        if (cancelled) {
+          return;
+        }
+
+        const nextOptions = Array.from(new Set(allSubgroups.flat())).sort((left, right) =>
+          left.localeCompare(right, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
+        );
+        setAvailableSubgroupOptions(nextOptions);
+        setComposeForm((previous) => {
+          if (previous.allSubgroups || previous.subgroupTargets.length === 0) {
+            return previous;
+          }
+
+          const nextTargets = previous.subgroupTargets.filter((item) =>
+            nextOptions.includes(item)
+          );
+          if (nextTargets.length === previous.subgroupTargets.length) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            subgroupTargets: nextTargets,
+          };
+        });
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          (error as { name?: string }).name === "AbortError"
+        ) {
+          return;
+        }
+        if (cancelled) {
+          return;
+        }
+        setAvailableSubgroupOptions([]);
+        setSubgroupLoadError("Unable to load subgroups for selected intakes.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingSubgroups(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    composeForm.audienceType,
+    composeForm.allIntakes,
+    composeForm.degreeCodeTarget,
+    composeForm.degreeFacultyCode,
+    composeForm.intakeTargets,
+    composeForm.streamTarget,
+    semesterFilteredIntakes,
+  ]);
+
   const buildDegreeProgramTargeting = (
     form: ComposeFormState
   ): NotificationTargeting => {
@@ -658,10 +1261,11 @@ export default function AdminNotificationsPage() {
     if (form.audienceType === "All") return "All Users";
     if (form.audienceType === "Role") return form.roleTarget;
     if (form.audienceType === "Faculty") {
+      const facultyCode = resolveFacultyCode(form.facultyTarget);
       const facultyLabel =
-        ACADEMIC_FACULTY_OPTIONS.find((item) => item.code === form.facultyTarget)?.label ??
+        facultyOptions.find((item) => item.code === facultyCode)?.label ??
         form.facultyTarget;
-      return facultyLabel;
+      return facultyCode ? `${facultyCode} - ${facultyLabel}` : facultyLabel;
     }
     if (form.audienceType === "Semester") {
       return form.audienceSemesterTarget === "ALL"
@@ -782,9 +1386,15 @@ export default function AdminNotificationsPage() {
     setComposeMode("create");
     setEditingAnnouncementId(null);
     setComposeForm(createDefaultComposeState());
+    setDegreeOptions([]);
     setAvailableIntakes([]);
+    setAvailableSubgroupOptions([]);
     setIntakeLoadError("");
+    setDegreeLoadError("");
+    setSubgroupLoadError("");
+    setIsLoadingDegrees(false);
     setIsLoadingIntakes(false);
+    setIsLoadingSubgroups(false);
     setComposeErrors({});
     setComposeOpen(true);
   };
@@ -797,13 +1407,11 @@ export default function AdminNotificationsPage() {
     defaultState.channel = announcement.channel;
     defaultState.priority = announcement.priority;
     defaultState.deliveryMode = announcement.status === "Scheduled" ? "schedule" : "send_now";
-    if (announcement.audienceType === "Role") defaultState.roleTarget = announcement.audienceLabel;
+    if (announcement.audienceType === "Role") {
+      defaultState.roleTarget = normalizeRoleTargetLabel(announcement.audienceLabel);
+    }
     if (announcement.audienceType === "Faculty") {
-      const matchingFaculty = ACADEMIC_FACULTY_OPTIONS.find(
-        (item) =>
-          item.code === announcement.audienceLabel || item.label === announcement.audienceLabel
-      );
-      defaultState.facultyTarget = matchingFaculty?.code ?? "";
+      defaultState.facultyTarget = resolveFacultyCode(announcement.audienceLabel);
     }
     if (announcement.audienceType === "Semester") {
       const normalizedSemester = String(announcement.audienceLabel ?? "").trim();
@@ -833,9 +1441,15 @@ export default function AdminNotificationsPage() {
       }
     }
     if (announcement.audienceType !== "Degree Program") {
+      setDegreeOptions([]);
       setAvailableIntakes([]);
+      setAvailableSubgroupOptions([]);
+      setDegreeLoadError("");
       setIntakeLoadError("");
+      setSubgroupLoadError("");
+      setIsLoadingDegrees(false);
       setIsLoadingIntakes(false);
+      setIsLoadingSubgroups(false);
     }
     setComposeMode("edit");
     setEditingAnnouncementId(announcement.id);
@@ -849,15 +1463,19 @@ export default function AdminNotificationsPage() {
     return `ann-${String(idCounter.current).padStart(3, "0")}`;
   };
 
-  const upsertAnnouncement = (status: AnnouncementStatus) => {
+  const upsertAnnouncement = async (status: AnnouncementStatus) => {
+    const existingAnnouncement =
+      composeMode === "edit" && editingAnnouncementId
+        ? sentAnnouncements.find((item) => item.id === editingAnnouncementId) ?? null
+        : null;
     const degreeTargeting =
       composeForm.audienceType === "Degree Program" &&
       composeForm.degreeFacultyCode &&
       composeForm.degreeCodeTarget
         ? buildDegreeProgramTargeting(composeForm)
         : undefined;
-
-    const announcement: Announcement = {
+    const audienceLabel = buildAudienceLabel(composeForm, degreeTargeting);
+    const baseAnnouncement: Announcement = {
       id:
         composeMode === "edit" && editingAnnouncementId
           ? editingAnnouncementId
@@ -865,7 +1483,7 @@ export default function AdminNotificationsPage() {
       title: composeForm.title.trim() || "Untitled Draft",
       message: composeForm.message.trim(),
       audienceType: composeForm.audienceType,
-      audienceLabel: buildAudienceLabel(composeForm, degreeTargeting),
+      audienceLabel,
       targeting: degreeTargeting,
       channel: composeForm.channel,
       status,
@@ -876,6 +1494,34 @@ export default function AdminNotificationsPage() {
           : status === "Draft"
             ? "Not scheduled"
             : currentTimestamp(),
+      publishedAt:
+        status === "Sent"
+          ? String(existingAnnouncement?.publishedAt ?? "").trim() ||
+            new Date().toISOString()
+          : undefined,
+    };
+    const audience = buildNotificationAudience(baseAnnouncement);
+
+    let tracking: AnnouncementDeliveryTracking | undefined;
+    let deliveryError = "";
+    if (status !== "Draft") {
+      try {
+        const recipients = await resolveAudienceRecipients(audience);
+        tracking = buildAnnouncementDeliveryTracking(recipients, composeForm.channel);
+      } catch (error) {
+        deliveryError =
+          error instanceof Error
+            ? error.message
+            : "Failed to resolve audience recipients";
+        tracking = buildAnnouncementDeliveryTracking([], composeForm.channel);
+      }
+    }
+
+    const announcement: Announcement = {
+      ...baseAnnouncement,
+      audience,
+      tracking,
+      deliveryError: deliveryError || undefined,
     };
 
     setSentAnnouncements((previous) => {
@@ -884,21 +1530,59 @@ export default function AdminNotificationsPage() {
       }
       return [announcement, ...previous];
     });
+
+    if (status !== "Draft") {
+      const summary = tracking
+        ? `Recipients ${tracking.totalRecipients}, Web ${tracking.webRecipientCount}, Email addresses ${tracking.totalEmailAddresses}`
+        : "Tracking not resolved";
+      const preview = deliveryError ? `Delivery issue: ${deliveryError}` : summary;
+      const eventLabel = status === "Scheduled" ? "scheduled" : "sent";
+      setInboxNotifications((previous) => [
+        {
+          id: `delivery-${announcement.id}-${Date.now()}`,
+          type: "Delivery",
+          subject: `Announcement ${eventLabel}: ${announcement.title}`,
+          preview,
+          message: `${announcement.message}\n\n${summary}`,
+          source: "Targeted Notification Engine",
+          timestamp: currentTimestamp(),
+          read: false,
+        },
+        ...previous,
+      ]);
+    }
   };
 
-  const handleSaveDraft = () => {
-    upsertAnnouncement("Draft");
-    setComposeOpen(false);
-    setComposeErrors({});
+  const handleSaveDraft = async () => {
+    if (isComposeSubmitting) {
+      return;
+    }
+
+    setIsComposeSubmitting(true);
+    try {
+      await upsertAnnouncement("Draft");
+      setComposeOpen(false);
+      setComposeErrors({});
+    } finally {
+      setIsComposeSubmitting(false);
+    }
   };
 
-  const handleSendOrSchedule = () => {
+  const handleSendOrSchedule = async () => {
+    if (isComposeSubmitting) {
+      return;
+    }
     if (!validateCompose()) return;
     const nextStatus: AnnouncementStatus =
       composeForm.deliveryMode === "schedule" ? "Scheduled" : "Sent";
-    upsertAnnouncement(nextStatus);
-    setComposeOpen(false);
-    setComposeErrors({});
+    setIsComposeSubmitting(true);
+    try {
+      await upsertAnnouncement(nextStatus);
+      setComposeOpen(false);
+      setComposeErrors({});
+    } finally {
+      setIsComposeSubmitting(false);
+    }
   };
 
   const handleAnnouncementAction = (
@@ -915,6 +1599,9 @@ export default function AdminNotificationsPage() {
         title: `${announcement.title} (Copy)`,
         status: "Draft",
         deliveryAt: "Not scheduled",
+        publishedAt: undefined,
+        tracking: undefined,
+        deliveryError: undefined,
       };
       setSentAnnouncements((previous) => [duplicated, ...previous]);
     }
@@ -1100,11 +1787,19 @@ export default function AdminNotificationsPage() {
                           </p>
                         </td>
                         <td className="px-5 py-4 text-[#26150F]/82">
-                          {announcement.audienceLabel}
+                          <p>{announcement.audienceLabel}</p>
+                          <p className="mt-0.5 text-xs text-[#26150F]/62">
+                            {trackingSummary(announcement)}
+                          </p>
+                          {announcement.deliveryError ? (
+                            <p className="mt-0.5 text-xs text-red-700">
+                              {announcement.deliveryError}
+                            </p>
+                          ) : null}
                         </td>
                         <td className="px-5 py-4">
                           <span className="inline-flex rounded-full border border-black/12 bg-black/5 px-2.5 py-1 text-xs font-semibold text-[#26150F]/82">
-                            {announcement.channel}
+                            {channelLabel(announcement.channel)}
                           </span>
                         </td>
                         <td className="px-5 py-4">
@@ -1394,7 +2089,7 @@ export default function AdminNotificationsPage() {
         <div
           className="fixed inset-0 z-50 bg-black/35 backdrop-blur-sm"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (event.target === event.currentTarget && !isComposeSubmitting) {
               setComposeOpen(false);
               setComposeErrors({});
             }
@@ -1422,7 +2117,11 @@ export default function AdminNotificationsPage() {
               <button
                 aria-label="Close compose announcement panel"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/15 text-[#26150F]/80 transition-colors duration-200 hover:border-[#034AA6]/55 hover:text-[#0339A6]"
+                disabled={isComposeSubmitting}
                 onClick={() => {
+                  if (isComposeSubmitting) {
+                    return;
+                  }
                   setComposeOpen(false);
                   setComposeErrors({});
                 }}
@@ -1523,9 +2222,9 @@ export default function AdminNotificationsPage() {
                       value={composeForm.roleTarget}
                     >
                       <option value="">Select Role</option>
-                      {ROLE_OPTIONS.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
+                      {ROLE_OPTIONS.map((roleOption) => (
+                        <option key={roleOption.label} value={roleOption.label}>
+                          {roleOption.label}
                         </option>
                       ))}
                     </Select>
@@ -1539,6 +2238,7 @@ export default function AdminNotificationsPage() {
                     </label>
                     <Select
                       className="mt-1 h-11 rounded-xl"
+                      disabled={isLoadingFaculties}
                       id="target-faculty"
                       onChange={(event) =>
                         setComposeForm((previous) => ({
@@ -1549,12 +2249,15 @@ export default function AdminNotificationsPage() {
                       value={composeForm.facultyTarget}
                     >
                       <option value="">Select Faculty</option>
-                      {ACADEMIC_FACULTY_OPTIONS.map((faculty) => (
+                      {facultyOptions.map((faculty) => (
                         <option key={faculty.code} value={faculty.code}>
                           {faculty.code} - {faculty.label}
                         </option>
                       ))}
                     </Select>
+                    {facultyLoadError ? (
+                      <p className="mt-1 text-xs text-[#0339A6]">{facultyLoadError}</p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1592,6 +2295,7 @@ export default function AdminNotificationsPage() {
                         </label>
                         <Select
                           className="mt-1 h-11 rounded-xl"
+                          disabled={isLoadingFaculties}
                           id="target-program-faculty"
                           onChange={(event) => {
                             setComposeForm((previous) => ({
@@ -1607,16 +2311,22 @@ export default function AdminNotificationsPage() {
                             setAvailableIntakes([]);
                             setIntakeLoadError("");
                             setIsLoadingIntakes(false);
+                            setAvailableSubgroupOptions([]);
+                            setSubgroupLoadError("");
+                            setIsLoadingSubgroups(false);
                           }}
                           value={composeForm.degreeFacultyCode}
                         >
                           <option value="">Select Faculty</option>
-                          {ACADEMIC_FACULTY_OPTIONS.map((faculty) => (
+                          {facultyOptions.map((faculty) => (
                             <option key={faculty.code} value={faculty.code}>
                               {faculty.code} - {faculty.label}
                             </option>
                           ))}
                         </Select>
+                        {facultyLoadError ? (
+                          <p className="mt-1 text-xs text-[#0339A6]">{facultyLoadError}</p>
+                        ) : null}
                       </div>
                       <div>
                         <label className="text-sm font-medium text-[#26150F]" htmlFor="target-program">
@@ -1624,6 +2334,7 @@ export default function AdminNotificationsPage() {
                         </label>
                         <Select
                           className="mt-1 h-11 rounded-xl"
+                          disabled={!composeForm.degreeFacultyCode || isLoadingDegrees}
                           id="target-program"
                           onChange={(event) => {
                             setComposeForm((previous) => ({
@@ -1637,9 +2348,10 @@ export default function AdminNotificationsPage() {
                             }));
                             setAvailableIntakes([]);
                             setIntakeLoadError("");
-                            setIsLoadingIntakes(
-                              Boolean(event.target.value && composeForm.degreeFacultyCode)
-                            );
+                            setIsLoadingIntakes(false);
+                            setAvailableSubgroupOptions([]);
+                            setSubgroupLoadError("");
+                            setIsLoadingSubgroups(false);
                           }}
                           value={composeForm.degreeCodeTarget}
                         >
@@ -1650,6 +2362,9 @@ export default function AdminNotificationsPage() {
                             </option>
                           ))}
                         </Select>
+                        {degreeLoadError ? (
+                          <p className="mt-1 text-xs text-[#0339A6]">{degreeLoadError}</p>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1771,7 +2486,9 @@ export default function AdminNotificationsPage() {
 
                       {availableSubgroupOptions.length === 0 ? (
                         <p className="text-xs text-[#26150F]/70">
-                          Select intake filters to enable subgroup selection.
+                          {isLoadingSubgroups
+                            ? "Loading subgroups..."
+                            : "Select intake filters to enable subgroup selection."}
                         </p>
                       ) : (
                         <div className="grid grid-cols-2 gap-1 rounded-lg border border-black/10 bg-white p-2">
@@ -1796,6 +2513,9 @@ export default function AdminNotificationsPage() {
                           ))}
                         </div>
                       )}
+                      {subgroupLoadError ? (
+                        <p className="text-xs text-[#0339A6]">{subgroupLoadError}</p>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -1821,9 +2541,9 @@ export default function AdminNotificationsPage() {
                     }
                     value={composeForm.channel}
                   >
-                    <option value="In-app">In-app</option>
-                    <option value="Email">Email</option>
-                    <option value="Both">Both</option>
+                    <option value="In-app">Notification (Web)</option>
+                    <option value="Email">Email Only</option>
+                    <option value="Both">Email + Notification</option>
                   </Select>
                 </div>
                 <div>
@@ -1922,7 +2642,11 @@ export default function AdminNotificationsPage() {
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-4">
               <Button
                 className="rounded-xl border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
+                disabled={isComposeSubmitting}
                 onClick={() => {
+                  if (isComposeSubmitting) {
+                    return;
+                  }
                   setComposeOpen(false);
                   setComposeErrors({});
                 }}
@@ -1934,7 +2658,10 @@ export default function AdminNotificationsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   className="rounded-xl border-black/20 bg-white text-[#26150F] hover:border-[#0339A6]/55 hover:bg-[#034AA6]/5 hover:text-[#0339A6]"
-                  onClick={handleSaveDraft}
+                  disabled={isComposeSubmitting}
+                  onClick={() => {
+                    void handleSaveDraft();
+                  }}
                   type="button"
                   variant="secondary"
                 >
@@ -1942,11 +2669,18 @@ export default function AdminNotificationsPage() {
                 </Button>
                 <Button
                   className="gap-2 rounded-xl bg-[#034AA6] text-[#D9D9D9] hover:bg-[#0339A6]"
-                  onClick={handleSendOrSchedule}
+                  disabled={isComposeSubmitting}
+                  onClick={() => {
+                    void handleSendOrSchedule();
+                  }}
                   type="button"
                 >
                   {composeForm.deliveryMode === "schedule" ? <Mail size={15} /> : <Send size={15} />}
-                  {composeForm.deliveryMode === "schedule" ? "Schedule" : "Send"}
+                  {isComposeSubmitting
+                    ? "Processing..."
+                    : composeForm.deliveryMode === "schedule"
+                      ? "Schedule"
+                      : "Send"}
                 </Button>
               </div>
             </div>
@@ -1981,6 +2715,14 @@ export default function AdminNotificationsPage() {
                 <p className="mt-1 text-sm text-[#26150F]/68">
                   {previewAnnouncement.audienceLabel} • {previewAnnouncement.deliveryAt}
                 </p>
+                <p className="mt-1 text-xs text-[#26150F]/62">
+                  {trackingSummary(previewAnnouncement)} • {channelLabel(previewAnnouncement.channel)}
+                </p>
+                {previewAnnouncement.deliveryError ? (
+                  <p className="mt-1 text-xs text-red-700">
+                    {previewAnnouncement.deliveryError}
+                  </p>
+                ) : null}
               </div>
               <button
                 aria-label="Close preview"

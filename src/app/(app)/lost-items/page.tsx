@@ -10,11 +10,12 @@ import {
   type AnnouncementRecord,
 } from "@/models/announcement-center";
 import {
-  listNotificationsForRole,
+  listNotificationsForUser,
   type NotificationFeedItem,
 } from "@/models/notification-center";
 import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
 import type { FoundItemRecord, LostItemReport } from "@/models/portal-types";
+import { readStoredUser } from "@/models/rbac";
 
 function formatDateTime(value: string) {
   const parsed = new Date(value);
@@ -34,9 +35,10 @@ export default function LostItemsDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const currentUser = readStoredUser();
     void Promise.all([
       listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
-      listNotificationsForRole("LOST_ITEM_STAFF").catch(
+      listNotificationsForUser(currentUser, "LOST_ITEM_STAFF").catch(
         () => [] as NotificationFeedItem[]
       ),
       loadPortalData<LostItemReport[]>(PORTAL_DATA_KEYS.lostItemReports, []),

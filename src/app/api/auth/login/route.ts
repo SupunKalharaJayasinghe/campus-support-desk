@@ -202,6 +202,7 @@ export async function POST(request: Request) {
       user: {
         id: String(user._id ?? ""),
         role,
+        userRole: String(user.role ?? "").trim().toUpperCase(),
         name: displayName || "User",
         username: String(user.username ?? "").trim(),
         email: String(user.email ?? "").trim().toLowerCase(),
