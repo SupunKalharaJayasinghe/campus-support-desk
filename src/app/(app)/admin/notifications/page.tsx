@@ -200,6 +200,16 @@ interface AnnouncementDeliveryTracking {
   recipients: AnnouncementDeliveryRecipient[];
 }
 
+interface EmailDeliveryResponse {
+  sentRecipients?: number;
+  totalRecipients?: number;
+  totalAddresses?: number;
+  sentAddresses?: number;
+  failedAddresses?: number;
+  failedEmailList?: string[];
+  message?: string;
+}
+
 const ROLE_OPTIONS: RoleTargetOption[] = [
   {
     label: "Student",
@@ -417,6 +427,32 @@ async function resolveAudienceRecipients(audience: NotificationAudience) {
     primaryEmail: normalizeEmail(row.primaryEmail),
     optionalEmail: normalizeEmail(row.optionalEmail),
   }));
+}
+
+async function sendAnnouncementEmailDelivery(input: {
+  title: string;
+  message: string;
+  targetLabel: string;
+  recipients: AnnouncementDeliveryRecipient[];
+}) {
+  const response = await fetch("/api/notifications/email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | EmailDeliveryResponse
+    | null;
+  const normalized = payload ?? {};
+  if (!response.ok) {
+    throw new Error(normalized.message || "Failed to send email notifications");
+  }
+
+  return normalized;
 }
 
 function buildAnnouncementDeliveryTracking(
@@ -1504,10 +1540,33 @@ export default function AdminNotificationsPage() {
 
     let tracking: AnnouncementDeliveryTracking | undefined;
     let deliveryError = "";
+    let emailDeliverySummary = "";
     if (status !== "Draft") {
       try {
         const recipients = await resolveAudienceRecipients(audience);
         tracking = buildAnnouncementDeliveryTracking(recipients, composeForm.channel);
+        if (
+          status === "Sent" &&
+          supportsEmailNotification(composeForm.channel) &&
+          tracking.totalEmailAddresses > 0
+        ) {
+          const delivery = await sendAnnouncementEmailDelivery({
+            title: baseAnnouncement.title,
+            message: baseAnnouncement.message,
+            targetLabel: audienceLabel,
+            recipients: tracking.recipients,
+          });
+          const sentAddresses = Math.max(0, Math.floor(Number(delivery.sentAddresses) || 0));
+          const totalAddresses = Math.max(0, Math.floor(Number(delivery.totalAddresses) || 0));
+          emailDeliverySummary =
+            delivery.message ||
+            `Delivered to ${sentAddresses}/${totalAddresses} email addresses.`;
+        } else if (
+          status === "Sent" &&
+          supportsEmailNotification(composeForm.channel)
+        ) {
+          emailDeliverySummary = "No recipient email addresses found.";
+        }
       } catch (error) {
         deliveryError =
           error instanceof Error
@@ -1535,7 +1594,11 @@ export default function AdminNotificationsPage() {
       const summary = tracking
         ? `Recipients ${tracking.totalRecipients}, Web ${tracking.webRecipientCount}, Email addresses ${tracking.totalEmailAddresses}`
         : "Tracking not resolved";
-      const preview = deliveryError ? `Delivery issue: ${deliveryError}` : summary;
+      const preview = deliveryError
+        ? `Delivery issue: ${deliveryError}`
+        : emailDeliverySummary
+          ? `${summary} | ${emailDeliverySummary}`
+          : summary;
       const eventLabel = status === "Scheduled" ? "scheduled" : "sent";
       setInboxNotifications((previous) => [
         {
@@ -1543,7 +1606,7 @@ export default function AdminNotificationsPage() {
           type: "Delivery",
           subject: `Announcement ${eventLabel}: ${announcement.title}`,
           preview,
-          message: `${announcement.message}\n\n${summary}`,
+          message: `${announcement.message}\n\n${summary}${emailDeliverySummary ? `\n${emailDeliverySummary}` : ""}`,
           source: "Targeted Notification Engine",
           timestamp: currentTimestamp(),
           read: false,
