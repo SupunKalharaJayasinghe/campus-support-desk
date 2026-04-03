@@ -142,7 +142,7 @@ export default function CommunityAdminMembersPage() {
       setMembersError(null);
     }
     try {
-      const response = await fetch("/api/community-members");
+      const response = await fetch("/api/community-members", { headers: authHeaders() });
       const data: unknown = await response.json();
       setMembers(parseMembersPayload(data));
       setMembersError(null);

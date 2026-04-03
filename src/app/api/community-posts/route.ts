@@ -20,7 +20,9 @@ import {
   applyCommunityProfileInc,
   COMMUNITY_POINTS_PER_POST,
 } from "@/lib/community-profile-points";
+import { authorMemberPointsForViewer } from "@/lib/community-profile-visibility";
 import { getCommunityMemberFieldsByUserRefs } from "@/lib/community-feed-member-fields";
+import { isCommunityAdminRole, resolveActiveApiUser } from "@/lib/resolve-api-user";
 import { CommunityProfileModel } from "@/models/CommunityProfile";
 import { CommunityUrgentPrepayModel } from "@/models/communityUrgentPrepay";
 import CommunityPost from "@/models/communityPost";
@@ -454,6 +456,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     await connectDB();
+    const actor = await resolveActiveApiUser(req);
+    const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
     const { searchParams } = new URL(req.url);
     const viewerId = toTrimmedString(searchParams.get("viewerId"));
 
@@ -525,7 +529,12 @@ export async function GET(req: Request) {
         likedByCurrentUser: likedByViewerSet.has(postId),
         reportedByCurrentUser: reportedByViewerSet.has(postId),
         authorMemberDisplayName: liveName || snapshotName || "Community User",
-        authorMemberPoints: member != null ? member.points : 0,
+        authorMemberPoints: authorMemberPointsForViewer({
+          member,
+          authorUserId: authorKey,
+          viewerUserId: viewerObjectId,
+          viewerIsCommunityAdmin,
+        }),
       };
     });
 

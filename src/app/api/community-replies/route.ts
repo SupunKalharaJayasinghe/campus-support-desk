@@ -8,7 +8,9 @@ import {
   normalizeOptionalReplyAttachmentUrl,
   normalizeReplyAttachmentName,
 } from "@/lib/community-reply-attachment";
+import { authorMemberPointsForViewer } from "@/lib/community-profile-visibility";
 import { getCommunityMemberFieldsByUserRefs } from "@/lib/community-feed-member-fields";
+import { isCommunityAdminRole, resolveActiveApiUser } from "@/lib/resolve-api-user";
 import CommunityPost from "@/models/communityPost";
 import CommunityReply from "@/models/communityReply";
 import CommunityReplyLike from "@/models/communityReplyLike";
@@ -119,7 +121,12 @@ export async function POST(req: Request) {
         likesCount: 0,
         likedByCurrentUser: false,
         authorMemberDisplayName: liveName || snapshotName || "Community User",
-        authorMemberPoints: member != null ? member.points : 0,
+        authorMemberPoints: authorMemberPointsForViewer({
+          member,
+          authorUserId: String(authorId),
+          viewerUserId: String(authorId),
+          viewerIsCommunityAdmin: false,
+        }),
       },
       { status: 201 }
     );
@@ -132,6 +139,9 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     await connectDB();
+
+    const actor = await resolveActiveApiUser(req);
+    const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
 
     const { searchParams } = new URL(req.url);
     const postId = searchParams.get("postId");
@@ -201,7 +211,12 @@ export async function GET(req: Request) {
         likesCount: likeCountByReplyId.get(replyId) ?? 0,
         likedByCurrentUser: likedByViewerSet.has(replyId),
         authorMemberDisplayName: liveName || snapshotName || "Community User",
-        authorMemberPoints: member != null ? member.points : 0,
+        authorMemberPoints: authorMemberPointsForViewer({
+          member,
+          authorUserId: authorKey,
+          viewerUserId: viewerObjectId,
+          viewerIsCommunityAdmin,
+        }),
       };
     });
 
