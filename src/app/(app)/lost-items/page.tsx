@@ -35,7 +35,7 @@ export default function LostItemsDashboardPage() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
+      listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
       listNotificationsForRole("LOST_ITEM_STAFF").catch(
         () => [] as NotificationFeedItem[]
       ),

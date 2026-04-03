@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
@@ -16,6 +17,10 @@ import {
   getConsultationBookingStatusLabel,
   isActiveConsultationBookingStatus,
 } from "@/models/consultation-booking";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
 
 interface LecturerAssignedModuleApiRecord {
   id: string;
@@ -82,20 +87,30 @@ function readMessage(payload: unknown) {
   return String(row?.message ?? "").trim();
 }
 
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
+
 export default function LecturerDashboardPage() {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<ConsultationBookingApiRecord[]>([]);
   const [notifications, setNotifications] = useState<ConsultationNotificationApiRecord[]>([]);
   const [assignedModules, setAssignedModules] = useState<LecturerAssignedModuleApiRecord[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        const [bookingPayload, notificationPayload, modulePayload] = await Promise.all([
+        const [bookingPayload, notificationPayload, announcementRows, modulePayload] = await Promise.all([
           listLecturerConsultationBookings(),
           listConsultationNotifications(),
+          listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
           (async () => {
             const response = await fetch("/api/lecturers/me/offerings", {
               cache: "no-store",
@@ -114,6 +129,7 @@ export default function LecturerDashboardPage() {
         if (!cancelled) {
           setBookings(bookingPayload.items);
           setNotifications(notificationPayload.items);
+          setAnnouncements(announcementRows);
           setAssignedModules(parseAssignedModules(modulePayload));
         }
       } catch (error) {
@@ -289,6 +305,39 @@ export default function LecturerDashboardPage() {
               ))}
             </div>
           )}
+        </Card>
+      </section>
+
+      <section>
+        <Card title="Latest Announcements" description="Recent announcements shared with all users">
+          {loading ? (
+            <p className="text-sm text-text/70">Loading announcements...</p>
+          ) : announcements.length === 0 ? (
+            <p className="text-sm text-text/70">No announcements available yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {announcements.map((item) => (
+                <div
+                  className="rounded-2xl border border-border bg-tint px-4 py-3"
+                  key={item.id}
+                >
+                  <p className="text-sm font-semibold text-heading">{item.title}</p>
+                  <p className="mt-1 text-xs text-text/70">{item.message}</p>
+                  <p className="mt-1 text-[11px] text-text/55">
+                    {item.targetLabel} • {formatDateTime(item.createdAt)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-4">
+            <Link
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+              href="/announcements"
+            >
+              View All
+            </Link>
+          </div>
         </Card>
       </section>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -15,6 +16,10 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Skeleton from "@/components/ui/Skeleton";
 import { authHeaders, updateStoredUser } from "@/models/rbac";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
 import {
   getStudentPortalSessionUser,
   resolveCurrentStudentRecord,
@@ -302,6 +307,7 @@ export default function StudentDashboardPage() {
   const [error, setError] = useState("");
   const [profileMissing, setProfileMissing] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardState | null>(null);
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -389,11 +395,12 @@ export default function StudentDashboardPage() {
       const student = await resolveCurrentStudentRecord(sessionUser);
       if (!student) {
         setDashboard(null);
+        setAnnouncements([]);
         setProfileMissing(true);
         return;
       }
 
-      const [performance, points, quizzes, trophies, communityPosts] = await Promise.all([
+      const [performance, points, quizzes, trophies, communityPosts, latestAnnouncements] = await Promise.all([
         fetchOptionalApiData<DashboardPerformanceData>(
           `/api/performance/${encodeURIComponent(student.id)}`
         ),
@@ -407,6 +414,7 @@ export default function StudentDashboardPage() {
           `/api/gamification/trophies/${encodeURIComponent(student.id)}`
         ),
         fetchOptionalPosts(sessionUser.id),
+        listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
       ]);
 
       setDashboard({
@@ -418,9 +426,11 @@ export default function StudentDashboardPage() {
         trophies,
         communityPosts,
       });
+      setAnnouncements(latestAnnouncements);
     } catch (loadError) {
       setProfileMissing(false);
       setDashboard(null);
+      setAnnouncements([]);
       setError(
         loadError instanceof Error
           ? loadError.message
@@ -691,6 +701,32 @@ export default function StudentDashboardPage() {
           </div>
         </Card>
       </section>
+
+      <Card title="Latest Announcements">
+        {announcements.length === 0 ? (
+          <p className="text-sm text-text/70">No announcements available yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {announcements.map((item) => (
+              <div className="rounded-2xl bg-tint px-4 py-3" key={item.id}>
+                <p className="text-sm font-semibold text-heading">{item.title}</p>
+                <p className="mt-1 text-xs text-text/72">{item.message}</p>
+                <p className="mt-1 text-[11px] text-text/60">
+                  {item.targetLabel} • {new Date(item.createdAt).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-4">
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+            href="/announcements"
+          >
+            View All
+          </Link>
+        </div>
+      </Card>
 
       <Card title="Security Settings">
         <div className="flex flex-wrap items-center justify-between gap-3">

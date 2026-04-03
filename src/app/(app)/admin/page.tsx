@@ -242,7 +242,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      listLatestAnnouncements(3).catch(() => [] as AnnouncementRecord[]),
+      listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
       listNotificationsForRole("SUPER_ADMIN").catch(
         () => [] as NotificationFeedItem[]
       ),
@@ -363,7 +363,7 @@ export default function AdminDashboardPage() {
             )}
             <Link
               className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-              href="/admin/communication/announcements"
+              href="/announcements"
             >
               View All
             </Link>

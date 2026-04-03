@@ -1,80 +1,19 @@
 import { NextResponse } from "next/server";
 import "@/models/Announcement";
+import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import { AnnouncementModel } from "@/models/Announcement";
-
-interface AnnouncementApiRecord {
-  id: string;
-  title: string;
-  message: string;
-  targetLabel: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function collapseSpaces(value: unknown) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function parseLimit(value: string | null) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 100;
-  }
-  return Math.max(1, Math.min(500, Math.floor(parsed)));
-}
-
-function toIsoDate(value: unknown) {
-  const raw = String(value ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-  return parsed.toISOString();
-}
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function toApiRecord(value: unknown): AnnouncementApiRecord | null {
-  const row = asObject(value);
-  if (!row) {
-    return null;
-  }
-
-  const id = collapseSpaces(row._id ?? row.id);
-  const title = collapseSpaces(row.title).slice(0, 180);
-  const message = collapseSpaces(row.message).slice(0, 3000);
-  const targetLabel = collapseSpaces(row.targetLabel || "All users").slice(0, 140) || "All users";
-  const createdBy = collapseSpaces(row.createdBy || "Admin").slice(0, 120) || "Admin";
-  const createdAt = toIsoDate(row.createdAt);
-  const updatedAt = toIsoDate(row.updatedAt);
-  if (!id || !title || !message || !createdAt || !updatedAt) {
-    return null;
-  }
-
-  return {
-    id,
-    title,
-    message,
-    targetLabel,
-    createdBy,
-    createdAt,
-    updatedAt,
-  };
-}
+import {
+  collapseSpaces,
+  parseBooleanQuery,
+  parseLimit,
+  resolveAnnouncementActor,
+  toAnnouncementApiRecord,
+} from "@/models/announcement-api";
 
 export async function GET(request: Request) {
   const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
+  if (!mongooseConnection) {
     return NextResponse.json(
       { message: "Database connection is required" },
       { status: 503 }
@@ -83,17 +22,31 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const limit = parseLimit(searchParams.get("limit"));
+  const includeDeletedRequested = parseBooleanQuery(
+    searchParams.get("includeDeleted")
+  );
+  const actor = await resolveAnnouncementActor(request);
+  const includeDeleted = includeDeletedRequested && actor?.role === "SUPER_ADMIN";
 
-  const rows = (await AnnouncementModel.find({})
-    .sort({ createdAt: -1 })
-    .limit(limit)
+  const mongoQuery: Record<string, unknown> = includeDeleted
+    ? {}
+    : { isDeleted: { $ne: true } };
+
+  const query = AnnouncementModel.find(mongoQuery).sort({ createdAt: -1 });
+  if (typeof limit === "number") {
+    query.limit(limit);
+  }
+
+  const rows = (await query
     .lean()
     .exec()
     .catch(() => [])) as unknown[];
 
   const items = rows
-    .map((row) => toApiRecord(row))
-    .filter((row): row is AnnouncementApiRecord => Boolean(row));
+    .map((row) => toAnnouncementApiRecord(row, actor))
+    .filter((row): row is NonNullable<ReturnType<typeof toAnnouncementApiRecord>> =>
+      Boolean(row)
+    );
 
   return NextResponse.json({ items });
 }
@@ -101,11 +54,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const mongooseConnection = await connectMongoose().catch(() => null);
-        if (!mongooseConnection) {
+    if (!mongooseConnection) {
       return NextResponse.json(
         { message: "Database connection is required" },
         { status: 503 }
       );
+    }
+
+    const actor = await resolveAnnouncementActor(request);
+    if (!actor) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const rawBody = (await request.json().catch(() => null)) as
@@ -115,8 +73,8 @@ export async function POST(request: Request) {
 
     const title = collapseSpaces(body.title).slice(0, 180);
     const message = collapseSpaces(body.message).slice(0, 3000);
-    const targetLabel = collapseSpaces(body.targetLabel || "All users").slice(0, 140) || "All users";
-    const createdBy = collapseSpaces(body.createdBy || "Admin").slice(0, 120) || "Admin";
+    const targetLabel =
+      collapseSpaces(body.targetLabel || "All users").slice(0, 140) || "All users";
     if (!title || !message) {
       return NextResponse.json(
         { message: "Title and message are required" },
@@ -128,10 +86,18 @@ export async function POST(request: Request) {
       title,
       message,
       targetLabel,
-      createdBy,
+      createdBy: actor.name,
+      authorUserId: actor.userId,
+      authorRole: actor.role,
+      authorEmail: actor.email,
+      updatedBy: actor.name,
+      updatedByUserId: actor.userId,
+      updatedByRole: actor.role,
+      updatedByEmail: actor.email,
+      isDeleted: false,
     });
 
-    const record = toApiRecord(created.toObject());
+    const record = toAnnouncementApiRecord(created.toObject(), actor);
     if (!record) {
       return NextResponse.json(
         { message: "Failed to map announcement" },
