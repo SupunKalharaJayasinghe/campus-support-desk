@@ -178,6 +178,7 @@ export default function CommunityProfilePage() {
         studyYear: "Year 2",
         points: 0,
         userId: "",
+        avatarUrl: "",
     }));
 
     useEffect(() => {
@@ -199,6 +200,7 @@ export default function CommunityProfilePage() {
             studyYear: settings.studyYear,
             points: 0,
             userId: storedUser?.id || "",
+            avatarUrl: settings.avatarUrl || "",
         });
     }, []);
 
@@ -219,6 +221,7 @@ export default function CommunityProfilePage() {
                       bio?: string;
                       faculty?: string;
                       studyYear?: string;
+                      avatarUrl?: string;
                       status?: "PUBLIC" | "PRIVATE";
                       points?: unknown;
                       postsCount?: unknown;
@@ -245,6 +248,7 @@ export default function CommunityProfilePage() {
                 email: String(db.email ?? "").trim() || prev.email,
                 faculty: String(db.faculty ?? "").trim() || prev.faculty,
                 studyYear: String(db.studyYear ?? "").trim() || prev.studyYear,
+                avatarUrl: String(db.avatarUrl ?? "").trim() || prev.avatarUrl,
                 joined: formatJoinedFromCreatedAt(db.createdAt, prev.joined),
                 stats: {
                     posts: pickFiniteNumber(
@@ -908,9 +912,18 @@ export default function CommunityProfilePage() {
                     <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-white to-blue-50 p-6 md:p-7">
                         <div className="flex flex-col gap-6 md:flex-row md:items-start">
                             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-                                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-100 text-blue-700 shadow-inner">
-                                    <User size={46} />
-                                </div>
+                                {profileData.avatarUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- data URLs / user avatar URLs
+                                    <img
+                                        src={profileData.avatarUrl}
+                                        alt=""
+                                        className="h-24 w-24 shrink-0 rounded-full border border-blue-200 bg-white object-cover shadow-inner"
+                                    />
+                                ) : (
+                                    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-100 text-blue-700 shadow-inner">
+                                        <User size={46} />
+                                    </div>
+                                )}
                                 <div className="text-center sm:text-left">
                                     <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                                         <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">{profileData.name}</h1>

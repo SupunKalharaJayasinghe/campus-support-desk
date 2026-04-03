@@ -54,7 +54,7 @@ const CommunityProfileSchema = new Schema(
     avatarUrl: {
       type: String,
       trim: true,
-      maxLength: 2048,
+      maxLength: 1_200_000,
       default: "",
     },
 

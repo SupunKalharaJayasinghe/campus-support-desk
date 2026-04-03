@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import Link from "next/link";
 import {
     ArrowLeft,
@@ -19,17 +20,28 @@ import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import communityBackground from "@/app/images/community/community2.jpg";
 import {
+    COMMUNITY_PROFILE_AVATAR_MAX_CHARS,
+    getCommunityProfileSettingsHydrationBaseline,
     readCommunityProfileSettings,
     saveCommunityProfileSettings,
     type CommunityProfileSettings,
 } from "@/lib/community-profile";
 import { authHeaders, readStoredUser, updateStoredUser } from "@/lib/rbac";
 
+const AVATAR_FILE_MAX_BYTES = 600 * 1024;
+
 export default function CommunitySettingsPage() {
-    const [form, setForm] = useState<CommunityProfileSettings>(() => readCommunityProfileSettings());
+    const [form, setForm] = useState<CommunityProfileSettings>(() =>
+        getCommunityProfileSettingsHydrationBaseline()
+    );
     const [isSaving, setIsSaving] = useState(false);
     const [savedAt, setSavedAt] = useState<string>("");
     const [saveError, setSaveError] = useState<string>("");
+    const [photoError, setPhotoError] = useState<string>("");
+
+    useEffect(() => {
+        setForm(readCommunityProfileSettings());
+    }, []);
 
     const isPublic = form.visibility === "public";
 
@@ -40,6 +52,40 @@ export default function CommunitySettingsPage() {
 
     const setField = <K extends keyof CommunityProfileSettings>(key: K, value: CommunityProfileSettings[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const onPhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        setPhotoError("");
+        if (!file.type.startsWith("image/")) {
+            setPhotoError("Please choose an image file.");
+            return;
+        }
+        if (file.size > AVATAR_FILE_MAX_BYTES) {
+            setPhotoError("Image must be about 600KB or smaller. Try a smaller photo.");
+            return;
+        }
+        try {
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result ?? ""));
+                reader.onerror = () => reject(new Error("read"));
+                reader.readAsDataURL(file);
+            });
+            if (!dataUrl.startsWith("data:image/")) {
+                setPhotoError("Could not read that image.");
+                return;
+            }
+            if (dataUrl.length > COMMUNITY_PROFILE_AVATAR_MAX_CHARS) {
+                setPhotoError("That image is too large. Try a smaller or more compressed photo.");
+                return;
+            }
+            setField("avatarUrl", dataUrl);
+        } catch {
+            setPhotoError("Could not read that image.");
+        }
     };
 
     const handleSave = async () => {
@@ -67,6 +113,7 @@ export default function CommunitySettingsPage() {
                     faculty: sanitized.faculty,
                     studyYear: sanitized.studyYear,
                     visibility: sanitized.visibility,
+                    avatarUrl: sanitized.avatarUrl,
                 }),
             });
 
@@ -145,6 +192,67 @@ export default function CommunitySettingsPage() {
                             <h2 className="text-base font-semibold text-slate-800">Edit Profile</h2>
                             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="md:col-span-2">
+                                    <p className="text-sm font-medium text-slate-700">Profile picture</p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                                        {form.avatarUrl ? (
+                                            // eslint-disable-next-line @next/next/no-img-element -- data URLs / arbitrary user URLs
+                                            <img
+                                                src={form.avatarUrl}
+                                                alt=""
+                                                className="h-20 w-20 rounded-full border border-blue-200 bg-white object-cover shadow-inner"
+                                            />
+                                        ) : (
+                                            <div
+                                                className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-dashed border-blue-200 bg-blue-50 text-blue-700"
+                                                aria-hidden
+                                            >
+                                                <User size={28} />
+                                            </div>
+                                        )}
+                                        <div className="flex flex-col gap-2">
+                                            {/*
+                                              Native file input must receive the click directly (not via ref.click() on a
+                                              clipped sr-only input) or the OS file picker may not open in some browsers.
+                                            */}
+                                            <label
+                                                className="relative inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+                                                onClick={() => setPhotoError("")}
+                                            >
+                                                <input
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp,image/gif"
+                                                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                                    onChange={onPhotoSelected}
+                                                />
+                                                <span className="pointer-events-none inline-flex items-center gap-2">
+                                                    <Camera size={15} aria-hidden />
+                                                    {form.avatarUrl ? "Change photo" : "Upload photo"}
+                                                </span>
+                                            </label>
+                                            {form.avatarUrl ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setPhotoError("");
+                                                        setField("avatarUrl", "");
+                                                    }}
+                                                    className="text-left text-sm font-medium text-red-700 hover:text-red-800"
+                                                >
+                                                    Remove photo
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    {photoError ? (
+                                        <p className="mt-2 text-sm font-medium text-red-700">{photoError}</p>
+                                    ) : (
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            JPG, PNG, WebP, or GIF — max about 600KB. Saved with your profile.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="md:col-span-2">
                                     <label className="text-sm font-medium text-slate-700" htmlFor="display-name">
                                         Display Name
                                     </label>
@@ -220,17 +328,6 @@ export default function CommunitySettingsPage() {
                                         placeholder="Tell your community a bit about your interests and how you help others."
                                     />
                                 </div>
-
-                                <div className="md:col-span-2">
-                                    <p className="text-sm font-medium text-slate-700">Profile Picture</p>
-                                    <button
-                                        type="button"
-                                        className="mt-2 inline-flex items-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
-                                    >
-                                        <Camera size={15} />
-                                        Change Photo
-                                    </button>
-                                </div>
                             </div>
                         </Card>
 
@@ -282,9 +379,18 @@ export default function CommunitySettingsPage() {
                             <div className="mt-5 rounded-xl bg-slate-50 p-3">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
                                 <div className="mt-2 flex items-start gap-3">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                                        <User size={16} />
-                                    </div>
+                                    {form.avatarUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={form.avatarUrl}
+                                            alt=""
+                                            className="h-9 w-9 shrink-0 rounded-full border border-blue-200 object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                                            <User size={16} />
+                                        </div>
+                                    )}
                                     <div>
                                         <p className="text-sm font-semibold text-slate-800">{form.displayName || "Current User"}</p>
                                         <p className="text-xs text-slate-500">{form.faculty} - {form.studyYear}</p>

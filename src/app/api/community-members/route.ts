@@ -74,10 +74,11 @@ export async function GET(req: NextRequest) {
   const communityProfilePointsByUserId = new Map<string, number>();
   const communityProfileStatusByUserId = new Map<string, "PUBLIC" | "PRIVATE">();
   const communityProfileDisplayNameByUserId = new Map<string, string>();
+  const communityProfileAvatarUrlByUserId = new Map<string, string>();
   const adminBonus20UsedByUserId = new Map<string, boolean>();
   if (userIds.length > 0) {
     const profiles = await CommunityProfileModel.find({ userRef: { $in: userIds } })
-      .select("userRef points adminBonus20Used displayName status")
+      .select("userRef points adminBonus20Used displayName status avatarUrl")
       .lean()
       .exec();
     for (const doc of profiles) {
@@ -87,6 +88,7 @@ export async function GET(req: NextRequest) {
         adminBonus20Used?: unknown;
         displayName?: unknown;
         status?: unknown;
+        avatarUrl?: unknown;
       };
       const ref = lean?.userRef;
       if (ref == null) continue;
@@ -99,6 +101,7 @@ export async function GET(req: NextRequest) {
         uid,
         String(lean.displayName ?? "").trim()
       );
+      communityProfileAvatarUrlByUserId.set(uid, String(lean.avatarUrl ?? "").trim());
       adminBonus20UsedByUserId.set(uid, lean.adminBonus20Used === true);
     }
   }
@@ -121,6 +124,9 @@ export async function GET(req: NextRequest) {
         viewerIsCommunityAdmin,
         memberDirectoryList: true,
       });
+    const avatarUrl = hasCommunityProfile
+      ? communityProfileAvatarUrlByUserId.get(uid) ?? ""
+      : "";
     return {
       id: username || uid,
       userId: uid,
@@ -134,6 +140,12 @@ export async function GET(req: NextRequest) {
       ...(showCommunityProfilePoints ? { communityProfilePoints: rawPoints } : {}),
       communityProfileDisplayName:
         communityProfileDisplayNameByUserId.get(uid) ?? "",
+      ...(hasCommunityProfile
+        ? {
+            communityProfileAvatarUrl: avatarUrl,
+            communityProfileStatus: profileStatus,
+          }
+        : {}),
       adminBonus20Used: adminBonus20UsedByUserId.get(uid) ?? false,
     };
   });
