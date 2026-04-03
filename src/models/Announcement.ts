@@ -28,6 +28,84 @@ const AnnouncementSchema = new Schema(
       default: "Admin",
       maxlength: 120,
     },
+    authorUserId: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    authorRole: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+    authorEmail: {
+      type: String,
+      trim: true,
+      default: "",
+      lowercase: true,
+      maxlength: 254,
+    },
+    updatedBy: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    updatedByUserId: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    updatedByRole: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+    updatedByEmail: {
+      type: String,
+      trim: true,
+      default: "",
+      lowercase: true,
+      maxlength: 254,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    deletedByUserId: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    deletedByRole: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+    deletedByEmail: {
+      type: String,
+      trim: true,
+      default: "",
+      lowercase: true,
+      maxlength: 254,
+    },
   },
   {
     timestamps: true,
@@ -36,6 +114,7 @@ const AnnouncementSchema = new Schema(
 );
 
 AnnouncementSchema.index({ createdAt: -1 });
+AnnouncementSchema.index({ isDeleted: 1, createdAt: -1 });
 
 const AnnouncementModel =
   mongoose.models.Announcement || mongoose.model("Announcement", AnnouncementSchema);

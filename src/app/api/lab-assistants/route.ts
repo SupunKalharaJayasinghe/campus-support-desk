@@ -23,6 +23,7 @@ import { getMongoDuplicateField, isMongoDuplicateKeyError } from "@/models/stude
 import { hashStaffPassword, resolveDefaultStaffPassword } from "@/models/staff-auth";
 import { LabAssistantModel } from "@/models/LabAssistant";
 import { UserModel } from "@/models/User";
+import { syncLabAssistantAssignmentsAcrossModuleOfferings } from "@/models/module-offering-lab-assistant-sync";
 import {
   StaffEligibilityValidationError,
   validateStaffEligibilityWithDb,
@@ -301,6 +302,19 @@ export async function POST(request: Request) {
         if (!parsed) {
           throw new Error("Failed to map lab assistant");
         }
+
+        await syncLabAssistantAssignmentsAcrossModuleOfferings(
+          {
+            labAssistantId: parsed.id,
+            fullName: parsed.fullName,
+            email: parsed.email,
+            status: parsed.status,
+            facultyIds: parsed.facultyIds,
+            degreeProgramIds: parsed.degreeProgramIds,
+            moduleIds: parsed.moduleIds,
+          },
+          { mongooseConnection }
+        ).catch(() => null);
 
         return NextResponse.json(toApiLabAssistant(parsed), { status: 201 });
       } catch (error) {

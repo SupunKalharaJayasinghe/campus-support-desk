@@ -2,6 +2,7 @@ import { PORTAL_DATA_KEYS, loadPortalData } from "@/models/portal-data";
 import type { AppRole, DemoUser } from "@/models/rbac";
 
 export type NotificationFeedType = "Announcement" | "System";
+export type NotificationChannel = "In-app" | "Email" | "Both";
 export type SemesterCode =
   | "Y1S1"
   | "Y1S2"
@@ -15,6 +16,7 @@ export type StreamCode = "WEEKDAY" | "WEEKEND";
 
 export interface NotificationAudience {
   roles: AppRole[];
+  userRoles?: string[];
   facultyCodes?: string[];
   degreeCodes?: string[];
   semesterCodes?: SemesterCode[];
@@ -33,10 +35,15 @@ export interface NotificationFeedItem {
   unread: boolean;
   targetLabel: string;
   audience: NotificationAudience;
+  channel?: NotificationChannel;
+  recipientUserIds?: string[];
+  recipientCount?: number;
 }
 
 export interface NotificationViewer {
+  userId?: string;
   role: AppRole;
+  userRole?: string;
   facultyCodes?: string[];
   degreeProgramIds?: string[];
   semesterCode?: string;
@@ -73,6 +80,10 @@ function asRoleArray(value: unknown) {
   return values;
 }
 
+function asUpperStringArray(value: unknown) {
+  return asStringArray(value).map((item) => item.toUpperCase());
+}
+
 function normalizeAudience(input: unknown): NotificationAudience {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return { roles: [] };
@@ -82,6 +93,7 @@ function normalizeAudience(input: unknown): NotificationAudience {
 
   return {
     roles: asRoleArray(row.roles),
+    userRoles: asUpperStringArray(row.userRoles),
     facultyCodes: asStringArray(row.facultyCodes).map((item) => item.toUpperCase()),
     degreeCodes: asStringArray(row.degreeCodes).map((item) => item.toUpperCase()),
     semesterCodes: asStringArray(row.semesterCodes).map(
@@ -147,6 +159,11 @@ function normalizeFeedItem(value: unknown, index: number): NotificationFeedItem 
   if (audience.roles.length === 0) {
     audience.roles = ["SUPER_ADMIN", "LECTURER", "LOST_ITEM_STAFF", "STUDENT"];
   }
+  const channelRaw = String(row.channel ?? "").trim();
+  const channel: NotificationChannel =
+    channelRaw === "Email" || channelRaw === "Both" ? channelRaw : "In-app";
+  const recipientUserIds = asStringArray(row.recipientUserIds);
+  const recipientCount = Math.max(0, Math.floor(Number(row.recipientCount) || 0));
 
   return {
     id,
@@ -158,6 +175,9 @@ function normalizeFeedItem(value: unknown, index: number): NotificationFeedItem 
     unread: row.unread !== false,
     targetLabel: String(row.targetLabel ?? "All Users").trim() || "All Users",
     audience,
+    channel,
+    recipientUserIds,
+    recipientCount,
   };
 }
 
@@ -167,8 +187,39 @@ function matchCodeList(left: string[], right: string[]) {
 }
 
 function matchesAudience(item: NotificationFeedItem, viewer: NotificationViewer) {
+  if (item.recipientUserIds?.length) {
+    const viewerUserId = String(viewer.userId ?? "").trim();
+    if (!viewerUserId) {
+      return false;
+    }
+    return item.recipientUserIds.includes(viewerUserId);
+  }
+
   if (!item.audience.roles.includes(viewer.role)) {
     return false;
+  }
+
+  if (item.audience.userRoles?.length) {
+    const viewerUserRole = String(viewer.userRole ?? "")
+      .trim()
+      .toUpperCase();
+    const roleCandidates = viewerUserRole
+      ? [viewerUserRole]
+      : viewer.role === "SUPER_ADMIN"
+        ? ["ADMIN", "SUPER_ADMIN"]
+        : viewer.role === "LECTURER"
+          ? ["LECTURER", "LAB_ASSISTANT"]
+          : viewer.role === "LOST_ITEM_STAFF"
+            ? ["LOST_ITEM_ADMIN", "LOST_ITEM_STAFF"]
+            : ["STUDENT"];
+
+    if (
+      !roleCandidates.some((candidate) =>
+        item.audience.userRoles?.includes(candidate)
+      )
+    ) {
+      return false;
+    }
   }
 
   if (item.audience.facultyCodes?.length) {
@@ -238,7 +289,9 @@ function matchesAudience(item: NotificationFeedItem, viewer: NotificationViewer)
 
 function toViewerFromUser(user: DemoUser, fallbackRole?: AppRole): NotificationViewer {
   return {
+    userId: String(user.id ?? "").trim(),
     role: user.role || fallbackRole || "STUDENT",
+    userRole: String(user.userRole ?? "").trim().toUpperCase(),
     facultyCodes: user.facultyCodes ?? [],
     degreeProgramIds: user.degreeProgramIds ?? [],
     semesterCode: user.semesterCode,

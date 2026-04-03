@@ -276,12 +276,17 @@ function normalizeScheduleRow(
 ): IntakeTermScheduleRecord {
   const termCode = sanitizeTermCode(value?.termCode ?? fallbackTerm);
   const startDate = sanitizeDateField(value?.startDate);
-  const weeks = sanitizeWeeksCount(
+  const rawWeeks = sanitizeWeeksCount(
     (value as IntakeTermScheduleRecord | IntakeTermScheduleInput | undefined)?.weeks
   );
+  const rawEndDate = sanitizeDateField(value?.endDate);
   const endDate = startDate
-    ? calculateEndDateFromWeeks(startDate, weeks)
-    : sanitizeDateField(value?.endDate);
+    ? rawEndDate || calculateEndDateFromWeeks(startDate, rawWeeks)
+    : rawEndDate;
+  const weeks =
+    startDate && endDate
+      ? sanitizeWeeksCount(weeksFromDateRange(startDate, endDate))
+      : rawWeeks;
 
   return {
     termCode,
@@ -324,13 +329,18 @@ function applyPolicyDefaultsToSchedules(
   const defaultNotify = sanitizeNotifyBeforeDays(defaults.defaultNotifyBeforeDays);
 
   return schedules.map((schedule) => {
-    const weeks = sanitizeWeeksCount(schedule.weeks || defaultWeeks);
+    const baselineWeeks = sanitizeWeeksCount(schedule.weeks || defaultWeeks);
+    const sanitizedEndDate = sanitizeDateField(schedule.endDate);
+    const weeks =
+      schedule.startDate && sanitizedEndDate
+        ? sanitizeWeeksCount(weeksFromDateRange(schedule.startDate, sanitizedEndDate))
+        : baselineWeeks;
     const notifyBeforeDays = sanitizeNotifyBeforeDays(
       schedule.notifyBeforeDays || defaultNotify
     );
     const endDate = schedule.startDate
-      ? calculateEndDateFromWeeks(schedule.startDate, weeks)
-      : schedule.endDate;
+      ? sanitizedEndDate || calculateEndDateFromWeeks(schedule.startDate, weeks)
+      : sanitizedEndDate;
 
     return {
       ...schedule,
@@ -482,8 +492,15 @@ function mergeSchedulesPreservingPast(
     return {
       ...incomingRow,
       termCode,
+      weeks:
+        incomingRow.startDate && incomingRow.endDate
+          ? sanitizeWeeksCount(
+              weeksFromDateRange(incomingRow.startDate, incomingRow.endDate)
+            )
+          : sanitizeWeeksCount(incomingRow.weeks),
       endDate: incomingRow.startDate
-        ? calculateEndDateFromWeeks(incomingRow.startDate, incomingRow.weeks)
+        ? incomingRow.endDate ||
+          calculateEndDateFromWeeks(incomingRow.startDate, incomingRow.weeks)
         : incomingRow.endDate,
       notificationSentAt: keepNotificationStamp
         ? currentRow.notificationSentAt
@@ -882,10 +899,15 @@ export function sanitizeTermSchedules(value: unknown): IntakeTermScheduleInput[]
         row.isManuallyCustomized === true ||
         (item as { manuallyEdited?: boolean }).manuallyEdited === true;
       const startDate = sanitizeDateField(row.startDate);
-      const weeks = sanitizeWeeksCount(row.weeks);
+      const rawWeeks = sanitizeWeeksCount(row.weeks);
+      const rawEndDate = sanitizeDateField(row.endDate);
       const endDate = startDate
-        ? calculateEndDateFromWeeks(startDate, weeks)
-        : sanitizeDateField(row.endDate);
+        ? rawEndDate || calculateEndDateFromWeeks(startDate, rawWeeks)
+        : rawEndDate;
+      const weeks =
+        startDate && endDate
+          ? sanitizeWeeksCount(weeksFromDateRange(startDate, endDate))
+          : rawWeeks;
 
       return {
         termCode: sanitizeTermCode(row.termCode),
@@ -905,13 +927,19 @@ export function sanitizeTermSchedules(value: unknown): IntakeTermScheduleInput[]
   return TERM_SEQUENCE.map((termCode) => {
     const row = byTerm.get(termCode);
     const startDate = row?.startDate ?? "";
-    const weeks = sanitizeWeeksCount(row?.weeks);
+    const rawWeeks = sanitizeWeeksCount(row?.weeks);
+    const rawEndDate = sanitizeDateField(row?.endDate);
+    const endDate = startDate
+      ? rawEndDate || calculateEndDateFromWeeks(startDate, rawWeeks)
+      : rawEndDate;
+    const weeks =
+      startDate && endDate
+        ? sanitizeWeeksCount(weeksFromDateRange(startDate, endDate))
+        : rawWeeks;
     return {
       termCode,
       startDate,
-      endDate: startDate
-        ? calculateEndDateFromWeeks(startDate, weeks)
-        : row?.endDate ?? "",
+      endDate,
       weeks,
       notifyBeforeDays: row?.notifyBeforeDays ?? DEFAULT_NOTIFY_BEFORE_DAYS,
       isManuallyCustomized: row?.isManuallyCustomized === true,
@@ -1300,12 +1328,7 @@ export function createIntake(input: {
           force: input.recalculateFutureTerms,
           today: todayDateOnly(),
         })
-      : schedulesWithDefaults.map((item) => ({
-          ...item,
-          endDate: item.startDate
-            ? calculateEndDateFromWeeks(item.startDate, item.weeks)
-            : item.endDate,
-        }));
+      : schedulesWithDefaults;
 
   const nextIntake: IntakeRecord = {
     id: buildIntakeId({
@@ -1449,18 +1472,20 @@ export function updateIntakeSchedule(
   }
 
   const startDate = sanitizeDateField(input.termStartDate);
-  const endDate = sanitizeDateField(input.termEndDate);
-  const nextWeeks = startDate && endDate
-    ? weeksFromDateRange(startDate, endDate)
-    : targetSchedule.weeks;
+  const explicitEndDate = sanitizeDateField(input.termEndDate);
+  const nextWeeks =
+    startDate && explicitEndDate
+      ? sanitizeWeeksCount(weeksFromDateRange(startDate, explicitEndDate))
+      : sanitizeWeeksCount(targetSchedule.weeks);
+  const nextEndDate = startDate
+    ? explicitEndDate || calculateEndDateFromWeeks(startDate, nextWeeks)
+    : "";
 
   schedules[scheduleIndex] = {
     ...targetSchedule,
     startDate,
-    weeks: sanitizeWeeksCount(nextWeeks),
-    endDate: startDate
-      ? calculateEndDateFromWeeks(startDate, sanitizeWeeksCount(nextWeeks))
-      : "",
+    weeks: nextWeeks,
+    endDate: nextEndDate,
     isManuallyCustomized: true,
     notificationSentAt: "",
   };

@@ -1,28 +1,28 @@
 import mongoose from "mongoose";
-import { LecturerModel } from "@/models/Lecturer";
+import { LabAssistantModel } from "@/models/LabAssistant";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { listModuleOfferings } from "@/models/module-offering-store";
 import {
-  findLecturerInMemoryById,
+  findLabAssistantInMemoryById,
   sanitizeModuleIdList,
-  updateLecturerInMemory,
-} from "@/models/lecturer-store";
+  updateLabAssistantInMemory,
+} from "@/models/lab-assistant-store";
 import { normalizeModuleCode, sanitizeId, sanitizeIdList } from "@/models/module-offering-api";
 
-interface OfferingLecturerLinkState {
+interface OfferingLabAssistantLinkState {
   offeringId?: string;
   moduleCode?: string;
   moduleId?: string;
-  lecturerIds?: string[];
+  labAssistantIds?: string[];
 }
 
-interface SyncLecturerModuleLinksForOfferingMutationInput {
-  previous?: OfferingLecturerLinkState | null;
-  next?: OfferingLecturerLinkState | null;
+interface SyncLabAssistantModuleLinksForOfferingMutationInput {
+  previous?: OfferingLabAssistantLinkState | null;
+  next?: OfferingLabAssistantLinkState | null;
   mongooseConnection?: typeof mongoose | null;
 }
 
-function primaryModuleToken(state?: OfferingLecturerLinkState | null) {
+function primaryModuleToken(state?: OfferingLabAssistantLinkState | null) {
   if (!state) {
     return "";
   }
@@ -30,7 +30,7 @@ function primaryModuleToken(state?: OfferingLecturerLinkState | null) {
   return sanitizeId(state.moduleId) || normalizeModuleCode(state.moduleCode);
 }
 
-function moduleTokenCandidates(state?: OfferingLecturerLinkState | null) {
+function moduleTokenCandidates(state?: OfferingLabAssistantLinkState | null) {
   const set = new Set<string>();
   if (!state) {
     return set;
@@ -48,12 +48,8 @@ function moduleTokenCandidates(state?: OfferingLecturerLinkState | null) {
   return set;
 }
 
-function normalizeLecturerIds(state?: OfferingLecturerLinkState | null) {
-  return new Set(sanitizeIdList(state?.lecturerIds));
-}
-
-function mergeSanitizedIdLists(...values: unknown[]) {
-  return sanitizeIdList(values.flatMap((value) => (Array.isArray(value) ? value : [])));
+function normalizeLabAssistantIds(state?: OfferingLabAssistantLinkState | null) {
+  return new Set(sanitizeIdList(state?.labAssistantIds));
 }
 
 function removeModuleTokens(moduleIds: string[], candidates: Set<string>) {
@@ -107,11 +103,11 @@ function hasTokenOverlap(
 }
 
 async function hasInMemoryAssignmentForModule(
-  lecturerId: string,
+  labAssistantId: string,
   moduleCandidates: Set<string>,
   excludeOfferingId?: string
 ) {
-  if (!lecturerId || moduleCandidates.size === 0) {
+  if (!labAssistantId || moduleCandidates.size === 0) {
     return false;
   }
 
@@ -121,11 +117,8 @@ async function hasInMemoryAssignmentForModule(
     if (excludeId && offering.id === excludeId) {
       return false;
     }
-    const assignedIds = mergeSanitizedIdLists(
-      offering.assignedLecturerIds,
-      offering.assignedLecturers
-    );
-    if (!assignedIds.includes(lecturerId)) {
+    const assignedIds = sanitizeIdList(offering.assignedLabAssistantIds);
+    if (!assignedIds.includes(labAssistantId)) {
       return false;
     }
 
@@ -138,11 +131,11 @@ async function hasInMemoryAssignmentForModule(
 }
 
 async function hasMongoAssignmentForModule(
-  lecturerId: string,
+  labAssistantId: string,
   moduleCandidates: Set<string>,
   excludeOfferingId?: string
 ) {
-  if (!lecturerId || moduleCandidates.size === 0) {
+  if (!labAssistantId || moduleCandidates.size === 0) {
     return false;
   }
 
@@ -151,11 +144,11 @@ async function hasMongoAssignmentForModule(
     $and: [
       {
         $or: [
-          { assignedLecturerIds: lecturerId },
-          { assignedLecturers: lecturerId },
-          { "assignedLecturers.lecturerId": lecturerId },
-          { "assignedLecturers.id": lecturerId },
-          { "assignedLecturers._id": lecturerId },
+          { assignedLabAssistantIds: labAssistantId },
+          { assignedLabAssistants: labAssistantId },
+          { "assignedLabAssistants.assistantId": labAssistantId },
+          { "assignedLabAssistants.id": labAssistantId },
+          { "assignedLabAssistants._id": labAssistantId },
         ],
       },
       {
@@ -177,8 +170,11 @@ async function hasMongoAssignmentForModule(
   return Boolean(await ModuleOfferingModel.exists(query).catch(() => null));
 }
 
-async function updateInMemoryLecturerModuleIds(lecturerId: string, nextModuleIds: string[]) {
-  const row = findLecturerInMemoryById(lecturerId);
+async function updateInMemoryLabAssistantModuleIds(
+  labAssistantId: string,
+  nextModuleIds: string[]
+) {
+  const row = findLabAssistantInMemoryById(labAssistantId);
   if (!row) {
     return;
   }
@@ -189,7 +185,7 @@ async function updateInMemoryLecturerModuleIds(lecturerId: string, nextModuleIds
     return;
   }
 
-  updateLecturerInMemory({
+  updateLabAssistantInMemory({
     id: row.id,
     fullName: row.fullName,
     optionalEmail: row.optionalEmail,
@@ -202,12 +198,15 @@ async function updateInMemoryLecturerModuleIds(lecturerId: string, nextModuleIds
   });
 }
 
-async function updateMongoLecturerModuleIds(lecturerId: string, nextModuleIds: string[]) {
-  if (!mongoose.Types.ObjectId.isValid(lecturerId)) {
+async function updateMongoLabAssistantModuleIds(
+  labAssistantId: string,
+  nextModuleIds: string[]
+) {
+  if (!mongoose.Types.ObjectId.isValid(labAssistantId)) {
     return;
   }
 
-  const row = await LecturerModel.findById(lecturerId).exec();
+  const row = await LabAssistantModel.findById(labAssistantId).exec();
   if (!row) {
     return;
   }
@@ -222,38 +221,41 @@ async function updateMongoLecturerModuleIds(lecturerId: string, nextModuleIds: s
   await row.save();
 }
 
-export async function syncLecturerModuleLinksForOfferingMutation(
-  input: SyncLecturerModuleLinksForOfferingMutationInput
+export async function syncLabAssistantModuleLinksForOfferingMutation(
+  input: SyncLabAssistantModuleLinksForOfferingMutationInput
 ) {
-  const previousLecturerIds = normalizeLecturerIds(input.previous);
-  const nextLecturerIds = normalizeLecturerIds(input.next);
+  const previousLabAssistantIds = normalizeLabAssistantIds(input.previous);
+  const nextLabAssistantIds = normalizeLabAssistantIds(input.next);
   const previousModuleCandidates = moduleTokenCandidates(input.previous);
   const nextPrimaryModuleToken = primaryModuleToken(input.next);
   const previousPrimaryModuleToken = primaryModuleToken(input.previous);
-  const shouldRemovePreviousForCommonLecturers =
+  const shouldRemovePreviousForCommonLabAssistants =
     Boolean(previousPrimaryModuleToken) &&
     previousPrimaryModuleToken !== nextPrimaryModuleToken;
   const previousOfferingId = sanitizeId(input.previous?.offeringId);
 
-  const affectedLecturerIds = new Set<string>([
-    ...previousLecturerIds,
-    ...nextLecturerIds,
+  const affectedLabAssistantIds = new Set<string>([
+    ...previousLabAssistantIds,
+    ...nextLabAssistantIds,
   ]);
 
-  for (const lecturerId of affectedLecturerIds) {
-    const lecturerKey = sanitizeId(lecturerId);
-    if (!lecturerKey) {
+  for (const labAssistantId of affectedLabAssistantIds) {
+    const labAssistantKey = sanitizeId(labAssistantId);
+    if (!labAssistantKey) {
       continue;
     }
 
-    const existsInPrevious = previousLecturerIds.has(lecturerKey);
-    const existsInNext = nextLecturerIds.has(lecturerKey);
+    const existsInPrevious = previousLabAssistantIds.has(labAssistantKey);
+    const existsInNext = nextLabAssistantIds.has(labAssistantKey);
 
-    const memoryRow = findLecturerInMemoryById(lecturerKey);
+    const memoryRow = findLabAssistantInMemoryById(labAssistantKey);
     let currentModuleIds = sanitizeModuleIdList(memoryRow?.moduleIds);
-    if (existsInPrevious && (!existsInNext || shouldRemovePreviousForCommonLecturers)) {
+    if (
+      existsInPrevious &&
+      (!existsInNext || shouldRemovePreviousForCommonLabAssistants)
+    ) {
       const hasOtherAssignments = await hasInMemoryAssignmentForModule(
-        lecturerKey,
+        labAssistantKey,
         previousModuleCandidates,
         previousOfferingId
       );
@@ -264,22 +266,25 @@ export async function syncLecturerModuleLinksForOfferingMutation(
     if (existsInNext && nextPrimaryModuleToken) {
       currentModuleIds = addModuleToken(currentModuleIds, nextPrimaryModuleToken);
     }
-    await updateInMemoryLecturerModuleIds(lecturerKey, currentModuleIds);
+    await updateInMemoryLabAssistantModuleIds(labAssistantKey, currentModuleIds);
 
     if (!input.mongooseConnection) {
       continue;
     }
 
-    const mongoRow = mongoose.Types.ObjectId.isValid(lecturerKey)
-      ? await LecturerModel.findById(lecturerKey).lean().exec().catch(() => null)
+    const mongoRow = mongoose.Types.ObjectId.isValid(labAssistantKey)
+      ? await LabAssistantModel.findById(labAssistantKey).lean().exec().catch(() => null)
       : null;
     const mongoModuleIds = sanitizeModuleIdList(
       (mongoRow as { moduleIds?: string[] } | null)?.moduleIds
     );
     let nextMongoModuleIds = mongoModuleIds;
-    if (existsInPrevious && (!existsInNext || shouldRemovePreviousForCommonLecturers)) {
+    if (
+      existsInPrevious &&
+      (!existsInNext || shouldRemovePreviousForCommonLabAssistants)
+    ) {
       const hasOtherAssignments = await hasMongoAssignmentForModule(
-        lecturerKey,
+        labAssistantKey,
         previousModuleCandidates,
         previousOfferingId
       );
@@ -290,6 +295,6 @@ export async function syncLecturerModuleLinksForOfferingMutation(
     if (existsInNext && nextPrimaryModuleToken) {
       nextMongoModuleIds = addModuleToken(nextMongoModuleIds, nextPrimaryModuleToken);
     }
-    await updateMongoLecturerModuleIds(lecturerKey, nextMongoModuleIds);
+    await updateMongoLabAssistantModuleIds(labAssistantKey, nextMongoModuleIds);
   }
 }

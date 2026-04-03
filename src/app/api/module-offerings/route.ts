@@ -33,6 +33,7 @@ import { listTermOptions, type TermCode } from "@/models/intake-store";
 import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { syncLecturerModuleLinksForOfferingMutation } from "@/models/module-offering-lecturer-module-sync";
+import { syncLabAssistantModuleLinksForOfferingMutation } from "@/models/module-offering-lab-assistant-module-sync";
 
 const TERM_SORT_ORDER = listTermOptions();
 
@@ -249,7 +250,7 @@ export async function GET(request: Request) {
     sort,
   } satisfies Parameters<typeof filterAndSortOfferings>[1];
 
-  let dbRows: ModuleOfferingRecord[] = [];
+  let sourceRows: ModuleOfferingRecord[] = [];
 
   if (mongooseConnection) {
     const query: Record<string, unknown> = {};
@@ -265,20 +266,20 @@ export async function GET(request: Request) {
       .exec()
       .catch(() => [])) as unknown[];
 
-    dbRows = rows
+    sourceRows = rows
       .map((row) => normalizeDbOffering(row))
       .filter((row): row is ModuleOfferingRecord => Boolean(row));
+  } else {
+    sourceRows = listModuleOfferings({
+      termCode: termCode ?? undefined,
+      status,
+      search,
+      sort,
+    });
   }
 
-  const storeRows = listModuleOfferings({
-    termCode: termCode ?? undefined,
-    status,
-    search,
-    sort,
-  });
-
   const allItems = filterAndSortOfferings(
-    mergeOfferingsByKey([...dbRows, ...storeRows]),
+    mergeOfferingsByKey(sourceRows),
     filterOptions
   );
 
@@ -354,7 +355,9 @@ export async function POST(request: Request) {
     );
     const assignedLabAssistantIds = sanitizeIdList(body.assignedLabAssistantIds);
 
-    const mongooseConnection = await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose({
+      forceAcademicCacheSync: true,
+    }).catch(() => null);
 
     await validateLecturerAssignments({
       ids: assignedLecturerIds,
@@ -488,6 +491,12 @@ export async function POST(request: Request) {
         if (normalized) {
           responseOffering = normalized;
         }
+
+        // MongoDB is authoritative when connected; prevent stale duplicate rows in memory.
+        if (createdInStoreId) {
+          deleteModuleOffering(createdInStoreId);
+          createdInStoreId = null;
+        }
       } catch (error) {
         if (createdInStoreId) {
           deleteModuleOffering(createdInStoreId);
@@ -516,6 +525,22 @@ export async function POST(request: Request) {
         moduleCode: responseOffering.moduleCode,
         moduleId: responseOffering.moduleId,
         lecturerIds: responseOffering.assignedLecturerIds,
+      },
+      mongooseConnection,
+    }).catch(() => null);
+
+    await syncLabAssistantModuleLinksForOfferingMutation({
+      previous: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        labAssistantIds: [],
+      },
+      next: {
+        offeringId: responseOffering.id,
+        moduleCode: responseOffering.moduleCode,
+        moduleId: responseOffering.moduleId,
+        labAssistantIds: responseOffering.assignedLabAssistantIds,
       },
       mongooseConnection,
     }).catch(() => null);

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
@@ -10,36 +11,135 @@ import {
   type ConsultationBookingApiRecord,
   type ConsultationNotificationApiRecord,
 } from "@/lib/consultation-client";
+import { authHeaders } from "@/lib/rbac";
 import {
   getConsultationBookingBadgeVariant,
   getConsultationBookingStatusLabel,
   isActiveConsultationBookingStatus,
 } from "@/models/consultation-booking";
+import {
+  listLatestAnnouncements,
+  type AnnouncementRecord,
+} from "@/models/announcement-center";
+
+interface LecturerAssignedModuleApiRecord {
+  id: string;
+  moduleCode: string;
+  moduleName: string;
+  intakeName: string;
+  termCode: string;
+  status: string;
+  updatedAt: string;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeModuleCode(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
+}
+
+function parseAssignedModules(payload: unknown) {
+  const root = asObject(payload);
+  const rows = Array.isArray(root?.items) ? root.items : [];
+
+  return rows
+    .map((item) => {
+      const row = asObject(item);
+      if (!row) {
+        return null;
+      }
+
+      const id = String(row.id ?? row._id ?? "").trim();
+      const moduleCode = normalizeModuleCode(row.moduleCode ?? row.moduleId);
+      const moduleName = normalizeText(row.moduleName) || moduleCode;
+      if (!id || !moduleCode) {
+        return null;
+      }
+
+      return {
+        id,
+        moduleCode,
+        moduleName,
+        intakeName: normalizeText(row.intakeName ?? row.intakeId),
+        termCode: String(row.termCode ?? "").trim().toUpperCase(),
+        status: String(row.status ?? "ACTIVE").trim().toUpperCase(),
+        updatedAt: String(row.updatedAt ?? "").trim(),
+      } satisfies LecturerAssignedModuleApiRecord;
+    })
+    .filter((row): row is LecturerAssignedModuleApiRecord => Boolean(row));
+}
+
+function readMessage(payload: unknown) {
+  const row = asObject(payload);
+  return String(row?.message ?? "").trim();
+}
+
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "—";
+  }
+  return parsed.toLocaleString();
+}
 
 export default function LecturerDashboardPage() {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<ConsultationBookingApiRecord[]>([]);
   const [notifications, setNotifications] = useState<ConsultationNotificationApiRecord[]>([]);
+  const [assignedModules, setAssignedModules] = useState<LecturerAssignedModuleApiRecord[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        const [bookingPayload, notificationPayload] = await Promise.all([
+        const [bookingPayload, notificationPayload, announcementRows, modulePayload] = await Promise.all([
           listLecturerConsultationBookings(),
           listConsultationNotifications(),
+          listLatestAnnouncements(15).catch(() => [] as AnnouncementRecord[]),
+          (async () => {
+            const response = await fetch("/api/lecturers/me/offerings", {
+              cache: "no-store",
+              headers: {
+                ...authHeaders(),
+              },
+            });
+            const payload = (await response.json().catch(() => null)) as unknown;
+            if (!response.ok) {
+              throw new Error(readMessage(payload) || "Failed to load assigned modules.");
+            }
+            return payload;
+          })(),
         ]);
 
         if (!cancelled) {
           setBookings(bookingPayload.items);
           setNotifications(notificationPayload.items);
+          setAnnouncements(announcementRows);
+          setAssignedModules(parseAssignedModules(modulePayload));
         }
       } catch (error) {
         if (!cancelled) {
           toast({
             title: "Dashboard data unavailable",
-            message: error instanceof Error ? error.message : "Failed to load booking summary.",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to load dashboard details.",
             variant: "error",
           });
         }
@@ -105,6 +205,14 @@ export default function LecturerDashboardPage() {
           <p className="mt-2 text-3xl font-semibold text-heading">{upcomingSessions.length}</p>
           <p className="mt-1 text-xs text-text/60">Future consultation bookings</p>
         </Card>
+        <Card accent>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-text/72">Assigned modules</p>
+            <Badge variant="success">Teaching</Badge>
+          </div>
+          <p className="mt-2 text-3xl font-semibold text-heading">{assignedModules.length}</p>
+          <p className="mt-1 text-xs text-text/60">From module offerings</p>
+        </Card>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
@@ -163,6 +271,73 @@ export default function LecturerDashboardPage() {
               ))}
             </div>
           )}
+        </Card>
+      </section>
+
+      <section>
+        <Card title="Assigned Modules" description="Module offerings linked to your lecturer profile">
+          {loading ? (
+            <p className="text-sm text-text/70">Loading assigned modules...</p>
+          ) : assignedModules.length === 0 ? (
+            <p className="text-sm text-text/70">No modules assigned yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {assignedModules.map((item) => (
+                <div
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-tint px-4 py-3"
+                  key={item.id}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-heading">
+                      {item.moduleCode} - {item.moduleName}
+                    </p>
+                    <p className="text-xs text-text/70">
+                      {item.intakeName || "Unknown Intake"} {item.termCode ? `• ${item.termCode}` : ""}
+                    </p>
+                    <p className="mt-1 text-[11px] text-text/55">
+                      Updated {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "—"}
+                    </p>
+                  </div>
+                  <Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>
+                    {item.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </section>
+
+      <section>
+        <Card title="Latest Announcements" description="Recent announcements shared with all users">
+          {loading ? (
+            <p className="text-sm text-text/70">Loading announcements...</p>
+          ) : announcements.length === 0 ? (
+            <p className="text-sm text-text/70">No announcements available yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {announcements.map((item) => (
+                <div
+                  className="rounded-2xl border border-border bg-tint px-4 py-3"
+                  key={item.id}
+                >
+                  <p className="text-sm font-semibold text-heading">{item.title}</p>
+                  <p className="mt-1 text-xs text-text/70">{item.message}</p>
+                  <p className="mt-1 text-[11px] text-text/55">
+                    {item.targetLabel} • {formatDateTime(item.createdAt)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-4">
+            <Link
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+              href="/announcements"
+            >
+              View All
+            </Link>
+          </div>
         </Card>
       </section>
     </div>

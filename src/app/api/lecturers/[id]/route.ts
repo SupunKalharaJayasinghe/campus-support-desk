@@ -242,7 +242,13 @@ export async function DELETE(
 
     const assignedOfferingExists = Boolean(
       await ModuleOfferingModel.exists({
-        assignedLecturerIds: lecturerId,
+        $or: [
+          { assignedLecturerIds: lecturerId },
+          { assignedLecturers: lecturerId },
+          { "assignedLecturers.lecturerId": lecturerId },
+          { "assignedLecturers.id": lecturerId },
+          { "assignedLecturers._id": lecturerId },
+        ],
       }).catch(() => null)
     );
     if (assignedOfferingExists) {

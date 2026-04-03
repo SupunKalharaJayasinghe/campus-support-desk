@@ -29,6 +29,7 @@ import {
 import { isMongoDuplicateKeyError } from "@/models/student-registration";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { syncLecturerModuleLinksForOfferingMutation } from "@/models/module-offering-lecturer-module-sync";
+import { syncLabAssistantModuleLinksForOfferingMutation } from "@/models/module-offering-lab-assistant-module-sync";
 
 function isDuplicateMessage(error: unknown) {
   if (!(error instanceof Error)) {
@@ -114,7 +115,9 @@ export async function PUT(
     const hasLecturerPayload =
       body.assignedLecturerIds !== undefined || body.assignedLecturers !== undefined;
     const hasLabPayload = body.assignedLabAssistantIds !== undefined;
-    const mongooseConnection = await connectMongoose().catch(() => null);
+    const mongooseConnection = await connectMongoose({
+      forceAcademicCacheSync: true,
+    }).catch(() => null);
 
     if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
       const row = await ModuleOfferingModel.findById(offeringId).exec();
@@ -126,12 +129,21 @@ export async function PUT(
         row.assignedLecturerIds,
         row.assignedLecturers
       );
-      const existingLabAssistantIds = sanitizeIdList(row.assignedLabAssistantIds);
+      const existingLabAssistantIds = mergeSanitizedIdLists(
+        row.assignedLabAssistantIds,
+        row.assignedLabAssistants
+      );
       const previousLecturerSyncState = {
         offeringId,
         moduleCode: String(row.moduleCode ?? row.moduleId ?? "").trim(),
         moduleId: String(row.moduleId ?? "").trim(),
         lecturerIds: existingLecturerIds,
+      };
+      const previousLabAssistantSyncState = {
+        offeringId,
+        moduleCode: String(row.moduleCode ?? row.moduleId ?? "").trim(),
+        moduleId: String(row.moduleId ?? "").trim(),
+        labAssistantIds: existingLabAssistantIds,
       };
 
       const context = resolveOfferingContext({
@@ -281,6 +293,17 @@ export async function PUT(
         mongooseConnection,
       }).catch(() => null);
 
+      await syncLabAssistantModuleLinksForOfferingMutation({
+        previous: previousLabAssistantSyncState,
+        next: {
+          offeringId: normalized.id,
+          moduleCode: normalized.moduleCode,
+          moduleId: normalized.moduleId,
+          labAssistantIds: normalized.assignedLabAssistantIds,
+        },
+        mongooseConnection,
+      }).catch(() => null);
+
       return NextResponse.json(toApiOfferingItem(normalized, assignees));
     }
 
@@ -297,6 +320,12 @@ export async function PUT(
         existing.assignedLecturerIds,
         existing.assignedLecturers
       ),
+    };
+    const previousLabAssistantSyncState = {
+      offeringId: existing.id,
+      moduleCode: existing.moduleCode,
+      moduleId: existing.moduleId,
+      labAssistantIds: existing.assignedLabAssistantIds,
     };
 
     const context = resolveOfferingContext({
@@ -397,6 +426,17 @@ export async function PUT(
       mongooseConnection: null,
     }).catch(() => null);
 
+    await syncLabAssistantModuleLinksForOfferingMutation({
+      previous: previousLabAssistantSyncState,
+      next: {
+        offeringId: updated.id,
+        moduleCode: updated.moduleCode,
+        moduleId: updated.moduleId,
+        labAssistantIds: updated.assignedLabAssistantIds,
+      },
+      mongooseConnection: null,
+    }).catch(() => null);
+
     const assignees = await resolveAssigneeMaps(
       {
         lecturerIds: updated.assignedLecturerIds,
@@ -437,7 +477,7 @@ export async function DELETE(
   if (mongooseConnection && mongoose.Types.ObjectId.isValid(offeringId)) {
     const dbOffering = (await ModuleOfferingModel.findById(offeringId)
       .select(
-        "_id moduleCode moduleId assignedLecturerIds assignedLecturers hasGrades hasAttendance hasContent"
+        "_id moduleCode moduleId assignedLecturerIds assignedLecturers assignedLabAssistantIds assignedLabAssistants hasGrades hasAttendance hasContent"
       )
       .lean()
       .exec()
@@ -466,12 +506,27 @@ export async function DELETE(
           dbOffering.assignedLecturers
         ),
       };
+      const previousLabAssistantSyncState = {
+        offeringId,
+        moduleCode: String(dbOffering.moduleCode ?? dbOffering.moduleId ?? "").trim(),
+        moduleId: String(dbOffering.moduleId ?? "").trim(),
+        labAssistantIds: mergeSanitizedIdLists(
+          dbOffering.assignedLabAssistantIds,
+          dbOffering.assignedLabAssistants
+        ),
+      };
 
       await ModuleOfferingModel.deleteOne({ _id: offeringId }).catch(() => null);
       deleteModuleOffering(offeringId);
 
       await syncLecturerModuleLinksForOfferingMutation({
         previous: previousLecturerSyncState,
+        next: null,
+        mongooseConnection,
+      }).catch(() => null);
+
+      await syncLabAssistantModuleLinksForOfferingMutation({
+        previous: previousLabAssistantSyncState,
         next: null,
         mongooseConnection,
       }).catch(() => null);
@@ -498,6 +553,12 @@ export async function DELETE(
     moduleId: offering.moduleId,
     lecturerIds: offering.assignedLecturerIds,
   };
+  const previousLabAssistantSyncState = {
+    offeringId: offering.id,
+    moduleCode: offering.moduleCode,
+    moduleId: offering.moduleId,
+    labAssistantIds: offering.assignedLabAssistantIds,
+  };
 
   const deleted = deleteModuleOffering(offeringId);
   if (!deleted) {
@@ -506,6 +567,12 @@ export async function DELETE(
 
   await syncLecturerModuleLinksForOfferingMutation({
     previous: previousLecturerSyncState,
+    next: null,
+    mongooseConnection: null,
+  }).catch(() => null);
+
+  await syncLabAssistantModuleLinksForOfferingMutation({
+    previous: previousLabAssistantSyncState,
     next: null,
     mongooseConnection: null,
   }).catch(() => null);

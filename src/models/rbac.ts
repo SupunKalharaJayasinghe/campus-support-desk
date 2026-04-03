@@ -4,14 +4,24 @@ export type AppRole =
   | "LOST_ITEM_STAFF"
   | "STUDENT"
   | "COMMUNITY_ADMIN";
+export type AcademicStream = "WEEKDAY" | "WEEKEND";
 
 export interface DemoUser {
   id: string;
   name: string;
   role: AppRole;
+  userRole?: string;
   username?: string;
   email?: string;
+  studentRef?: string;
+  studentRegistrationNumber?: string;
   mustChangePassword?: boolean;
+  facultyCodes?: string[];
+  degreeProgramIds?: string[];
+  semesterCode?: string;
+  stream?: AcademicStream;
+  subgroup?: string | null;
+  intakeId?: string;
 }
 
 export const ROLE_STORAGE_KEY = "unihub_role";
@@ -109,6 +119,22 @@ export function readStoredUser(): DemoUser | null {
 
   try {
     const parsed = JSON.parse(rawUser) as Partial<DemoUser>;
+    const parsedFacultyCodes = Array.isArray(parsed.facultyCodes)
+      ? parsed.facultyCodes
+          .map((value) => String(value ?? "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+    const parsedDegreeProgramIds = Array.isArray(parsed.degreeProgramIds)
+      ? parsed.degreeProgramIds
+          .map((value) => String(value ?? "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+    const parsedSemesterCode = String(parsed.semesterCode ?? "").trim().toUpperCase();
+    const parsedStream = String(parsed.stream ?? "").trim().toUpperCase();
+    const parsedSubgroup = String(parsed.subgroup ?? "").trim();
+    const parsedIntakeId = String(parsed.intakeId ?? "").trim();
+    const parsedUserRole = String(parsed.userRole ?? "").trim().toUpperCase();
+
     if (
       !parsed ||
       typeof parsed !== "object" ||
@@ -121,12 +147,28 @@ export function readStoredUser(): DemoUser | null {
       id: parsed.id,
       name: typeof parsed.name === "string" ? parsed.name : "User",
       role: parsed.role as AppRole,
+      userRole: parsedUserRole || undefined,
       username: typeof parsed.username === "string" ? parsed.username : undefined,
       email: typeof parsed.email === "string" ? parsed.email : undefined,
+      studentRef:
+        typeof parsed.studentRef === "string" ? parsed.studentRef : undefined,
+      studentRegistrationNumber:
+        typeof parsed.studentRegistrationNumber === "string"
+          ? parsed.studentRegistrationNumber
+          : undefined,
       mustChangePassword:
         typeof parsed.mustChangePassword === "boolean"
           ? parsed.mustChangePassword
           : false,
+      facultyCodes: parsedFacultyCodes,
+      degreeProgramIds: parsedDegreeProgramIds,
+      semesterCode: parsedSemesterCode || undefined,
+      stream:
+        parsedStream === "WEEKDAY" || parsedStream === "WEEKEND"
+          ? (parsedStream as AcademicStream)
+          : undefined,
+      subgroup: parsedSubgroup || undefined,
+      intakeId: parsedIntakeId || undefined,
     };
   } catch {
     return null;
@@ -151,7 +193,9 @@ export function updateStoredUser(patch: Partial<DemoUser>) {
   const next: DemoUser = {
     ...current,
     ...patch,
-    role: isRole(String((patch.role ?? current.role) || "")) ? (patch.role ?? current.role)! : current.role,
+    role: isRole(String((patch.role ?? current.role) || ""))
+      ? (patch.role ?? current.role)!
+      : current.role,
   };
 
   persistDemoSession(next);
@@ -170,6 +214,7 @@ export function authHeaders() {
 
   return {
     "x-user-id": user.id,
+    "x-user-role": user.userRole || user.role,
   } as Record<string, string>;
 }
 
@@ -177,6 +222,9 @@ export function toAppRoleFromUserRole(value: unknown): AppRole {
   const normalized = String(value ?? "").trim().toUpperCase();
   if (normalized === "ADMIN" || normalized === "SUPER_ADMIN") {
     return "SUPER_ADMIN";
+  }
+  if (normalized === "LOST_ITEM_ADMIN" || normalized === "LOST_ITEM_STAFF") {
+    return "LOST_ITEM_STAFF";
   }
   if (normalized === "LECTURER") {
     return "LECTURER";
