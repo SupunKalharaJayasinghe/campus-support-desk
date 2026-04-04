@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, FocusEvent } from "react";
+import type { ChangeEvent } from "react";
 import Link from "next/link";
 import {
     ArrowLeft,
@@ -120,16 +120,10 @@ export default function CommunitySettingsPage() {
     }, [isPublic]);
 
     const setField = <K extends keyof CommunityProfileSettings>(key: K, value: CommunityProfileSettings[K]) => {
-        if (key === "username" || key === "email" || key === "displayName") {
+        if (key === "displayName") {
             userEditedBeforeServerHydrateRef.current = true;
         }
         setForm((prev) => ({ ...prev, [key]: value }));
-    };
-
-    const unlockCredentialField = (event: FocusEvent<HTMLInputElement>) => {
-        const el = event.currentTarget;
-        el.readOnly = false;
-        el.removeAttribute("readonly");
     };
 
     const onPhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -356,17 +350,17 @@ export default function CommunitySettingsPage() {
                                         name="community_display_username"
                                         type="text"
                                         inputMode="text"
+                                        readOnly
                                         autoComplete="off"
                                         spellCheck={false}
                                         data-1p-ignore
                                         data-lpignore="true"
                                         data-form-type="other"
-                                        className="mt-1 border-blue-200 bg-white"
+                                        className="mt-1 cursor-not-allowed border-blue-200 bg-slate-100 text-slate-700"
                                         value={form.username}
-                                        onChange={(event) => setField("username", event.target.value)}
-                                        onFocus={unlockCredentialField}
                                         placeholder="e.g. it22123456"
                                     />
+                                    <p className="mt-1 text-xs text-slate-500">Username is tied to your account and can't be changed here.</p>
                                 </div>
 
                                 <div>
@@ -378,17 +372,17 @@ export default function CommunitySettingsPage() {
                                         name="community_contact_email"
                                         type="email"
                                         inputMode="email"
+                                        readOnly
                                         autoComplete="off"
                                         spellCheck={false}
                                         data-1p-ignore
                                         data-lpignore="true"
                                         data-form-type="other"
-                                        className="mt-1 border-blue-200 bg-white"
+                                        className="mt-1 cursor-not-allowed border-blue-200 bg-slate-100 text-slate-700"
                                         value={form.email}
-                                        onChange={(event) => setField("email", event.target.value)}
-                                        onFocus={unlockCredentialField}
                                         placeholder="name@campus.edu"
                                     />
+                                    <p className="mt-1 text-xs text-slate-500">Email is tied to your account and can't be changed here.</p>
                                 </div>
 
                                 <div>
