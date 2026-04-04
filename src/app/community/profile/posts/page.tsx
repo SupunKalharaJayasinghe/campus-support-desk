@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ChevronDown,
   ChevronLeft,
-  Eye,
   FileText,
   MessageSquare,
   ThumbsUp,
@@ -32,6 +31,7 @@ type DbCommunityPost = {
   title: string;
   description: string;
   category: "lost_item" | "study_material" | "academic_question";
+  pictureUrl?: string | null;
   status?: "open" | "resolved" | "archived";
   createdAt?: string;
   likesCount?: number;
@@ -288,8 +288,18 @@ export default function CommunityProfilePostsPage() {
                   </button>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{post.description}</p>
+                {post.pictureUrl ? (
+                  <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={post.pictureUrl}
+                      alt=""
+                      className="max-h-56 w-full object-contain"
+                    />
+                  </div>
+                ) : null}
 
-                <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-600">
+                <div className="mt-3 flex items-center gap-4 text-xs font-semibold text-slate-600">
                   <span className="inline-flex items-center gap-1.5">
                     <ThumbsUp size={14} /> {post.likesCount ?? 0}
                   </span>
@@ -308,9 +318,6 @@ export default function CommunityProfilePostsPage() {
                       }`}
                     />
                   </button>
-                  <span className="inline-flex items-center gap-1.5 text-slate-500">
-                    <Eye size={14} /> {post.status || "open"}
-                  </span>
                 </div>
 
                 {expandedPostReplies[post._id] && (post.replies?.length ?? 0) > 0 && (

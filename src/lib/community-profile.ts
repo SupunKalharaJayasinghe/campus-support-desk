@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS: CommunityProfileSettings = {
   avatarUrl: "",
 };
 
-function normalizeSettings(
+export function normalizeCommunityProfileSettings(
   input: Partial<CommunityProfileSettings> | null | undefined
 ): CommunityProfileSettings {
   const rawAvatar = String(input?.avatarUrl ?? "").trim();
@@ -87,7 +87,7 @@ export function getCommunityProfileSettingsStorageKey(userId?: string | null) {
  * Real values are applied in `useEffect` via {@link readCommunityProfileSettings}.
  */
 export function getCommunityProfileSettingsHydrationBaseline(): CommunityProfileSettings {
-  return normalizeSettings({
+  return normalizeCommunityProfileSettings({
     displayName: DEFAULT_SETTINGS.displayName,
     username: "",
     email: "",
@@ -96,7 +96,7 @@ export function getCommunityProfileSettingsHydrationBaseline(): CommunityProfile
 
 export function readCommunityProfileSettings(): CommunityProfileSettings {
   const storedUser = readStoredUser();
-  const base = normalizeSettings({
+  const base = normalizeCommunityProfileSettings({
     displayName: storedUser?.name ?? storedUser?.username ?? DEFAULT_SETTINGS.displayName,
     username: storedUser?.username ?? "",
     email: storedUser?.email ?? "",
@@ -109,12 +109,12 @@ export function readCommunityProfileSettings(): CommunityProfileSettings {
   const perUserKey = getCommunityProfileSettingsStorageKey(storedUser?.id);
   const perUser = readSettingsFromStorageKey(perUserKey);
   if (perUser) {
-    return normalizeSettings({ ...base, ...perUser });
+    return normalizeCommunityProfileSettings({ ...base, ...perUser });
   }
 
   const legacy = readSettingsFromStorageKey(LEGACY_SETTINGS_STORAGE_KEY);
   if (legacy) {
-    return normalizeSettings({ ...base, ...legacy });
+    return normalizeCommunityProfileSettings({ ...base, ...legacy });
   }
 
   return base;
@@ -123,7 +123,7 @@ export function readCommunityProfileSettings(): CommunityProfileSettings {
 export function saveCommunityProfileSettings(
   settings: CommunityProfileSettings
 ): CommunityProfileSettings {
-  const sanitized = normalizeSettings(settings);
+  const sanitized = normalizeCommunityProfileSettings(settings);
   if (typeof window === "undefined") {
     return sanitized;
   }

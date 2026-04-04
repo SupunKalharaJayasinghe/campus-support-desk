@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FocusEvent } from "react";
 import Link from "next/link";
 import {
     ArrowLeft,
@@ -22,6 +22,7 @@ import communityBackground from "@/app/images/community/community2.jpg";
 import {
     COMMUNITY_PROFILE_AVATAR_MAX_CHARS,
     getCommunityProfileSettingsHydrationBaseline,
+    normalizeCommunityProfileSettings,
     readCommunityProfileSettings,
     saveCommunityProfileSettings,
     type CommunityProfileSettings,
@@ -38,9 +39,77 @@ export default function CommunitySettingsPage() {
     const [savedAt, setSavedAt] = useState<string>("");
     const [saveError, setSaveError] = useState<string>("");
     const [photoError, setPhotoError] = useState<string>("");
+    /** If true, do not replace the form when the community-profile GET returns (avoids wiping in-progress edits). */
+    const userEditedBeforeServerHydrateRef = useRef(false);
 
     useEffect(() => {
-        setForm(readCommunityProfileSettings());
+        let cancelled = false;
+
+        async function load() {
+            const local = readCommunityProfileSettings();
+            const storedUser = readStoredUser();
+            const userId = storedUser?.id?.trim();
+
+            const applyLocal = () => {
+                if (!cancelled) setForm(local);
+            };
+
+            if (!userId) {
+                applyLocal();
+                return;
+            }
+
+            // Show saved local + session values immediately so fields are editable while GET is in flight.
+            if (!cancelled) setForm(local);
+
+            try {
+                const res = await fetch(
+                    `/api/community-profile?userId=${encodeURIComponent(userId)}`
+                );
+                if (!res.ok) {
+                    return;
+                }
+                const db = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+                if (!db || cancelled) {
+                    return;
+                }
+
+                const trim = (value: unknown) => String(value ?? "").trim();
+                const dbStatus = trim(db.status).toUpperCase();
+                const visibility: CommunityProfileSettings["visibility"] =
+                    dbStatus === "PRIVATE"
+                        ? "private"
+                        : dbStatus === "PUBLIC"
+                          ? "public"
+                          : local.visibility;
+
+                const merged: CommunityProfileSettings = normalizeCommunityProfileSettings({
+                    ...local,
+                    displayName: trim(db.displayName) || local.displayName,
+                    username: trim(db.username) || local.username,
+                    email: trim(db.email) || local.email,
+                    bio: trim(db.bio) || local.bio,
+                    faculty: trim(db.faculty) || local.faculty,
+                    studyYear: trim(db.studyYear) || local.studyYear,
+                    avatarUrl: trim(db.avatarUrl) || local.avatarUrl,
+                    visibility,
+                });
+
+                if (!cancelled) {
+                    setForm((prev) => {
+                        if (userEditedBeforeServerHydrateRef.current) return prev;
+                        return merged;
+                    });
+                }
+            } catch {
+                // local + session already applied above
+            }
+        }
+
+        void load();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     const isPublic = form.visibility === "public";
@@ -51,7 +120,16 @@ export default function CommunitySettingsPage() {
     }, [isPublic]);
 
     const setField = <K extends keyof CommunityProfileSettings>(key: K, value: CommunityProfileSettings[K]) => {
+        if (key === "username" || key === "email" || key === "displayName") {
+            userEditedBeforeServerHydrateRef.current = true;
+        }
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const unlockCredentialField = (event: FocusEvent<HTMLInputElement>) => {
+        const el = event.currentTarget;
+        el.readOnly = false;
+        el.removeAttribute("readonly");
     };
 
     const onPhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +268,11 @@ export default function CommunitySettingsPage() {
                     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                         <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none lg:col-span-2">
                             <h2 className="text-base font-semibold text-slate-800">Edit Profile</h2>
-                            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <form
+                                className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2"
+                                autoComplete="off"
+                                onSubmit={(e) => e.preventDefault()}
+                            >
                                 <div className="md:col-span-2">
                                     <p className="text-sm font-medium text-slate-700">Profile picture</p>
                                     <div className="mt-2 flex flex-wrap items-center gap-4">
@@ -266,28 +348,45 @@ export default function CommunitySettingsPage() {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-slate-700" htmlFor="username">
+                                    <label className="text-sm font-medium text-slate-700" htmlFor="community-settings-username">
                                         Username
                                     </label>
                                     <Input
-                                        id="username"
+                                        id="community-settings-username"
+                                        name="community_display_username"
+                                        type="text"
+                                        inputMode="text"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        data-1p-ignore
+                                        data-lpignore="true"
+                                        data-form-type="other"
                                         className="mt-1 border-blue-200 bg-white"
                                         value={form.username}
                                         onChange={(event) => setField("username", event.target.value)}
+                                        onFocus={unlockCredentialField}
                                         placeholder="e.g. it22123456"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-slate-700" htmlFor="email">
+                                    <label className="text-sm font-medium text-slate-700" htmlFor="community-settings-email">
                                         Email
                                     </label>
                                     <Input
-                                        id="email"
+                                        id="community-settings-email"
+                                        name="community_contact_email"
                                         type="email"
+                                        inputMode="email"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        data-1p-ignore
+                                        data-lpignore="true"
+                                        data-form-type="other"
                                         className="mt-1 border-blue-200 bg-white"
                                         value={form.email}
                                         onChange={(event) => setField("email", event.target.value)}
+                                        onFocus={unlockCredentialField}
                                         placeholder="name@campus.edu"
                                     />
                                 </div>
@@ -328,7 +427,7 @@ export default function CommunitySettingsPage() {
                                         placeholder="Tell your community a bit about your interests and how you help others."
                                     />
                                 </div>
-                            </div>
+                            </form>
                         </Card>
 
                         <Card className="rounded-2xl border border-blue-100 bg-white p-5 shadow-none">
