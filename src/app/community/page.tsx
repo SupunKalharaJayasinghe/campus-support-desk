@@ -41,8 +41,6 @@ import {
 type Reply = {
     id: string;
     author: string;
-    /** Present for feed loaded from API; omitted for static demo posts. */
-    authorPoints?: number;
     content: string;
     createdAt: string;
     likes: number;
@@ -57,8 +55,6 @@ type Post = {
     content: string;
     pictureUrl?: string;
     author: string;
-    /** Present for feed loaded from API; omitted for static demo posts. */
-    authorPoints?: number;
     category: "lost_item" | "study_material" | "academic_question";
     createdAt: string;
     likes: number;
@@ -137,8 +133,6 @@ const mapApiReply = (reply: ApiReply): Reply => {
     return {
         id: reply._id,
         author: live || snapshot || fallback,
-        authorPoints:
-            typeof reply.authorMemberPoints === "number" ? reply.authorMemberPoints : undefined,
         content: reply.message,
         createdAt: toTimeAgo(reply.createdAt),
         likes: Number(reply.likesCount ?? 0),
@@ -471,10 +465,6 @@ export default function CommunityPage() {
                         content: post.description,
                         pictureUrl: post.pictureUrl?.trim() || undefined,
                         author: live || snapshot || fallback,
-                        authorPoints:
-                            typeof post.authorMemberPoints === "number"
-                                ? post.authorMemberPoints
-                                : undefined,
                         category: mapCategory(post.category),
                         createdAt: toTimeAgo(post.createdAt),
                         likes: Number(post.likesCount ?? 0),
@@ -1139,9 +1129,6 @@ export default function CommunityPage() {
                                                 <h3 className="line-clamp-2 text-base font-semibold leading-snug text-slate-800">{post.title}</h3>
                                                 <p className="mt-1 text-sm text-slate-600">
                                                     {post.author}
-                                                    {post.authorPoints != null ? (
-                                                        <span className="text-slate-500"> · {post.authorPoints} pts</span>
-                                                    ) : null}
                                                 </p>
                                                 <p className="text-xs text-slate-500">
                                                     {post.createdAt} • {post.replies.length} replies
@@ -1197,12 +1184,6 @@ export default function CommunityPage() {
                                                             <div className="flex items-center justify-between">
                                                                 <p className="text-sm font-semibold text-slate-800">
                                                                     {reply.author}
-                                                                    {reply.authorPoints != null ? (
-                                                                        <span className="font-normal text-slate-500">
-                                                                            {" "}
-                                                                            · {reply.authorPoints} pts
-                                                                        </span>
-                                                                    ) : null}
                                                                 </p>
                                                                 <p className="text-xs text-slate-500">{reply.createdAt}</p>
                                                             </div>
