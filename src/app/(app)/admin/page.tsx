@@ -15,7 +15,6 @@ import {
   UserCheck,
   Users,
 } from "lucide-react";
-import PageHeader from "@/components/admin/PageHeader";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import {
@@ -27,7 +26,6 @@ import {
   type NotificationFeedItem,
 } from "@/models/notification-center";
 import { readStoredUser } from "@/models/rbac";
-import LatestNotificationSection from "@/components/notifications/LatestNotificationSection";
 
 type StatIcon = ComponentType<{ size?: number }>;
 
@@ -346,7 +344,6 @@ export default function AdminDashboardPage() {
   const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [dashboardError, setDashboardError] = useState("");
-  const latestNotification = notifications[0] ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -431,30 +428,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="admin-dashboard space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="admin-toolbar-chip">
-              {dashboard?.currentIntake?.currentTerm
-                ? `Live term ${dashboard.currentIntake.currentTerm}`
-                : "Live operations"}
-            </span>
-            <Link className="admin-toolbar-link" href="/admin/reports/student-analytics">
-              Open Reports
-              <ArrowRight size={14} />
-            </Link>
-          </div>
-        }
-        description="Centralized oversight for academic structure, enrollments, teaching operations, and system-wide alerts."
-        title="Dashboard"
-      />
-
-      <LatestNotificationSection
-        href="/admin/notifications"
-        item={latestNotification}
-        subtitle="Most recent notification targeted to admin users."
-      />
-
       {dashboardError ? (
         <Card className="admin-empty-state p-5">
           <p className="text-sm font-semibold text-heading">Dashboard data unavailable</p>

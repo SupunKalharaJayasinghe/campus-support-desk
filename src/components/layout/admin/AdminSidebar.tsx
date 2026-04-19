@@ -72,6 +72,8 @@ export default function AdminSidebar({
 
   const showFlyout = collapsed && Boolean(hoveredSection);
   const flyoutListMaxHeight = Math.max(96, flyoutMetrics.maxHeight - FLYOUT_HEADER_HEIGHT);
+  const isDirectSection = (section: AdminNavSection) =>
+    section.items.length === 1 && section.items[0]?.label === section.label;
 
   const clearCloseTimeout = () => {
     if (closeTimeoutRef.current) {
@@ -212,6 +214,33 @@ export default function AdminSidebar({
               {visibleSections.map((section) => {
                 const Icon = section.icon;
                 const isSectionActive = section.key === activeSectionKey;
+                const directSection = isDirectSection(section);
+
+                if (directSection) {
+                  const item = section.items[0];
+                  const active = itemMatchesPath(item, pathname);
+
+                  return (
+                    <Link
+                      aria-current={active ? "page" : undefined}
+                      aria-label={section.label}
+                      className={cn(
+                        "admin-sidebar-icon-button flex h-11 w-full items-center justify-center rounded-2xl border transition-colors",
+                        active
+                          ? "border-primary/25 bg-primary/10 text-primary"
+                          : "border-transparent text-text/75 hover:border-border hover:bg-tint hover:text-heading"
+                      )}
+                      data-active={active ? "true" : "false"}
+                      href={item.href}
+                      key={section.key}
+                      onFocus={closeFlyout}
+                      onMouseEnter={closeFlyout}
+                      title={section.label}
+                    >
+                      <Icon size={18} />
+                    </Link>
+                  );
+                }
 
                 return (
                   <button
@@ -243,6 +272,32 @@ export default function AdminSidebar({
                 const Icon = section.icon;
                 const isSectionActive = section.key === activeSectionKey;
                 const isOpen = openSections[section.key] ?? isSectionActive;
+                const directSection = isDirectSection(section);
+
+                if (directSection) {
+                  const item = section.items[0];
+                  const active = itemMatchesPath(item, pathname);
+
+                  return (
+                    <Link
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "admin-sidebar-section-trigger flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-text/82 hover:bg-tint hover:text-heading"
+                      )}
+                      data-active={active ? "true" : "false"}
+                      href={item.href}
+                      key={section.key}
+                    >
+                      <span className="admin-sidebar-section-icon inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-card text-text/80">
+                        <Icon size={18} />
+                      </span>
+                      <span className="text-sm font-semibold">{section.label}</span>
+                    </Link>
+                  );
+                }
 
                 return (
                   <div key={section.key}>

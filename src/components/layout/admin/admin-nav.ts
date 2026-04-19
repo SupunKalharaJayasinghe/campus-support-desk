@@ -40,7 +40,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     roles: ["SUPER_ADMIN", "LECTURER"],
-    items: [{ label: "Overview", href: "/admin" }],
+    items: [{ label: "Dashboard", href: "/admin" }],
   },
   {
     key: "academics",

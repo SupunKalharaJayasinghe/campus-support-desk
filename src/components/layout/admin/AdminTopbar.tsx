@@ -108,7 +108,7 @@ export default function AdminTopbar() {
     const lastSegment = segments[segments.length - 1];
 
     if (!lastSegment || lastSegment === "admin") {
-      return "Overview";
+      return "Dashboard";
     }
 
     return labelForSegment(lastSegment);
@@ -120,7 +120,7 @@ export default function AdminTopbar() {
     }
 
     if (pathname === "/admin") {
-      return "Overview";
+      return "Dashboard";
     }
 
     if (activeItem && itemMatchesPathExactly(activeItem, pathname)) {
@@ -135,9 +135,14 @@ export default function AdminTopbar() {
   const submenuLabel = activeItem?.label ?? fallbackWindowLabel;
   const submenuHref = activeItem?.href ?? pathname;
   const showSubmenu = Boolean(activeItem && activeSection?.key !== "dashboard");
+  const showWindowLabel = currentWindowLabel !== sectionLabel;
   const breadcrumbTitle = showSubmenu
-    ? `${sectionLabel} > ${submenuLabel} | ${currentWindowLabel}`
-    : `${sectionLabel} | ${currentWindowLabel}`;
+    ? showWindowLabel
+      ? `${sectionLabel} > ${submenuLabel} | ${currentWindowLabel}`
+      : `${sectionLabel} > ${submenuLabel}`
+    : showWindowLabel
+      ? `${sectionLabel} | ${currentWindowLabel}`
+      : sectionLabel;
   const userLabel = user?.name ?? "Lakvidu Upasara";
 
   return (
@@ -169,8 +174,12 @@ export default function AdminTopbar() {
             ) : null}
           </div>
 
-          <span className="shrink-0 text-text/35">|</span>
-          <span className="truncate font-medium text-heading">{currentWindowLabel}</span>
+          {showWindowLabel ? (
+            <>
+              <span className="shrink-0 text-text/35">|</span>
+              <span className="truncate font-medium text-heading">{currentWindowLabel}</span>
+            </>
+          ) : null}
         </nav>
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">

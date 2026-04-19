@@ -73,10 +73,10 @@
 }
 
 .admin-sidebar {
-  background: var(--surface);
-  border-color: var(--border);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(20px) saturate(1.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(249, 250, 253, 0.96) 100%);
+  border-color: rgba(191, 191, 191, 0.45);
+  box-shadow: 0 10px 28px rgba(38, 21, 15, 0.05);
+  backdrop-filter: blur(14px);
   height: 100%;
 }
 
@@ -97,49 +97,53 @@
 
 .admin-sidebar-toggle,
 .admin-toolbar-link {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(38, 21, 15, 0.12);
+  color: rgba(38, 21, 15, 0.82);
+  backdrop-filter: blur(10px);
 }
 
 .admin-sidebar-toggle:hover,
 .admin-toolbar-link:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow);
-  color: var(--ink);
+  border-color: rgba(3, 74, 166, 0.26);
+  box-shadow: 0 8px 20px rgba(38, 21, 15, 0.08);
+  color: #0339a6;
   transform: translateY(-1px);
 }
 
 .admin-sidebar-brand {
-  border: 1px solid transparent;
+  border: 1px solid rgba(38, 21, 15, 0.06);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 14px rgba(38, 21, 15, 0.04);
 }
 
 .admin-sidebar-brand:hover {
-  background: rgba(255, 255, 255, 0.42);
-  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(3, 74, 166, 0.12);
 }
 
 .admin-sidebar-brand-mark {
-  background: linear-gradient(135deg, rgba(52, 97, 255, 0.1) 0%, rgba(13, 181, 200, 0.08) 100%);
-  color: var(--accent);
+  background: linear-gradient(135deg, rgba(3, 74, 166, 0.1) 0%, rgba(3, 74, 166, 0.04) 100%);
+  border: 1px solid rgba(3, 74, 166, 0.12);
+  color: #034aa6;
 }
 
 .admin-sidebar-brand-title {
-  color: var(--ink);
+  color: #0a0a0a;
   font-family: var(--font-heading), sans-serif;
   font-weight: 800;
   letter-spacing: -0.5px;
 }
 
 .admin-sidebar-brand-copy {
-  color: var(--ink-3);
+  color: rgba(38, 21, 15, 0.58);
 }
 
 .admin-sidebar-section-icon {
-  background: rgba(255, 255, 255, 0.6);
-  border-color: var(--border);
-  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(38, 21, 15, 0.12);
+  color: rgba(38, 21, 15, 0.74);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .admin-sidebar-icon-button,
@@ -147,38 +151,60 @@
 .admin-sidebar-link,
 .admin-sidebar-flyout-link {
   border: 1px solid transparent;
-  color: var(--ink-3);
+  color: rgba(38, 21, 15, 0.62);
+  position: relative;
 }
 
 .admin-sidebar-icon-button:hover,
 .admin-sidebar-section-trigger:hover,
 .admin-sidebar-link:hover,
 .admin-sidebar-flyout-link:hover {
-  background: rgba(52, 97, 255, 0.06);
-  color: var(--ink-2);
+  background: rgba(3, 74, 166, 0.045);
+  border-color: rgba(3, 74, 166, 0.08);
+  color: #26150f;
 }
 
 .admin-sidebar-icon-button[data-active="true"],
 .admin-sidebar-section-trigger[data-active="true"],
 .admin-sidebar-link[data-active="true"],
 .admin-sidebar-flyout-link[data-active="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  box-shadow: 0 4px 14px var(--accent-glow-strong);
+  background: linear-gradient(135deg, rgba(3, 74, 166, 0.1) 0%, rgba(3, 74, 166, 0.04) 100%);
+  border-color: rgba(3, 74, 166, 0.16);
+  color: #034aa6;
+  box-shadow: 0 10px 24px rgba(3, 74, 166, 0.08);
 }
 
 .admin-sidebar-section-trigger[data-active="true"] .admin-sidebar-section-icon {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: rgba(3, 74, 166, 0.1);
+  border-color: rgba(3, 74, 166, 0.14);
+  color: #034aa6;
+}
+
+.admin-sidebar-link,
+.admin-sidebar-flyout-link {
+  overflow: hidden;
+  padding-left: 1rem;
+}
+
+.admin-sidebar-link[data-active="true"]::before,
+.admin-sidebar-flyout-link[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0.45rem;
+  top: 50%;
+  width: 3px;
+  height: 1.35rem;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: #034aa6;
+  box-shadow: 0 0 0 4px rgba(3, 74, 166, 0.08);
 }
 
 .admin-sidebar-flyout {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: var(--border);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(191, 191, 191, 0.55);
+  box-shadow: 0 18px 38px rgba(38, 21, 15, 0.1);
+  backdrop-filter: blur(14px);
 }
 
 .admin-topbar {
