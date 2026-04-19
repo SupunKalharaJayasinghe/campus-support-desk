@@ -448,7 +448,7 @@ export default function AdminDashboardPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+      <section className="grid gap-6">
         <Card
           accent
           description="Operational academic metrics across faculties, degrees, and active delivery groups."
@@ -522,43 +522,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         </Card>
-
-        <Card
-          description="Latest communication posted by the super admin team."
-          title="Announcement Preview"
-        >
-          <div className="space-y-4">
-              {announcements.length === 0 ? (
-              <div className="admin-empty-state rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
-                No announcements available yet.
-              </div>
-            ) : (
-              announcements.map((item) => (
-                <div className="admin-list-card rounded-3xl border border-border bg-card p-5" key={item.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-heading">{item.title}</p>
-                      <p className="mt-1 text-xs text-text/60">{item.targetLabel}</p>
-                    </div>
-                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Megaphone size={16} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs font-medium text-text/55">
-                    {formatDateTime(item.createdAt)}
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-text/72">{item.message}</p>
-                </div>
-              ))
-            )}
-            <Link
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-              href="/admin/announcements"
-            >
-              View All
-            </Link>
-          </div>
-        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -596,6 +559,46 @@ export default function AdminDashboardPage() {
         </Card>
 
         <div className="space-y-6">
+          <Card
+            description="Latest communication posted by the super admin team."
+            title="Announcement Preview"
+          >
+            <div className="space-y-4">
+              {announcements.length === 0 ? (
+                <div className="admin-empty-state rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
+                  No announcements available yet.
+                </div>
+              ) : (
+                announcements.map((item) => (
+                  <div
+                    className="admin-list-card rounded-3xl border border-border bg-card p-5"
+                    key={item.id}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-heading">{item.title}</p>
+                        <p className="mt-1 text-xs text-text/60">{item.targetLabel}</p>
+                      </div>
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Megaphone size={16} />
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs font-medium text-text/55">
+                      {formatDateTime(item.createdAt)}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-text/72">{item.message}</p>
+                  </div>
+                ))
+              )}
+              <Link
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
+                href="/admin/announcements"
+              >
+                View All
+              </Link>
+            </div>
+          </Card>
+
           <Card
             description="Fast access to common super admin workflows."
             title="Quick Actions"
