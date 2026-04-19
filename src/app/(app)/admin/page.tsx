@@ -322,7 +322,7 @@ function StatOverviewCard({
   tone: StatDefinition["tone"];
 }) {
   return (
-    <Card accent className="admin-stat-card p-5" data-tone={tone}>
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
@@ -435,7 +435,7 @@ export default function AdminDashboardPage() {
         </Card>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {statistics.map((item) => (
           <StatOverviewCard
             icon={item.icon}
