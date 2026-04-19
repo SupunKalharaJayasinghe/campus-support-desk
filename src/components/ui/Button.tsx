@@ -32,6 +32,7 @@ export default function Button({
         variantClasses[variant],
         className
       )}
+      data-variant={variant}
       type={type}
       {...props}
     />

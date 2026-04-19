@@ -22,8 +22,8 @@ export default function PlaceholderPage({
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <Card title="Scope">
-          <ul className="space-y-2 text-sm text-text/75">
+        <Card accent title="Scope">
+          <ul className="admin-placeholder-list text-sm text-text/75">
             <li>Faculty, degree, intake, term, stream, subgroup</li>
             <li>Role-based visibility for navigation</li>
             <li>Enterprise-ready layout patterns</li>
@@ -31,7 +31,7 @@ export default function PlaceholderPage({
         </Card>
 
         <Card title="Workflows">
-          <ul className="space-y-2 text-sm text-text/75">
+          <ul className="admin-placeholder-list text-sm text-text/75">
             <li>Search + filters + pagination</li>
             <li>Add / Edit / Delete actions</li>
             <li>Audit-friendly, minimal UI</li>
@@ -40,7 +40,7 @@ export default function PlaceholderPage({
 
         <Card title="Highlights">
           {highlights.length ? (
-            <ul className="space-y-2 text-sm text-text/75">
+            <ul className="admin-placeholder-list text-sm text-text/75">
               {highlights.map((item) => (
                 <li key={item}>{item}</li>
               ))}

@@ -152,7 +152,7 @@ export default function AdminSidebar({
   return (
     <aside
       className={cn(
-        "sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200",
+        "admin-sidebar sticky top-0 z-40 flex h-dvh shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[272px]"
       )}
       onMouseEnter={clearCloseTimeout}
@@ -162,7 +162,7 @@ export default function AdminSidebar({
         <div className={cn("flex", collapsed ? "justify-center" : "justify-start")}>
           <button
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/80 transition-colors hover:bg-slate-200/40 hover:text-heading"
+            className="admin-sidebar-toggle inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-tint text-text/80"
             onClick={() => {
               const nextCollapsed = !collapsed;
               if (!nextCollapsed) {
@@ -180,18 +180,20 @@ export default function AdminSidebar({
 
         <Link
           className={cn(
-            "mt-3 flex min-w-0 items-center gap-3 rounded-2xl p-2 hover:bg-tint",
+            "admin-sidebar-brand mt-3 flex min-w-0 items-center gap-3 rounded-2xl p-2",
             collapsed ? "justify-center" : ""
           )}
           href="/admin"
         >
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <span className="admin-sidebar-brand-mark inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <Wrench size={18} />
           </span>
           {collapsed ? null : (
             <span className="min-w-0">
-              <p className="truncate text-sm font-semibold text-heading">UniHub LMS</p>
-              <p className="text-xs text-text/60">Admin Console</p>
+              <p className="admin-sidebar-brand-title truncate text-sm font-semibold text-heading">
+                UniHub LMS
+              </p>
+              <p className="admin-sidebar-brand-copy text-xs text-text/60">Admin Console</p>
             </span>
           )}
         </Link>
@@ -216,11 +218,12 @@ export default function AdminSidebar({
                     aria-label={section.label}
                     aria-pressed={isSectionActive}
                     className={cn(
-                      "flex h-11 w-full items-center justify-center rounded-2xl border transition-colors",
+                      "admin-sidebar-icon-button flex h-11 w-full items-center justify-center rounded-2xl border transition-colors",
                       isSectionActive
                         ? "border-primary/25 bg-primary/10 text-primary"
                         : "border-transparent text-text/75 hover:border-border hover:bg-tint hover:text-heading"
                     )}
+                    data-active={isSectionActive ? "true" : "false"}
                     key={section.key}
                     onBlur={scheduleFlyoutClose}
                     onFocus={(event) => openFlyout(section, event.currentTarget)}
@@ -246,11 +249,12 @@ export default function AdminSidebar({
                     <button
                       aria-expanded={isOpen}
                       className={cn(
-                        "flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors",
+                        "admin-sidebar-section-trigger flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors",
                         isSectionActive
                           ? "bg-primary/10 text-primary"
                           : "text-text/82 hover:bg-tint hover:text-heading"
                       )}
+                      data-active={isSectionActive ? "true" : "false"}
                       onClick={() =>
                         setOpenSections((previous) => ({
                           ...previous,
@@ -260,7 +264,7 @@ export default function AdminSidebar({
                       type="button"
                     >
                       <span className="flex items-center gap-2">
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-card text-text/80">
+                        <span className="admin-sidebar-section-icon inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border bg-card text-text/80">
                           <Icon size={18} />
                         </span>
                         <span className="text-sm font-semibold">{section.label}</span>
@@ -277,11 +281,12 @@ export default function AdminSidebar({
                             <Link
                               aria-current={active ? "page" : undefined}
                               className={cn(
-                                "block rounded-2xl px-3 py-2 text-sm transition-colors",
+                                "admin-sidebar-link block rounded-2xl px-3 py-2 text-sm transition-colors",
                                 active
                                   ? "bg-primary/10 font-semibold text-primary"
                                   : "text-text/75 hover:bg-tint hover:text-heading"
                               )}
+                              data-active={active ? "true" : "false"}
                               href={item.href}
                               key={item.href}
                             >
@@ -300,7 +305,7 @@ export default function AdminSidebar({
 
         <div
           className={cn(
-            "fixed z-[80] w-[256px] overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-[0_18px_38px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/70 transition-all duration-200 ease-out",
+            "admin-sidebar-flyout fixed z-[80] w-[256px] overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-[0_18px_38px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/70 transition-all duration-200 ease-out",
             showFlyout
               ? "pointer-events-auto translate-x-0 opacity-100"
               : "pointer-events-none translate-x-1 opacity-0"
@@ -335,11 +340,12 @@ export default function AdminSidebar({
                       <Link
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "flex h-10 items-center rounded-2xl px-3 text-sm transition-colors",
+                          "admin-sidebar-flyout-link flex h-10 items-center rounded-2xl px-3 text-sm transition-colors",
                           active
                             ? "bg-primary/10 font-semibold text-primary"
                             : "text-text/75 hover:bg-tint hover:text-heading"
                         )}
+                        data-active={active ? "true" : "false"}
                         href={item.href}
                         key={item.href}
                         onClick={closeFlyout}

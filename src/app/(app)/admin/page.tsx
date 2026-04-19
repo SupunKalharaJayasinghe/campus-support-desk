@@ -87,15 +87,16 @@ interface StatDefinition {
     | "intakes";
   label: string;
   icon: StatIcon;
+  tone: "sky" | "teal" | "violet" | "amber" | "green" | "rose";
 }
 
 const STAT_DEFINITIONS: StatDefinition[] = [
-  { key: "students", label: "Total Students", icon: Users },
-  { key: "faculties", label: "Total Faculties", icon: Building2 },
-  { key: "degreePrograms", label: "Degree Programs", icon: GraduationCap },
-  { key: "lecturers", label: "Lecturers / Instructors", icon: UserCheck },
-  { key: "modules", label: "Total Modules", icon: BookOpen },
-  { key: "intakes", label: "Active Intakes", icon: CalendarDays },
+  { key: "students", label: "Total Students", icon: Users, tone: "sky" },
+  { key: "faculties", label: "Total Faculties", icon: Building2, tone: "teal" },
+  { key: "degreePrograms", label: "Degree Programs", icon: GraduationCap, tone: "violet" },
+  { key: "lecturers", label: "Lecturers / Instructors", icon: UserCheck, tone: "green" },
+  { key: "modules", label: "Total Modules", icon: BookOpen, tone: "amber" },
+  { key: "intakes", label: "Active Intakes", icon: CalendarDays, tone: "rose" },
 ];
 
 const QUICK_ACTIONS = [
@@ -287,7 +288,7 @@ function DistributionList({ items }: { items: DistributionItem[] }) {
   return (
     <div className="space-y-4">
       {items.map((item) => (
-        <div key={`${item.meta}-${item.label}`}>
+        <div className="admin-distribution-row" key={`${item.meta}-${item.label}`}>
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-heading">{item.label}</p>
@@ -297,9 +298,9 @@ function DistributionList({ items }: { items: DistributionItem[] }) {
               {item.value.toLocaleString()}
             </p>
           </div>
-          <div className="mt-2 h-2 rounded-full bg-slate-200/70">
+          <div className="admin-distribution-track mt-3 h-2 rounded-full bg-slate-200/70">
             <div
-              className="h-2 rounded-full bg-primary"
+              className="admin-distribution-fill h-2 rounded-full bg-primary"
               style={{ width: `${Math.max(12, Math.round((item.value / maxValue) * 100))}%` }}
             />
           </div>
@@ -314,14 +315,16 @@ function StatOverviewCard({
   label,
   value,
   meta,
+  tone,
 }: {
   icon: StatIcon;
   label: string;
   value: string;
   meta: string;
+  tone: StatDefinition["tone"];
 }) {
   return (
-    <Card accent className="p-5">
+    <Card accent className="admin-stat-card p-5" data-tone={tone}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
@@ -329,7 +332,7 @@ function StatOverviewCard({
           </p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
         </div>
-        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Icon size={18} />
         </span>
       </div>
@@ -427,8 +430,21 @@ export default function AdminDashboardPage() {
   }, [dashboard]);
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
       <PageHeader
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="admin-toolbar-chip">
+              {dashboard?.currentIntake?.currentTerm
+                ? `Live term ${dashboard.currentIntake.currentTerm}`
+                : "Live operations"}
+            </span>
+            <Link className="admin-toolbar-link" href="/admin/reports/student-analytics">
+              Open Reports
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+        }
         description="Centralized oversight for academic structure, enrollments, teaching operations, and system-wide alerts."
         title="Dashboard"
       />
@@ -440,7 +456,7 @@ export default function AdminDashboardPage() {
       />
 
       {dashboardError ? (
-        <Card className="p-5">
+        <Card className="admin-empty-state p-5">
           <p className="text-sm font-semibold text-heading">Dashboard data unavailable</p>
           <p className="mt-1 text-sm text-text/68">{dashboardError}</p>
         </Card>
@@ -453,6 +469,7 @@ export default function AdminDashboardPage() {
             key={item.key}
             label={item.label}
             meta={item.meta}
+            tone={item.tone}
             value={item.value}
           />
         ))}
@@ -465,7 +482,7 @@ export default function AdminDashboardPage() {
           title="Academic Overview"
         >
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-3xl border border-border bg-card p-5">
+            <div className="admin-surface rounded-3xl border border-border bg-card p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-heading">Students per Faculty</p>
                 <Badge variant="neutral">Live distribution</Badge>
@@ -474,13 +491,15 @@ export default function AdminDashboardPage() {
                 {dashboard?.studentsPerFaculty.length ? (
                   <DistributionList items={dashboard.studentsPerFaculty} />
                 ) : (
-                  <p className="text-sm text-text/68">No enrollment distribution available yet.</p>
+                  <p className="admin-empty-state rounded-3xl px-4 py-5 text-sm text-text/68">
+                    No enrollment distribution available yet.
+                  </p>
                 )}
               </div>
             </div>
 
             <div className="space-y-5">
-              <div className="rounded-3xl border border-border bg-card p-5">
+              <div className="admin-surface rounded-3xl border border-border bg-card p-5">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-heading">Students per Degree</p>
                   <Badge variant="neutral">Top programs</Badge>
@@ -489,7 +508,7 @@ export default function AdminDashboardPage() {
                   {dashboard?.studentsPerDegree.length ? (
                     <DistributionList items={dashboard.studentsPerDegree} />
                   ) : (
-                    <p className="text-sm text-text/68">
+                    <p className="admin-empty-state rounded-3xl px-4 py-5 text-sm text-text/68">
                       No degree-level enrollment distribution available yet.
                     </p>
                   )}
@@ -497,7 +516,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-3xl border border-border bg-card p-5">
+                <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5">
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                     <CalendarDays size={18} />
                   </span>
@@ -512,7 +531,7 @@ export default function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="rounded-3xl border border-border bg-card p-5">
+                <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5">
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                     <Layers3 size={18} />
                   </span>
@@ -537,12 +556,12 @@ export default function AdminDashboardPage() {
         >
           <div className="space-y-4">
               {announcements.length === 0 ? (
-              <div className="rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
+              <div className="admin-empty-state rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
                 No announcements available yet.
               </div>
             ) : (
               announcements.map((item) => (
-                <div className="rounded-3xl border border-border bg-card p-5" key={item.id}>
+                <div className="admin-list-card rounded-3xl border border-border bg-card p-5" key={item.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-heading">{item.title}</p>
@@ -583,10 +602,10 @@ export default function AdminDashboardPage() {
                       <Clock3 size={16} />
                     </span>
                     {index === dashboard.recentActivity.length - 1 ? null : (
-                      <span className="mt-2 h-full w-px bg-border" />
+                      <span className="mt-2 h-full w-px bg-border opacity-80" />
                     )}
                   </div>
-                  <div className="min-w-0 rounded-3xl border border-border bg-card p-4">
+                  <div className="admin-activity-panel min-w-0 rounded-3xl border border-border bg-card p-4">
                     <p className="text-sm font-semibold text-heading">{item.title}</p>
                     <p className="mt-1 text-sm text-text/68">{item.detail}</p>
                     <p className="mt-3 text-xs font-medium text-text/55">
@@ -596,7 +615,7 @@ export default function AdminDashboardPage() {
                 </div>
               ))
             ) : (
-              <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+              <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
                 No recent database activity available.
               </div>
             )}
@@ -612,9 +631,9 @@ export default function AdminDashboardPage() {
               {QUICK_ACTIONS.map((item, index) => (
                 <Link
                   className={[
-                    "inline-flex items-center justify-between rounded-2xl px-4 py-2 text-sm font-medium transition-all",
+                    "admin-quick-link inline-flex items-center justify-between rounded-2xl px-4 py-2 text-sm font-medium transition-all",
                     index === QUICK_ACTIONS.length - 1
-                      ? "bg-primary text-white hover:bg-primaryHover"
+                      ? "admin-quick-link-primary bg-primary text-white hover:bg-primaryHover"
                       : "border border-border bg-card text-text hover:bg-tint",
                   ].join(" ")}
                   href={item.href}
@@ -634,7 +653,7 @@ export default function AdminDashboardPage() {
             <div className="space-y-3">
               {dashboard?.alerts.length ? (
                 dashboard.alerts.map((item) => (
-                  <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                  <div className="admin-alert-card rounded-3xl border border-border bg-card p-4" key={item.id}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
                         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -652,7 +671,7 @@ export default function AdminDashboardPage() {
                   </div>
                 ))
               ) : (
-                <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
                   No alert conditions detected from current database records.
                 </div>
               )}
@@ -665,7 +684,7 @@ export default function AdminDashboardPage() {
           >
             <div className="space-y-3">
               {notifications.map((item) => (
-                <div className="rounded-3xl border border-border bg-card p-4" key={item.id}>
+                <div className="admin-notification-card rounded-3xl border border-border bg-card p-4" key={item.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
@@ -679,7 +698,7 @@ export default function AdminDashboardPage() {
                 </div>
               ))}
               {notifications.length === 0 ? (
-                <div className="rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
                   No notifications available.
                 </div>
               ) : null}

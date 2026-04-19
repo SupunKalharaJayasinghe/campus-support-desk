@@ -141,11 +141,11 @@ export default function AdminTopbar() {
   const userLabel = user?.name ?? "Lakvidu Upasara";
 
   return (
-    <header className="z-20 h-[60px] shrink-0 border-b border-border bg-card">
-      <div className="flex h-full items-center justify-between gap-4 px-4 md:px-6">
+    <header className="admin-topbar z-20 shrink-0 border-b border-border bg-card">
+      <div className="flex min-h-[72px] flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-6">
         <nav
           aria-label="Breadcrumb"
-          className="flex min-w-0 items-center gap-2 text-sm"
+          className="admin-topbar-breadcrumb flex min-w-0 items-center gap-2 rounded-full px-4 py-3 text-sm"
           title={breadcrumbTitle}
         >
           <div className="flex min-w-0 items-center gap-1.5 truncate">
@@ -173,13 +173,15 @@ export default function AdminTopbar() {
           <span className="truncate font-medium text-heading">{currentWindowLabel}</span>
         </nav>
 
-        <div className="flex min-w-0 items-center gap-3">
-          <Badge className="shrink-0" variant="neutral">
-            {roleLabel(role)}
-          </Badge>
-          <p className="truncate text-sm font-medium text-heading" title={userLabel}>
-            {userLabel}
-          </p>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <div className="admin-topbar-user flex min-w-0 items-center gap-3 rounded-full px-3 py-2">
+            <Badge className="shrink-0" variant="neutral">
+              {roleLabel(role)}
+            </Badge>
+            <p className="truncate text-sm font-medium text-heading" title={userLabel}>
+              {userLabel}
+            </p>
+          </div>
           <Button
             className="shrink-0 px-3 py-1.5"
             onClick={() => {

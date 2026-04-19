@@ -31,15 +31,17 @@ export default function Card({
           : "border-border bg-tint",
         className
       )}
+      data-accent={accent ? "true" : "false"}
+      data-variant={variant}
       {...props}
     >
       {accent ? (
         <div
           aria-hidden
-          className="absolute inset-x-0 top-0 h-20 pointer-events-none"
+          className="ui-card-accent absolute inset-x-0 top-0 h-20 pointer-events-none"
           style={{
             background:
-              "linear-gradient(135deg, rgba(3,74,166,0.12), rgba(3,57,166,0.06), transparent 60%)",
+              "linear-gradient(135deg, color-mix(in srgb, var(--primary) 16%, transparent), color-mix(in srgb, var(--primaryHover) 10%, transparent), transparent 62%)",
           }}
         />
       ) : null}

@@ -37,6 +37,7 @@ export default function Badge({
         variantClasses[variant],
         className
       )}
+      data-variant={variant}
       {...props}
     />
   );

@@ -1,3 +1,5 @@
+import "./admin-experience.css";
+
 import RoleGuard from "@/components/auth/RoleGuard";
 import AdminShell from "@/components/layout/admin/AdminShell";
 
