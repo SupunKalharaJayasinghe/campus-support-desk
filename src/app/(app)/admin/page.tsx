@@ -426,6 +426,11 @@ export default function AdminDashboardPage() {
     }));
   }, [dashboard]);
 
+  const recentActivityItems = dashboard?.recentActivity.slice(0, 4) ?? [];
+  const alertItems = dashboard?.alerts.slice(0, 3) ?? [];
+  const announcementPreviewItems = announcements.slice(0, 2);
+  const recentNotificationItems = notifications.slice(0, 3);
+
   return (
     <div className="admin-dashboard space-y-6 lg:space-y-8">
       {dashboardError ? (
@@ -524,29 +529,26 @@ export default function AdminDashboardPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card
-          description="Recent platform events across enrollments, teaching allocation, and coursework setup."
-          title="Recent Activity"
-        >
-          <div className="space-y-4">
-            {dashboard?.recentActivity.length ? (
-              dashboard.recentActivity.map((item, index) => (
-                <div className="flex gap-4" key={item.id}>
-                  <div className="flex flex-col items-center">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Clock3 size={16} />
-                    </span>
-                    {index === dashboard.recentActivity.length - 1 ? null : (
-                      <span className="mt-2 h-full w-px bg-border opacity-80" />
-                    )}
-                  </div>
-                  <div className="admin-activity-panel min-w-0 rounded-3xl border border-border bg-card p-4">
-                    <p className="text-sm font-semibold text-heading">{item.title}</p>
-                    <p className="mt-1 text-sm text-text/68">{item.detail}</p>
-                    <p className="mt-3 text-xs font-medium text-text/55">
-                      {formatRelativeTime(item.occurredAt)}
-                    </p>
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card className="p-5" title="Recent Activity">
+          <div className="space-y-3">
+            {recentActivityItems.length ? (
+              recentActivityItems.map((item) => (
+                <div
+                  className="admin-activity-panel flex items-start gap-3 rounded-3xl border border-border bg-card p-4"
+                  key={item.id}
+                >
+                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Clock3 size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="shrink-0 text-xs font-medium text-text/55">
+                        {formatRelativeTime(item.occurredAt)}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-text/68">{item.detail}</p>
                   </div>
                 </div>
               ))
@@ -558,56 +560,13 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
 
-        <div className="space-y-6">
-          <Card
-            description="Latest communication posted by the super admin team."
-            title="Announcement Preview"
-          >
-            <div className="space-y-4">
-              {announcements.length === 0 ? (
-                <div className="admin-empty-state rounded-3xl border border-border bg-card p-5 text-sm text-text/70">
-                  No announcements available yet.
-                </div>
-              ) : (
-                announcements.map((item) => (
-                  <div
-                    className="admin-list-card rounded-3xl border border-border bg-card p-5"
-                    key={item.id}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-heading">{item.title}</p>
-                        <p className="mt-1 text-xs text-text/60">{item.targetLabel}</p>
-                      </div>
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Megaphone size={16} />
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs font-medium text-text/55">
-                      {formatDateTime(item.createdAt)}
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-text/72">{item.message}</p>
-                  </div>
-                ))
-              )}
-              <Link
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-heading hover:bg-tint"
-                href="/admin/announcements"
-              >
-                View All
-              </Link>
-            </div>
-          </Card>
-
-          <Card
-            description="Fast access to common super admin workflows."
-            title="Quick Actions"
-          >
-            <div className="grid gap-3">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-1">
+          <Card className="p-5" title="Quick Actions">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               {QUICK_ACTIONS.map((item, index) => (
                 <Link
                   className={[
-                    "admin-quick-link inline-flex items-center justify-between rounded-2xl px-4 py-2 text-sm font-medium transition-all",
+                    "admin-quick-link inline-flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition-all",
                     index === QUICK_ACTIONS.length - 1
                       ? "admin-quick-link-primary bg-primary text-white hover:bg-primaryHover"
                       : "border border-border bg-card text-text hover:bg-tint",
@@ -622,27 +581,27 @@ export default function AdminDashboardPage() {
             </div>
           </Card>
 
-          <Card
-            description="Priority issues that need intervention from academic operations."
-            title="Important Alerts"
-          >
+          <Card className="p-5" title="Important Alerts">
             <div className="space-y-3">
-              {dashboard?.alerts.length ? (
-                dashboard.alerts.map((item) => (
-                  <div className="admin-alert-card rounded-3xl border border-border bg-card p-4" key={item.id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-                          <AlertTriangle size={16} />
-                        </span>
-                        <div>
+              {alertItems.length ? (
+                alertItems.map((item) => (
+                  <div
+                    className="admin-alert-card rounded-3xl border border-border bg-card p-4"
+                    key={item.id}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                        <AlertTriangle size={16} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
                           <p className="text-sm font-semibold text-heading">{item.title}</p>
-                          <p className="mt-1 text-sm text-text/68">{item.detail}</p>
+                          <Badge variant={item.level === "High" ? "warning" : "neutral"}>
+                            {item.level}
+                          </Badge>
                         </div>
+                        <p className="mt-1 text-sm leading-6 text-text/68">{item.detail}</p>
                       </div>
-                      <Badge variant={item.level === "High" ? "warning" : "neutral"}>
-                        {item.level}
-                      </Badge>
                     </div>
                   </div>
                 ))
@@ -653,34 +612,86 @@ export default function AdminDashboardPage() {
               )}
             </div>
           </Card>
+        </div>
+      </section>
 
-          <Card
-            description="Notifications and system announcements visible to admin users."
-            title="Recent Notifications"
-          >
-            <div className="space-y-3">
-              {notifications.map((item) => (
-                <div className="admin-notification-card rounded-3xl border border-border bg-card p-4" key={item.id}>
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card className="p-5" title="Announcement Preview">
+          <div className="space-y-3">
+            {announcementPreviewItems.length ? (
+              announcementPreviewItems.map((item) => (
+                <div
+                  className="admin-list-card rounded-3xl border border-border bg-card p-4"
+                  key={item.id}
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
-                        {item.type}
-                      </Badge>
-                      <p className="mt-2 text-sm font-semibold text-heading">{item.title}</p>
-                      <p className="mt-1 text-sm text-text/68">{item.message}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                          <Megaphone size={14} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-heading">
+                            {item.title}
+                          </p>
+                          <p className="mt-0.5 text-xs text-text/60">{item.targetLabel}</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-text/72">{item.message}</p>
                     </div>
-                    <p className="text-xs text-text/55">{item.time}</p>
+                    <p className="shrink-0 text-xs font-medium text-text/55">
+                      {formatDateTime(item.createdAt)}
+                    </p>
                   </div>
                 </div>
-              ))}
-              {notifications.length === 0 ? (
-                <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
-                  No notifications available.
-                </div>
-              ) : null}
+              ))
+            ) : (
+              <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                No announcements available yet.
+              </div>
+            )}
+            <div className="pt-1">
+              <Link
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primaryHover"
+                href="/admin/announcements"
+              >
+                View All
+                <ArrowRight size={14} />
+              </Link>
             </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
+
+        <Card className="p-5" title="Recent Notifications">
+          <div className="space-y-3">
+            {recentNotificationItems.length ? (
+              recentNotificationItems.map((item) => (
+                <div
+                  className="admin-notification-card rounded-3xl border border-border bg-card p-4"
+                  key={item.id}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={item.type === "Announcement" ? "success" : "warning"}>
+                          {item.type}
+                        </Badge>
+                        {item.unread ? <Badge variant="neutral">Unread</Badge> : null}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-heading">{item.title}</p>
+                      <p className="mt-1 text-sm leading-6 text-text/68">{item.message}</p>
+                    </div>
+                    <p className="shrink-0 text-xs text-text/55">{item.time}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="admin-empty-state rounded-3xl border border-border bg-card p-4 text-sm text-text/68">
+                No notifications available.
+              </div>
+            )}
+          </div>
+        </Card>
       </section>
     </div>
   );
