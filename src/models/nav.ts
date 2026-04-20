@@ -53,5 +53,11 @@ export const NAV_BY_ROLE: Record<AppRole, NavItem[]> = {
     { label: "Moderation", href: "/admin/moderation", icon: "shield", badge: 5 },
     { label: "Analytics", href: "/admin/analytics", icon: "chart" },
   ],
+  COMMUNITY_ADMIN: [
+    { label: "Dashboard", href: "/community-admin", icon: "home" },
+    { label: "Members", href: "/community-admin/members", icon: "users" },
+    { label: "Reported posts", href: "/community-admin/reported-posts", icon: "shield", badge: 5 },
+    { label: "Urgent payments", href: "/community-admin/urgent-payments", icon: "chart" },
+  ],
 };
 

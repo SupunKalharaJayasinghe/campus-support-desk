@@ -1,12 +1,9 @@
 import mongoose from "mongoose";
-import { toAppRoleFromUserRole } from "@/models/rbac";
+import { toAppRoleFromUserRole, type AppRole } from "@/models/rbac";
 import { UserModel } from "@/models/User";
 
-export type AnnouncementAppRole =
-  | "SUPER_ADMIN"
-  | "LECTURER"
-  | "LOST_ITEM_STAFF"
-  | "STUDENT";
+/** Mirrors {@link AppRole} so announcement actors stay aligned with RBAC roles. */
+export type AnnouncementAppRole = AppRole;
 
 export interface AnnouncementActor {
   userId: string;

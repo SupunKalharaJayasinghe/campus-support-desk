@@ -713,7 +713,7 @@ export default function CommunityPostComposer({
         if (isUrgent && urgentPaymentMethod === "points" && urgentPrepayId) {
             const prepayAlreadyOnDraft =
                 Boolean(draftToEdit?.urgentPrepayId) &&
-                String(draftToEdit.urgentPrepayId) === String(urgentPrepayId);
+                String(draftToEdit?.urgentPrepayId) === String(urgentPrepayId);
             if (
                 !prepayAlreadyOnDraft &&
                 pointsNonRefundAckPrepayIdRef.current !== urgentPrepayId
