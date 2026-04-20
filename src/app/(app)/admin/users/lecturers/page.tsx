@@ -2,9 +2,23 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  Users2,
+  X,
+} from "lucide-react";
+import AdminSummaryCard from "@/components/admin/AdminSummaryCard";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -87,6 +101,17 @@ function formatDate(value: string | null | undefined) {
   if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -376,6 +401,36 @@ export default function LecturersPage() {
   const facultyOpts = faculties.map((item) => ({ id: item.code, label: `${item.code} - ${item.name}` }));
   const degreeOpts = degrees.map((item) => ({ id: item.code, label: `${item.code} - ${item.name}` }));
   const moduleOpts = modules.map((item) => ({ id: item.id, label: `${item.code} - ${item.name}` }));
+  const contentBlurClass = overlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
+  const activeFilterCount = Number(Boolean(status));
+  const filtersApplied = Boolean(query.trim() || activeFilterCount > 0);
+  const activeLecturersCount = useMemo(
+    () => lecturers.filter((item) => item.status === "ACTIVE").length,
+    [lecturers]
+  );
+  const scopedModuleCount = useMemo(
+    () => new Set(lecturers.flatMap((item) => item.moduleIds)).size,
+    [lecturers]
+  );
+  const latestUpdatedAt = useMemo(
+    () =>
+      lecturers.reduce<string | null>((latest, item) => {
+        if (!item.updatedAt) return latest;
+        if (!latest || item.updatedAt.localeCompare(latest) > 0) {
+          return item.updatedAt;
+        }
+        return latest;
+      }, null),
+    [lecturers]
+  );
+  const sortLabel =
+    sort === "updated"
+      ? "Recently Updated"
+      : sort === "created"
+        ? "Recently Added"
+        : sort === "az"
+          ? "A-Z"
+          : "Z-A";
 
   const openAdd = () => { setModal({ mode: "add" }); setForm({ fullName: "", email: "", optionalEmail: "", phone: "", nicStaffId: "", status: "ACTIVE", facultyIds: [], degreeProgramIds: [], moduleIds: [] }); setFormError(""); };
   const openEdit = (row: LecturerRecord) => { setModal({ mode: "edit", id: row.id }); setForm({ fullName: row.fullName, email: row.email, optionalEmail: row.optionalEmail, phone: row.phone, nicStaffId: row.nicStaffId, status: row.status, facultyIds: [...row.facultyIds], degreeProgramIds: [...row.degreeProgramIds], moduleIds: [...row.moduleIds] }); setFormError(""); };
@@ -409,18 +464,249 @@ export default function LecturersPage() {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader actions={<Button className="h-11 min-w-[172px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]" onClick={openAdd}><Plus size={16} />Add Lecturer</Button>} description="Manage lecturer profiles and teaching eligibility scope" title="Lecturers" />
-      <Card className={cn("transition-all", overlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "")}>
-        <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px_220px]">
-            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Search</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50" size={16} /><Input className="h-12 pl-10" onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search by name, email, or staff id" value={query} /></div></div>
-            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Status</label><Select className="h-12" onChange={(e) => { setStatus(e.target.value as "" | LecturerStatus); setPage(1); }} value={status}><option value="">All</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></Select></div>
-            <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Sort</label><Select className="h-12" onChange={(e) => { setSort(e.target.value as SortOption); setPage(1); }} value={sort}><option value="updated">Recently Updated</option><option value="created">Recently Added</option><option value="az">A-Z</option><option value="za">Z-A</option></Select></div>
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex justify-end", contentBlurClass)}>
+        <Button className="h-11 gap-2 px-5" onClick={openAdd}>
+          <Plus size={16} />
+          Add Lecturer
+        </Button>
+      </div>
+
+      <section
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
+        )}
+      >
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">User Management</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Lecturer directory
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Manage lecturer profiles and teaching eligibility scope using the same updated
+                  admin surface used across the academic directory pages.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Results
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {total.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {filtersApplied
+                      ? "Matching the current search and filters"
+                      : "Showing the full lecturer directory"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-end">
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Search
+                  </label>
+                  <div className="group flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Search size={17} />
+                    </span>
+                    <input
+                      aria-label="Search lecturers"
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Search by name, email, or staff id"
+                      value={query}
+                    />
+                    {query.trim() ? (
+                      <button
+                        aria-label="Clear search"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text/45 transition-colors hover:bg-primary/8 hover:text-primary"
+                        onClick={() => {
+                          setQuery("");
+                          setPage(1);
+                        }}
+                        type="button"
+                      >
+                        <X size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Sort
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ArrowUpDown size={16} />
+                    </span>
+                    <select
+                      aria-label="Sort lecturers"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setSort(event.target.value as SortOption);
+                        setPage(1);
+                      }}
+                      value={sort}
+                    >
+                      <option value="updated">Recently Updated</option>
+                      <option value="created">Recently Added</option>
+                      <option value="az">A-Z</option>
+                      <option value="za">Z-A</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Status
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter lecturers by status"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setStatus(event.target.value as "" | LecturerStatus);
+                        setPage(1);
+                      }}
+                      value={status}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+                {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+              </Badge>
+              <Badge variant="neutral">{sortLabel}</Badge>
+              {query.trim() ? (
+                <Badge
+                  className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap"
+                  variant="primary"
+                >
+                  Search: {query.trim()}
+                </Badge>
+              ) : null}
+              {filtersApplied ? (
+                <Button
+                  className="h-9 px-3 text-xs"
+                  onClick={() => {
+                    setQuery("");
+                    setStatus("");
+                    setSort("updated");
+                    setPage(1);
+                  }}
+                  variant="ghost"
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
           </div>
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Total Lecturers</p><p className="mt-1 text-2xl font-semibold text-heading">{total}</p></div>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <AdminSummaryCard
+            detail={`${lecturers.length.toLocaleString()} rows loaded on this page`}
+            icon={Users2}
+            label="Total Lecturers"
+            tone="sky"
+            value={total.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail={
+              activeLecturersCount > 0
+                ? `${activeLecturersCount.toLocaleString()} active lecturer records in view`
+                : "No active lecturer records in the current view"
+            }
+            icon={CheckCircle2}
+            label="Active Lecturers"
+            tone="green"
+            value={activeLecturersCount.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail={
+              scopedModuleCount > 0
+                ? `${scopedModuleCount.toLocaleString()} eligible modules linked across visible lecturers`
+                : "No eligible modules linked in the current view"
+            }
+            icon={BookOpen}
+            label="Eligible Modules"
+            tone="violet"
+            value={scopedModuleCount.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail={
+              latestUpdatedAt
+                ? "Most recent visible lecturer profile change"
+                : "No lecturer updates loaded yet"
+            }
+            icon={Clock3}
+            label="Latest Update"
+            tone="amber"
+            value={formatShortDate(latestUpdatedAt)}
+          />
         </div>
-        <div className="mt-5 overflow-x-auto">
+      </section>
+
+      <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Lecturer Records</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review lecturer identity, contact details, active state, and assigned teaching scope
+              from a cleaner table surface.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+              {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+            </Badge>
+            <Badge variant="neutral">{sortLabel}</Badge>
+            {query.trim() ? (
+              <Badge
+                className="max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap"
+                variant="primary"
+              >
+                Search: {query.trim()}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border bg-tint"><tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60"><th className="px-4 py-3">Lecturer</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Phone</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Teaching Scope</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
             <tbody>
               {loading ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>Loading lecturers...</td></tr> : lecturers.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>No lecturers match the current filters.</td></tr> : lecturers.map((row) => (
@@ -436,8 +722,10 @@ export default function LecturersPage() {
               ))}
             </tbody>
           </table>
+            </div>
+          </div>
         </div>
-        <TablePagination onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value as PageSize); setPage(1); }} page={safePage} pageCount={pageCount} pageSize={pageSize} totalItems={total} />
+        <TablePagination className="mt-0 px-6 pb-6" onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value as PageSize); setPage(1); }} page={safePage} pageCount={pageCount} pageSize={pageSize} totalItems={total} />
       </Card>
       {modal ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[3px]" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) closeModal(); }} role="presentation">

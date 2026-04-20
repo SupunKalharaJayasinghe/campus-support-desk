@@ -10,17 +10,23 @@ import {
 } from "react";
 import Link from "next/link";
 import {
+  ArrowUpDown,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  GraduationCap,
   Loader2,
   Pencil,
   Plus,
   RotateCcw,
   Save,
   Search,
+  Users2,
   Trash2,
   X,
 } from "lucide-react";
+import AdminSummaryCard from "@/components/admin/AdminSummaryCard";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -163,6 +169,17 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function collapseSpaces(value: unknown) {
@@ -788,6 +805,36 @@ export default function StudentsAdminPage() {
 
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, pageCount);
+  const contentBlurClass = isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
+  const activeFilterCount = [statusFilter].filter(Boolean).length;
+  const filtersApplied = Boolean(searchQuery.trim() || activeFilterCount > 0);
+  const activeStudentsCount = useMemo(
+    () => students.filter((student) => student.status === "ACTIVE").length,
+    [students]
+  );
+  const loadedEnrollmentsCount = useMemo(
+    () => students.reduce((total, student) => total + student.enrollmentCount, 0),
+    [students]
+  );
+  const latestUpdatedAt = useMemo(
+    () =>
+      students.reduce<string | null>((latest, student) => {
+        if (!student.updatedAt) return latest;
+        if (!latest || student.updatedAt.localeCompare(latest) > 0) {
+          return student.updatedAt;
+        }
+        return latest;
+      }, null),
+    [students]
+  );
+  const sortLabel =
+    sortBy === "updated"
+      ? "Recently Updated"
+      : sortBy === "created"
+        ? "Recently Added"
+        : sortBy === "az"
+          ? "A-Z"
+          : "Z-A";
 
   const openAddModal = () => {
     setModal({ mode: "add" });
@@ -1099,186 +1146,342 @@ export default function StudentsAdminPage() {
   const subgroupSelectValue = collapseSpaces(form.subgroup);
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        actions={
-          <Button
-            className="h-11 min-w-[164px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] transition-colors hover:bg-[#0339a6]"
-            onClick={openAddModal}
-          >
-            <Plus size={16} /> Add Student
-          </Button>
-        }
-        description="Manage student profiles and multiple program enrollments."
-        title="Students"
-      />
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex justify-end", contentBlurClass)}>
+        <Button className="h-11 gap-2 px-5" onClick={openAddModal}>
+          <Plus size={16} />
+          Add Student
+        </Button>
+      </div>
 
-      <Card className={cn("transition-all", isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "")}> 
-        <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px_220px]">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Search
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50" size={16} />
-                <Input
-                  aria-label="Search students"
-                  className="h-12 pl-10"
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search by student ID, name, email"
-                  value={searchQuery}
-                />
+      <section
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
+        )}
+      >
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">User Management</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Student directory
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Manage student profiles and multiple program enrollments using the
+                  same updated directory surface used across the admin academics pages.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Results
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {totalCount.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {filtersApplied
+                      ? "Matching the current search and filters"
+                      : "Showing the full student directory"}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Status
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as "" | StudentStatus);
-                  setPage(1);
-                }}
-                value={statusFilter}
-              >
-                <option value="">All</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
-              </Select>
+            <div className="space-y-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-end">
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Search
+                  </label>
+                  <div className="group flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Search size={17} />
+                    </span>
+                    <input
+                      aria-label="Search students"
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Search by student ID, name, email"
+                      value={searchQuery}
+                    />
+                    {searchQuery.trim() ? (
+                      <button
+                        aria-label="Clear search"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text/45 transition-colors hover:bg-primary/8 hover:text-primary"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setPage(1);
+                        }}
+                        type="button"
+                      >
+                        <X size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Sort
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ArrowUpDown size={16} />
+                    </span>
+                    <select
+                      aria-label="Sort students"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setSortBy(event.target.value as SortOption);
+                        setPage(1);
+                      }}
+                      value={sortBy}
+                    >
+                      <option value="updated">Recently Updated</option>
+                      <option value="created">Recently Added</option>
+                      <option value="az">A-Z</option>
+                      <option value="za">Z-A</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Status
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter students by status"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value as "" | StudentStatus);
+                        setPage(1);
+                      }}
+                      value={statusFilter}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Sort
-              </label>
-              <Select
-                className="h-12"
-                onChange={(event) => {
-                  setSortBy(event.target.value as SortOption);
-                  setPage(1);
-                }}
-                value={sortBy}
-              >
-                <option value="updated">Recently Updated</option>
-                <option value="created">Recently Added</option>
-                <option value="az">A-Z</option>
-                <option value="za">Z-A</option>
-              </Select>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+                {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+              </Badge>
+              <Badge variant="neutral">{sortLabel}</Badge>
+              {searchQuery.trim() ? (
+                <Badge
+                  className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap"
+                  variant="primary"
+                >
+                  Search: {searchQuery.trim()}
+                </Badge>
+              ) : null}
+              {filtersApplied ? (
+                <Button
+                  className="h-9 px-3 text-xs"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("");
+                    setSortBy("updated");
+                    setPage(1);
+                  }}
+                  variant="ghost"
+                >
+                  Clear
+                </Button>
+              ) : null}
             </div>
           </div>
+        </Card>
 
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-              Total Students
+        <div className="grid gap-4 sm:grid-cols-2">
+          <AdminSummaryCard
+            detail={`${students.length.toLocaleString()} rows loaded on this page`}
+            icon={GraduationCap}
+            label="Total Students"
+            tone="sky"
+            value={totalCount.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail={
+              activeStudentsCount > 0
+                ? `${activeStudentsCount.toLocaleString()} active student records in view`
+                : "No active student records in the current view"
+            }
+            icon={CheckCircle2}
+            label="Active Students"
+            tone="green"
+            value={activeStudentsCount.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail="Visible enrollment count across the students loaded on this page."
+            icon={Users2}
+            label="Loaded Enrollments"
+            tone="violet"
+            value={loadedEnrollmentsCount.toLocaleString()}
+          />
+          <AdminSummaryCard
+            detail={latestUpdatedAt ? "Most recent visible student profile change" : "No student updates loaded yet"}
+            icon={Clock3}
+            label="Latest Update"
+            tone="amber"
+            value={formatShortDate(latestUpdatedAt)}
+          />
+        </div>
+      </section>
+
+      <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Student Records</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review profile identity, latest enrollment, current term, and student status from a cleaner table surface.
             </p>
-            <p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+              {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+            </Badge>
+            <Badge variant="neutral">{sortLabel}</Badge>
+            {searchQuery.trim() ? (
+              <Badge
+                className="max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap"
+                variant="primary"
+              >
+                Search: {searchQuery.trim()}
+              </Badge>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left text-sm">
-            <thead className="border-b border-border bg-tint">
-              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                <th className="px-4 py-3">Student ID</th>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Latest Enrollment</th>
-                <th className="px-4 py-3">Semester</th>
-                <th className="px-4 py-3">Enrollments</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
-                    Loading student records...
-                  </td>
-                </tr>
-              ) : null}
-
-              {!isLoading
-                ? students.map((student) => (
-                    <tr className="border-b border-border/70 transition-colors hover:bg-tint" key={student.id}>
-                      <td className="px-4 py-4 font-semibold text-heading">
-                        <Link
-                          className="text-[#034aa6] hover:text-[#0339a6]"
-                          href={`/admin/users/students/${encodeURIComponent(student.id)}`}
-                        >
-                          {student.studentId}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p className="font-semibold text-heading">
-                          {student.firstName} {student.lastName}
-                        </p>
-                        <p className="mt-0.5 text-xs text-text/60">
-                          Updated {formatDate(student.updatedAt)}
-                        </p>
-                        <p className="mt-0.5 text-xs text-text/65">{student.email}</p>
-                      </td>
-                      <td className="px-4 py-4 text-text/75">
-                        {student.latestEnrollment ? (
-                          <>
-                            <p>
-                              {student.latestEnrollment.facultyId} / {student.latestEnrollment.degreeProgramId}
-                            </p>
-                            <p className="text-xs text-text/58">{student.latestEnrollment.intakeName || student.latestEnrollment.intakeId}</p>
-                            <p className="text-xs text-text/58">{student.latestEnrollment.stream}</p>
-                          </>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-text/75">
-                        {student.latestEnrollment?.currentTerm || "-"}
-                      </td>
-                      <td className="px-4 py-4 text-text/75">{student.enrollmentCount}</td>
-                      <td className="px-4 py-4">
-                        <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            aria-label={`Edit ${student.studentId}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                            onClick={() => openEditModal(student)}
-                            type="button"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            aria-label={`Delete ${student.studentId}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                            onClick={() => setDeleteTarget(student)}
-                            type="button"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-left text-sm">
+                <thead className="bg-[rgba(255,255,255,0.82)]">
+                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    <th className="px-5 py-4">Student ID</th>
+                    <th className="px-5 py-4">Name</th>
+                    <th className="px-5 py-4">Latest Enrollment</th>
+                    <th className="px-5 py-4">Semester</th>
+                    <th className="px-5 py-4">Enrollments</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/70">
+                  {isLoading ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
+                        Loading student records...
                       </td>
                     </tr>
-                  ))
-                : null}
+                  ) : null}
 
-              {!isLoading && students.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
-                    No students match the current filters.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  {!isLoading
+                    ? students.map((student) => (
+                        <tr className="transition-colors duration-200 hover:bg-white/70" key={student.id}>
+                          <td className="px-5 py-4 align-top font-semibold text-heading">
+                            <Link
+                              className="text-primary hover:text-primaryHover"
+                              href={`/admin/users/students/${encodeURIComponent(student.id)}`}
+                            >
+                              {student.studentId}
+                            </Link>
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <p className="font-semibold text-heading">
+                              {student.firstName} {student.lastName}
+                            </p>
+                            <p className="mt-0.5 text-xs text-text/55">
+                              Updated {formatDate(student.updatedAt)}
+                            </p>
+                            <p className="mt-0.5 text-xs text-text/65">{student.email}</p>
+                          </td>
+                          <td className="px-5 py-4 align-top text-text/75">
+                            {student.latestEnrollment ? (
+                              <>
+                                <p>
+                                  {student.latestEnrollment.facultyId} / {student.latestEnrollment.degreeProgramId}
+                                </p>
+                                <p className="text-xs text-text/58">
+                                  {student.latestEnrollment.intakeName || student.latestEnrollment.intakeId}
+                                </p>
+                                <p className="text-xs text-text/58">{student.latestEnrollment.stream}</p>
+                              </>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td className="px-5 py-4 align-top text-text/75">
+                            {student.latestEnrollment?.currentTerm || "-"}
+                          </td>
+                          <td className="px-5 py-4 align-top text-text/75">{student.enrollmentCount}</td>
+                          <td className="px-5 py-4 align-top">
+                            <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                aria-label={`Edit ${student.studentId}`}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-heading hover:shadow-shadow"
+                                onClick={() => openEditModal(student)}
+                                type="button"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                aria-label={`Delete ${student.studentId}`}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-red-200 hover:bg-white hover:text-red-600 hover:shadow-shadow"
+                                onClick={() => setDeleteTarget(student)}
+                                type="button"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    : null}
+
+                  {!isLoading && students.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
+                        No students match the current filters.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <TablePagination
+          className="mt-0 px-6 pb-6"
           onPageChange={setPage}
           onPageSizeChange={(value) => {
             setPageSize(value as PageSize);

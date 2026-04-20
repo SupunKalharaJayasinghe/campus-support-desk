@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+} from "react";
 import {
   AlertTriangle,
+  ArrowUpDown,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
   Loader2,
   Pencil,
   Plus,
@@ -13,7 +25,6 @@ import {
   X,
 } from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -35,6 +46,7 @@ type TermCode =
 type SyllabusVersion = "OLD" | "NEW";
 type SortOption = "updated" | "created" | "az" | "za";
 type PageSize = 10 | 25 | 50 | 100;
+type SummaryTone = "sky" | "teal" | "amber" | "green" | "rose" | "violet";
 
 interface ModuleOutlineTemplateItem {
   weekNo: number;
@@ -113,6 +125,13 @@ const TERM_SEQUENCE: TermCode[] = [
   "Y4S1",
   "Y4S2",
 ];
+
+const SORT_LABELS: Record<SortOption, string> = {
+  updated: "Recently Updated",
+  created: "Recently Added",
+  az: "A-Z",
+  za: "Z-A",
+};
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -204,6 +223,54 @@ async function readJson<T>(response: Response) {
   }
 
   return (payload ?? ({} as T)) as T;
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: SummaryTone;
+}) {
+  return (
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-current">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{detail}</p>
+    </Card>
+  );
 }
 
 function parseModules(payload: unknown): ModuleRecord[] {
@@ -418,6 +485,7 @@ export default function AdminModulesPage() {
       showUnassignAllConfirm ||
       showDependencyDeleteConfirm
   );
+  const contentBlurClass = isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
 
   const loadData = useCallback(
     async (options?: { background?: boolean; silent?: boolean }) => {
@@ -518,11 +586,11 @@ export default function AdminModulesPage() {
 
   useEffect(() => {
     if (!modal) {
-      setActiveWindow("List");
+      setActiveWindow(null);
       return;
     }
 
-    setActiveWindow(modal.mode === "add" ? "Create" : "Edit");
+    setActiveWindow(modal.mode === "add" ? "Create Module" : "Edit Module");
   }, [modal, setActiveWindow]);
 
   useEffect(() => {
@@ -624,6 +692,75 @@ export default function AdminModulesPage() {
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, pageCount);
   const paginatedModules = visibleModules.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const searchActive = Boolean(searchQuery.trim());
+  const newSyllabusCount = useMemo(
+    () => visibleModules.filter((module) => module.defaultSyllabusVersion === "NEW").length,
+    [visibleModules]
+  );
+  const legacySyllabusCount = useMemo(
+    () => visibleModules.filter((module) => module.defaultSyllabusVersion === "OLD").length,
+    [visibleModules]
+  );
+  const latestUpdatedAt = useMemo(
+    () =>
+      visibleModules.reduce<string | null>((latest, module) => {
+        if (!module.updatedAt) {
+          return latest;
+        }
+
+        if (!latest || module.updatedAt.localeCompare(latest) > 0) {
+          return module.updatedAt;
+        }
+
+        return latest;
+      }, null),
+    [visibleModules]
+  );
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: SummaryTone;
+    icon: ComponentType<{ size?: number }>;
+  }> = [
+    {
+      label: "Total Modules",
+      value: totalCount.toLocaleString(),
+      detail: `${paginatedModules.length.toLocaleString()} rows on the current page`,
+      tone: "sky",
+      icon: BookOpen,
+    },
+    {
+      label: "New Syllabus",
+      value: newSyllabusCount.toLocaleString(),
+      detail:
+        newSyllabusCount > 0
+          ? `${newSyllabusCount.toLocaleString()} modules default to NEW`
+          : "No modules default to NEW in the current view",
+      tone: "green",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Legacy Syllabus",
+      value: legacySyllabusCount.toLocaleString(),
+      detail:
+        legacySyllabusCount > 0
+          ? `${legacySyllabusCount.toLocaleString()} modules still use OLD`
+          : "No legacy syllabus defaults in the current view",
+      tone: "amber",
+      icon: AlertTriangle,
+    },
+    {
+      label: "Latest Update",
+      value: formatShortDate(latestUpdatedAt),
+      detail:
+        latestUpdatedAt !== null
+          ? "Most recent visible module change"
+          : "No module updates loaded yet",
+      tone: "violet",
+      icon: Clock3,
+    },
+  ];
 
   const filteredDegrees = useMemo(
     () => degrees.filter((degree) => degree.facultyCode === form.facultyCode),
@@ -1040,97 +1177,191 @@ export default function AdminModulesPage() {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={
-          <Button
-            className="h-11 min-w-[164px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] transition-colors hover:bg-[#0339a6]"
-            onClick={openAddModal}
-          >
-            <Plus size={16} />
-            Add Module
-          </Button>
-        }
-        description="Master modules with protected assignment-aware delete and edit flows."
-        title="Modules"
-      />
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex justify-end", contentBlurClass)}>
+        <Button className="h-11 gap-2 px-5" onClick={openAddModal}>
+          <Plus size={16} />
+          Add Module
+        </Button>
+      </div>
 
-      <Card
+      <section
         className={cn(
-          "transition-all",
-          isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : ""
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
         )}
       >
-        <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_220px]">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Search
-              </label>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50"
-                  size={16}
-                />
-                <Input
-                  aria-label="Search modules"
-                  className="h-12 pl-10"
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search by code, name, or faculty"
-                  value={searchQuery}
-                />
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">Academic Structure</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Module directory
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Search, sort, and maintain module definitions, syllabus defaults,
+                  degree mappings, and term applicability using the updated admin
+                  surface style.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Results
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {totalCount.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {searchActive
+                      ? "Matching the current search criteria"
+                      : "Showing the full module catalog"}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                Sort
-              </label>
-              <Select
-                aria-label="Sort modules"
-                className="h-12"
-                onChange={(event) => {
-                  setSortBy(event.target.value as SortOption);
-                  setPage(1);
-                }}
-                value={sortBy}
-              >
-                <option value="updated">Recently Updated</option>
-                <option value="created">Recently Added</option>
-                <option value="az">A-Z</option>
-                <option value="za">Z-A</option>
-              </Select>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Search
+                </label>
+                <div className="group flex h-14 w-full min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                  <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Search size={17} />
+                  </span>
+                  <input
+                    aria-label="Search modules"
+                    className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Search by module code, name, or faculty"
+                    value={searchQuery}
+                  />
+                  {searchActive ? (
+                    <button
+                      aria-label="Clear search"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text/45 transition-colors hover:bg-primary/8 hover:text-primary"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setPage(1);
+                      }}
+                      type="button"
+                    >
+                      <X size={15} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Sort
+                </label>
+                <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                  <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <ArrowUpDown size={16} />
+                  </span>
+                  <select
+                    aria-label="Sort modules"
+                    className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                    onChange={(event) => {
+                      setSortBy(event.target.value as SortOption);
+                      setPage(1);
+                    }}
+                    value={sortBy}
+                  >
+                    <option value="updated">Recently Updated</option>
+                    <option value="created">Recently Added</option>
+                    <option value="az">A-Z</option>
+                    <option value="za">Z-A</option>
+                  </select>
+                  <ChevronDown
+                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                    size={17}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-              Total Modules
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {summaryCards.map((item) => (
+            <SummaryCard
+              detail={item.detail}
+              icon={item.icon}
+              key={item.label}
+              label={item.label}
+              tone={item.tone}
+              value={item.value}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Module Records</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review module ownership, degree applicability, term coverage, and
+              syllabus defaults from a cleaner table surface.
             </p>
-            <p className="mt-1 text-2xl font-semibold text-heading">{totalCount}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={searchActive ? "primary" : "neutral"}>
+              {searchActive ? "Search active" : "Full catalog"}
+            </Badge>
+            <Badge variant="neutral">{SORT_LABELS[sortBy]}</Badge>
+            {searchActive ? (
+              <Badge
+                className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap"
+                variant="primary"
+              >
+                Search: {searchQuery.trim()}
+              </Badge>
+            ) : null}
+            {searchActive ? (
+              <Button
+                className="h-9 px-3 text-xs"
+                onClick={() => {
+                  setSearchQuery("");
+                  setPage(1);
+                }}
+                variant="ghost"
+              >
+                Clear
+              </Button>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="border-b border-border bg-tint">
-              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                <th className="px-4 py-3">Module</th>
-                <th className="px-4 py-3">Faculty</th>
-                <th className="px-4 py-3">Degrees</th>
-                <th className="px-4 py-3">Terms</th>
-                <th className="px-4 py-3">Syllabus</th>
-                <th className="px-4 py-3">Last Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1120px] text-left text-sm">
+                <thead className="bg-[rgba(255,255,255,0.82)]">
+                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    <th className="px-5 py-4">Module</th>
+                    <th className="px-5 py-4">Faculty</th>
+                    <th className="px-5 py-4">Degree Scope</th>
+                    <th className="px-5 py-4">Term Scope</th>
+                    <th className="px-5 py-4">Default Syllabus</th>
+                    <th className="px-5 py-4">Last Updated</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/70">
               {isLoading ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
+                  <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
                     Loading module records...
                   </td>
                 </tr>
@@ -1139,13 +1370,13 @@ export default function AdminModulesPage() {
               {!isLoading
                 ? paginatedModules.map((module) => (
                     <tr
-                      className="border-b border-border/70 transition-colors hover:bg-tint"
+                      className="transition-colors duration-200 hover:bg-white/70"
                       key={module.id}
                     >
-                      <td className="px-4 py-4">
+                      <td className="px-5 py-4 align-top">
                         <p className="font-semibold text-heading">{module.code}</p>
-                        <p className="mt-0.5 text-sm text-text/78">{module.name}</p>
-                        <p className="mt-0.5 text-xs text-text/60">{module.credits} credits</p>
+                        <p className="mt-1 text-sm text-text/78">{module.name}</p>
+                        <p className="mt-1 text-xs text-text/55">{module.credits} credits</p>
                       </td>
                       <td className="px-4 py-4 text-text/75">{module.facultyCode || "—"}</td>
                       <td className="px-4 py-4 text-text/75">
@@ -1168,7 +1399,7 @@ export default function AdminModulesPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             aria-label={`Edit ${module.code}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 transition-colors hover:bg-white hover:text-heading"
                             onClick={() => openEditModal(module)}
                             type="button"
                           >
@@ -1176,7 +1407,7 @@ export default function AdminModulesPage() {
                           </button>
                           <button
                             aria-label={`Delete ${module.code}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 transition-colors hover:bg-white hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={checkingDeleteModuleId === module.id}
                             onClick={() => {
                               void openDeleteFlow(module);
@@ -1197,13 +1428,15 @@ export default function AdminModulesPage() {
 
               {!isLoading && paginatedModules.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={7}>
-                    No modules match the current filters.
+                  <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
+                    No modules match the current search.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+        </div>
+          </div>
         </div>
 
         <TablePagination

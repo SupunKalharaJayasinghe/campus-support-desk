@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  Clock3,
+  GraduationCap,
+  Layers3,
+} from "lucide-react";
+import AdminSummaryCard from "@/components/admin/AdminSummaryCard";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -59,6 +67,10 @@ interface ModuleOption {
   name: string;
 }
 
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -112,6 +124,17 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 async function readJson<T>(response: Response) {
@@ -391,14 +414,32 @@ export default function LecturerProfilePage() {
     },
     [modules]
   );
+  const activeOfferingCount = useMemo(
+    () => offerings.filter((offering) => offering.status === "ACTIVE").length,
+    [offerings]
+  );
+  const latestOfferingUpdate = useMemo(
+    () =>
+      offerings.reduce<string | null>((latest, offering) => {
+        if (!offering.updatedAt) return latest;
+        if (!latest || offering.updatedAt.localeCompare(latest) > 0) {
+          return offering.updatedAt;
+        }
+        return latest;
+      }, null),
+    [offerings]
+  );
+  const latestVisibleUpdate =
+    lecturer?.updatedAt && latestOfferingUpdate
+      ? lecturer.updatedAt.localeCompare(latestOfferingUpdate) > 0
+        ? lecturer.updatedAt
+        : latestOfferingUpdate
+      : lecturer?.updatedAt ?? latestOfferingUpdate ?? null;
+  const lecturerName = lecturer?.fullName ?? "Lecturer Profile";
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Profile</p>
-          <h1 className="mt-1 text-2xl font-semibold text-heading">Lecturer Profile</h1>
-        </div>
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className="flex justify-end">
         <Link
           className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-medium text-heading transition-colors hover:bg-slate-50"
           href="/admin/users/lecturers"
@@ -418,48 +459,126 @@ export default function LecturerProfilePage() {
         </Card>
       ) : lecturer ? (
         <>
-          <Card>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Name</p>
-                <p className="mt-1 text-lg font-semibold text-heading">{lecturer.fullName}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Email</p>
-                <p className="mt-1 text-sm text-text/75">{lecturer.email}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Phone</p>
-                <p className="mt-1 text-sm text-text/75">{lecturer.phone || "-"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Status</p>
-                <div className="mt-1">
-                  <Badge variant={lecturer.status === "ACTIVE" ? "success" : "neutral"}>
-                    {lecturer.status}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            {lecturer.optionalEmail ? (
-              <p className="mt-2 text-sm text-text/75">
-                Optional Email: {lecturer.optionalEmail}
-              </p>
-            ) : null}
-            <p className="mt-4 text-xs text-text/60">Updated {formatDate(lecturer.updatedAt)}</p>
-          </Card>
+          <section className={cn("grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]")}>
+            <Card accent className="p-6 lg:p-7">
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-2xl">
+                    <Badge variant="neutral">User Management</Badge>
+                    <h1 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                      {lecturerName}
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                      Lecturer profile overview with identity, teaching eligibility coverage, and
+                      assigned module offerings in the updated admin directory surface.
+                    </p>
+                  </div>
 
-          <Card>
-            <div className="border-b border-border pb-4">
-              <p className="text-lg font-semibold text-heading">Teaching Eligibility</p>
-              <p className="text-sm text-text/65">
-                Faculties, degrees, and modules this lecturer is eligible to teach. This is not the assignment source.
-              </p>
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                        Staff ID
+                      </p>
+                      <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                        {lecturer.nicStaffId || "-"}
+                      </p>
+                      <p className="mt-1 text-sm text-text/60">Lecturer profile details loaded</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Email
+                    </p>
+                    <p className="mt-2 text-sm text-text/78">{lecturer.email}</p>
+                  </div>
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Phone
+                    </p>
+                    <p className="mt-2 text-sm text-text/78">{lecturer.phone || "-"}</p>
+                  </div>
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Status
+                    </p>
+                    <div className="mt-2">
+                      <Badge variant={lecturer.status === "ACTIVE" ? "success" : "neutral"}>
+                        {lecturer.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-3 text-xs text-text/60">
+                      Updated {formatDate(lecturer.updatedAt)}
+                    </p>
+                  </div>
+                </div>
+
+                {lecturer.optionalEmail ? (
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Optional Email
+                    </p>
+                    <p className="mt-2 text-sm text-text/78">{lecturer.optionalEmail}</p>
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AdminSummaryCard
+                detail="Profile identity loaded for the selected lecturer."
+                icon={GraduationCap}
+                label="Lecturer Status"
+                tone="sky"
+                value={lecturer.status}
+              />
+              <AdminSummaryCard
+                detail={`${activeOfferingCount.toLocaleString()} active assigned offerings currently visible`}
+                icon={CheckCircle2}
+                label="Active Offerings"
+                tone="green"
+                value={activeOfferingCount.toLocaleString()}
+              />
+              <AdminSummaryCard
+                detail={`${lecturer.moduleIds.length.toLocaleString()} eligible modules configured for this lecturer`}
+                icon={BookOpen}
+                label="Eligible Modules"
+                tone="violet"
+                value={lecturer.moduleIds.length.toLocaleString()}
+              />
+              <AdminSummaryCard
+                detail={
+                  latestVisibleUpdate
+                    ? "Most recent visible profile or assignment change"
+                    : "No recent lecturer updates available"
+                }
+                icon={Clock3}
+                label="Latest Update"
+                tone="amber"
+                value={formatShortDate(latestVisibleUpdate)}
+              />
             </div>
-            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          </section>
+
+          <Card className="overflow-hidden p-0">
+            <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Faculties</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <p className="text-lg font-semibold text-heading">Teaching Eligibility</p>
+                <p className="mt-1 text-sm text-text/68">
+                  Faculties, degrees, and modules this lecturer is eligible to teach. This remains
+                  separate from actual assignment data.
+                </p>
+              </div>
+              <Badge variant="neutral">Eligibility Scope</Badge>
+            </div>
+            <div className="grid gap-4 px-6 py-6 lg:grid-cols-3">
+              <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Faculties
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   {lecturer.facultyIds.length === 0 ? (
                     <p className="text-sm text-text/68">No faculties selected.</p>
                   ) : (
@@ -475,9 +594,11 @@ export default function LecturerProfilePage() {
                   )}
                 </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Degrees</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+              <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Degrees
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   {lecturer.degreeProgramIds.length === 0 ? (
                     <p className="text-sm text-text/68">No degrees selected.</p>
                   ) : (
@@ -493,9 +614,11 @@ export default function LecturerProfilePage() {
                   )}
                 </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Eligible Modules</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+              <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                  Eligible Modules
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   {lecturer.moduleIds.length === 0 ? (
                     <p className="text-sm text-text/68">No modules selected.</p>
                   ) : (
@@ -513,94 +636,101 @@ export default function LecturerProfilePage() {
             </div>
           </Card>
 
-          <Card>
-            <div className="flex items-center justify-between border-b border-border pb-4">
+          <Card className="overflow-hidden p-0">
+            <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-lg font-semibold text-heading">Assigned Module Offerings</p>
-                <p className="text-sm text-text/65">
+                <p className="mt-1 text-sm text-text/68">
                   Actual teaching assignments derived from module offerings.
                 </p>
               </div>
-              <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-                  Total
-                </p>
-                <p className="mt-1 text-xl font-semibold text-heading">{offerings.length}</p>
-              </div>
+              <AdminSummaryCard
+                detail="Visible teaching assignments loaded for this lecturer."
+                icon={Layers3}
+                label="Loaded Offerings"
+                tone="sky"
+                value={offerings.length.toLocaleString()}
+              />
             </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
-                <thead className="border-b border-border bg-tint">
-                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                    <th className="px-4 py-3">Module</th>
-                    <th className="px-4 py-3">Faculty</th>
-                    <th className="px-4 py-3">Degree</th>
-                    <th className="px-4 py-3">Intake</th>
-                    <th className="px-4 py-3">Term</th>
-                    <th className="px-4 py-3">Syllabus</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoadingOfferings ? (
-                    <tr>
-                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
-                        Loading assigned offerings...
-                      </td>
-                    </tr>
-                  ) : offeringsError ? (
-                    <tr>
-                      <td className="px-4 py-8" colSpan={8}>
-                        <div className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-                          <p className="text-sm font-medium text-red-700">Failed to load assigned offerings</p>
-                          <Button
-                            className="h-10 min-w-[96px] border-red-300 bg-white px-4 text-red-700 hover:bg-red-100"
-                            onClick={() => {
-                              void loadOfferings();
-                              toast({
-                                title: "Retrying",
-                                message: "Loading assigned offerings again",
-                                variant: "info",
-                              });
-                            }}
-                            variant="secondary"
-                          >
-                            Retry
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : offerings.length === 0 ? (
-                    <tr>
-                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
-                        No offerings assigned yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    offerings.map((offering) => (
-                      <tr className="border-b border-border/70" key={offering.id}>
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-heading">{offering.moduleCode}</p>
-                          <p className="text-text/75">{offering.moduleName}</p>
-                        </td>
-                        <td className="px-4 py-4">{offering.facultyId}</td>
-                        <td className="px-4 py-4">{offering.degreeProgramId}</td>
-                        <td className="px-4 py-4">{offering.intakeName || offering.intakeId}</td>
-                        <td className="px-4 py-4">{offering.termCode}</td>
-                        <td className="px-4 py-4">{offering.syllabusVersion || "-"}</td>
-                        <td className="px-4 py-4">
-                          <Badge variant={offering.status === "ACTIVE" ? "success" : "neutral"}>
-                            {offering.status || "-"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-4">{formatDate(offering.updatedAt)}</td>
+            <div className="px-4 py-4 sm:px-6 sm:py-6">
+              <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] text-left text-sm">
+                    <thead className="bg-[rgba(255,255,255,0.82)]">
+                      <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                        <th className="px-5 py-4">Module</th>
+                        <th className="px-5 py-4">Faculty</th>
+                        <th className="px-5 py-4">Degree</th>
+                        <th className="px-5 py-4">Intake</th>
+                        <th className="px-5 py-4">Term</th>
+                        <th className="px-5 py-4">Syllabus</th>
+                        <th className="px-5 py-4">Status</th>
+                        <th className="px-5 py-4">Updated</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/70">
+                      {isLoadingOfferings ? (
+                        <tr>
+                          <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={8}>
+                            Loading assigned offerings...
+                          </td>
+                        </tr>
+                      ) : offeringsError ? (
+                        <tr>
+                          <td className="px-5 py-8" colSpan={8}>
+                            <div className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                              <p className="text-sm font-medium text-red-700">
+                                Failed to load assigned offerings
+                              </p>
+                              <Button
+                                className="h-10 min-w-[96px] border-red-300 bg-white px-4 text-red-700 hover:bg-red-100"
+                                onClick={() => {
+                                  void loadOfferings();
+                                  toast({
+                                    title: "Retrying",
+                                    message: "Loading assigned offerings again",
+                                    variant: "info",
+                                  });
+                                }}
+                                variant="secondary"
+                              >
+                                Retry
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : offerings.length === 0 ? (
+                        <tr>
+                          <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={8}>
+                            No offerings assigned yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        offerings.map((offering) => (
+                          <tr className="transition-colors duration-200 hover:bg-white/70" key={offering.id}>
+                            <td className="px-5 py-4">
+                              <p className="font-semibold text-heading">{offering.moduleCode}</p>
+                              <p className="text-text/75">{offering.moduleName}</p>
+                            </td>
+                            <td className="px-5 py-4">{offering.facultyId}</td>
+                            <td className="px-5 py-4">{offering.degreeProgramId}</td>
+                            <td className="px-5 py-4">{offering.intakeName || offering.intakeId}</td>
+                            <td className="px-5 py-4">{offering.termCode}</td>
+                            <td className="px-5 py-4">{offering.syllabusVersion || "-"}</td>
+                            <td className="px-5 py-4">
+                              <Badge variant={offering.status === "ACTIVE" ? "success" : "neutral"}>
+                                {offering.status || "-"}
+                              </Badge>
+                            </td>
+                            <td className="px-5 py-4">{formatDate(offering.updatedAt)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </Card>
         </>

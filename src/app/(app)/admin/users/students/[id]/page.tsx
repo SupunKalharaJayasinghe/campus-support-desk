@@ -3,7 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock3,
+  GraduationCap,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+  Users2,
+  X,
+} from "lucide-react";
+import AdminSummaryCard from "@/components/admin/AdminSummaryCard";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
@@ -80,6 +93,10 @@ interface EnrollmentFormState {
   status: StudentStatus;
 }
 
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -113,6 +130,17 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function statusVariant(status: StudentStatus) {
@@ -1048,13 +1076,36 @@ export default function StudentProfilePage() {
     }
   };
 
+  const contentBlurClass =
+    isModalOpen || Boolean(editTarget) || Boolean(deleteTarget)
+      ? "pointer-events-none opacity-45 blur-[1px]"
+      : "";
+  const activeEnrollmentCount = useMemo(
+    () => enrollments.filter((enrollment) => enrollment.status === "ACTIVE").length,
+    [enrollments]
+  );
+  const latestEnrollmentUpdate = useMemo(
+    () =>
+      enrollments.reduce<string | null>((latest, enrollment) => {
+        if (!enrollment.updatedAt) return latest;
+        if (!latest || enrollment.updatedAt.localeCompare(latest) > 0) {
+          return enrollment.updatedAt;
+        }
+        return latest;
+      }, null),
+    [enrollments]
+  );
+  const latestVisibleUpdate =
+    student?.updatedAt && latestEnrollmentUpdate
+      ? student.updatedAt.localeCompare(latestEnrollmentUpdate) > 0
+        ? student.updatedAt
+        : latestEnrollmentUpdate
+      : student?.updatedAt ?? latestEnrollmentUpdate ?? null;
+  const studentName = student ? `${student.firstName} ${student.lastName}` : "Student Profile";
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Profile</p>
-          <h1 className="mt-1 text-2xl font-semibold text-heading">Student Profile</h1>
-        </div>
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className="flex justify-end">
         <Link
           className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 text-sm font-medium text-heading transition-colors hover:bg-slate-50"
           href="/admin/users/students"
@@ -1064,132 +1115,217 @@ export default function StudentProfilePage() {
       </div>
 
       {isLoading ? (
-        <Card>
+        <Card className={contentBlurClass}>
           <p className="py-10 text-center text-text/65">Loading profile...</p>
         </Card>
       ) : error ? (
-        <Card>
+        <Card className={contentBlurClass}>
           <p className="py-10 text-center text-red-700">{error}</p>
         </Card>
       ) : student ? (
         <>
-          <Card>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Student ID</p>
-                <p className="mt-1 text-lg font-semibold text-heading">{student.studentId}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Name</p>
-                <p className="mt-1 text-lg font-semibold text-heading">{student.firstName} {student.lastName}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Email</p>
-                <p className="mt-1 text-sm text-text/75">{student.email}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">Status</p>
-                <div className="mt-1"><Badge variant={statusVariant(student.status)}>{student.status}</Badge></div>
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-text/60">Updated {formatDate(student.updatedAt)}</p>
-          </Card>
+          <section
+            className={cn(
+              "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+              contentBlurClass
+            )}
+          >
+            <Card accent className="p-6 lg:p-7">
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-2xl">
+                    <Badge variant="neutral">User Management</Badge>
+                    <h1 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                      {studentName}
+                    </h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                      Student profile overview with identity, academic enrollment coverage, and
+                      current status in the updated admin directory surface.
+                    </p>
+                  </div>
 
-          <Card>
-            <div className="flex items-center justify-between border-b border-border pb-4">
-              <div>
-                <p className="text-lg font-semibold text-heading">Enrollments</p>
-                <p className="text-sm text-text/65">{enrollments.length} program enrollments</p>
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                        Student ID
+                      </p>
+                      <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                        {student.studentId}
+                      </p>
+                      <p className="mt-1 text-sm text-text/60">Profile details loaded for this user</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Email
+                    </p>
+                    <p className="mt-2 text-sm text-text/78">{student.email}</p>
+                  </div>
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Phone
+                    </p>
+                    <p className="mt-2 text-sm text-text/78">{student.phone || "-"}</p>
+                  </div>
+                  <div className="rounded-[24px] border border-border bg-white/78 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                      Status
+                    </p>
+                    <div className="mt-2">
+                      <Badge variant={statusVariant(student.status)}>{student.status}</Badge>
+                    </div>
+                    <p className="mt-3 text-xs text-text/60">
+                      Updated {formatDate(student.updatedAt)}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <Button
-                className="h-11 min-w-[160px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
-                onClick={openEnrollmentModal}
-              >
+            </Card>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AdminSummaryCard
+                detail="Profile identity loaded for the selected student record."
+                icon={GraduationCap}
+                label="Student Status"
+                tone="sky"
+                value={student.status}
+              />
+              <AdminSummaryCard
+                detail={`${activeEnrollmentCount.toLocaleString()} active enrollments currently enabled`}
+                icon={CheckCircle2}
+                label="Active Enrollments"
+                tone="green"
+                value={activeEnrollmentCount.toLocaleString()}
+              />
+              <AdminSummaryCard
+                detail={`${enrollments.length.toLocaleString()} program enrollments linked to this profile`}
+                icon={Users2}
+                label="Total Enrollments"
+                tone="violet"
+                value={enrollments.length.toLocaleString()}
+              />
+              <AdminSummaryCard
+                detail={
+                  latestVisibleUpdate
+                    ? "Most recent visible profile or enrollment change"
+                    : "No recent student updates available"
+                }
+                icon={Clock3}
+                label="Latest Update"
+                tone="amber"
+                value={formatShortDate(latestVisibleUpdate)}
+              />
+            </div>
+          </section>
+
+          <Card className={cn("overflow-hidden p-0", contentBlurClass)}>
+            <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-lg font-semibold text-heading">Enrollment Records</p>
+                <p className="mt-1 text-sm text-text/68">
+                  Review every linked faculty, program, intake, stream, subgroup, and status from a
+                  cleaner table surface.
+                </p>
+              </div>
+              <Button className="h-11 gap-2 px-5" onClick={openEnrollmentModal}>
                 <Plus size={16} /> Add Enrollment
               </Button>
             </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left text-sm">
-                <thead className="border-b border-border bg-tint">
-                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                    <th className="px-4 py-3">Faculty</th>
-                    <th className="px-4 py-3">Degree</th>
-                    <th className="px-4 py-3">Intake</th>
-                    <th className="px-4 py-3">Semester</th>
-                    <th className="px-4 py-3">Stream</th>
-                    <th className="px-4 py-3">Subgroup</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Updated</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoadingEnrollments ? (
-                    <tr>
-                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={9}>
-                        Loading enrollments...
-                      </td>
-                    </tr>
-                  ) : enrollmentsError ? (
-                    <tr>
-                      <td className="px-4 py-8" colSpan={9}>
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-                          <p className="text-sm font-medium text-red-700">Failed to load enrollments</p>
-                          <Button
-                            className="h-10 min-w-[96px] border-red-300 bg-white px-4 text-red-700 hover:bg-red-100"
-                            onClick={() => {
-                              void loadEnrollments();
-                            }}
-                            variant="secondary"
-                          >
-                            Retry
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : enrollments.length > 0 ? (
-                    enrollments.map((enrollment) => (
-                      <tr className="border-b border-border/70" key={enrollment.id}>
-                        <td className="px-4 py-4">{enrollment.facultyId}</td>
-                        <td className="px-4 py-4">{enrollment.degreeProgramId}</td>
-                        <td className="px-4 py-4">{enrollment.intakeName || enrollment.intakeId}</td>
-                        <td className="px-4 py-4">{enrollment.currentTerm || "-"}</td>
-                        <td className="px-4 py-4">{enrollment.stream}</td>
-                        <td className="px-4 py-4">{enrollment.subgroup || "-"}</td>
-                        <td className="px-4 py-4"><Badge variant={statusVariant(enrollment.status)}>{enrollment.status}</Badge></td>
-                        <td className="px-4 py-4">{formatDate(enrollment.updatedAt)}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              aria-label="Edit enrollment"
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                              onClick={() => openEditEnrollmentModal(enrollment)}
-                              type="button"
-                            >
-                              <Pencil size={16} />
-                            </button>
-                            <button
-                              aria-label="Delete enrollment"
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                              onClick={() => setDeleteTarget(enrollment)}
-                              type="button"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+            <div className="px-4 py-4 sm:px-6 sm:py-6">
+              <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1040px] text-left text-sm">
+                    <thead className="bg-[rgba(255,255,255,0.82)]">
+                      <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                        <th className="px-5 py-4">Faculty</th>
+                        <th className="px-5 py-4">Degree</th>
+                        <th className="px-5 py-4">Intake</th>
+                        <th className="px-5 py-4">Semester</th>
+                        <th className="px-5 py-4">Stream</th>
+                        <th className="px-5 py-4">Subgroup</th>
+                        <th className="px-5 py-4">Status</th>
+                        <th className="px-5 py-4">Updated</th>
+                        <th className="px-5 py-4 text-right">Actions</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={9}>
-                        No enrollments added yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/70">
+                      {isLoadingEnrollments ? (
+                        <tr>
+                          <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={9}>
+                            Loading enrollments...
+                          </td>
+                        </tr>
+                      ) : enrollmentsError ? (
+                        <tr>
+                          <td className="px-5 py-8" colSpan={9}>
+                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                              <p className="text-sm font-medium text-red-700">
+                                Failed to load enrollments
+                              </p>
+                              <Button
+                                className="h-10 min-w-[96px] border-red-300 bg-white px-4 text-red-700 hover:bg-red-100"
+                                onClick={() => {
+                                  void loadEnrollments();
+                                }}
+                                variant="secondary"
+                              >
+                                Retry
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : enrollments.length > 0 ? (
+                        enrollments.map((enrollment) => (
+                          <tr className="transition-colors duration-200 hover:bg-white/70" key={enrollment.id}>
+                            <td className="px-5 py-4">{enrollment.facultyId}</td>
+                            <td className="px-5 py-4">{enrollment.degreeProgramId}</td>
+                            <td className="px-5 py-4">{enrollment.intakeName || enrollment.intakeId}</td>
+                            <td className="px-5 py-4">{enrollment.currentTerm || "-"}</td>
+                            <td className="px-5 py-4">{enrollment.stream}</td>
+                            <td className="px-5 py-4">{enrollment.subgroup || "-"}</td>
+                            <td className="px-5 py-4">
+                              <Badge variant={statusVariant(enrollment.status)}>
+                                {enrollment.status}
+                              </Badge>
+                            </td>
+                            <td className="px-5 py-4">{formatDate(enrollment.updatedAt)}</td>
+                            <td className="px-5 py-4">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  aria-label="Edit enrollment"
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-heading hover:shadow-shadow"
+                                  onClick={() => openEditEnrollmentModal(enrollment)}
+                                  type="button"
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                <button
+                                  aria-label="Delete enrollment"
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-red-200 hover:bg-white hover:text-red-600 hover:shadow-shadow"
+                                  onClick={() => setDeleteTarget(enrollment)}
+                                  type="button"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={9}>
+                            No enrollments added yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </Card>
         </>

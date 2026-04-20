@@ -1,9 +1,28 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+} from "react";
+import {
+  ArrowUpDown,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -28,12 +47,22 @@ type PageSize = 10 | 25 | 50 | 100;
 type SortOption = "updated" | "module" | "term";
 type TermCode = "Y1S1" | "Y1S2" | "Y2S1" | "Y2S2" | "Y3S1" | "Y3S2" | "Y4S1" | "Y4S2";
 type ModalMode = "add" | "edit";
+type SummaryTone = "sky" | "teal" | "amber" | "green" | "rose" | "violet";
 
 interface DegreeOption extends OfferingDegreeOption { facultyCode: string }
 interface IntakeOption extends OfferingIntakeOption { facultyCode: string; degreeCode: string }
 interface OfferingRecord extends EditOfferingContext { createdAt: string; updatedAt: string }
 
 const TERM_OPTIONS: TermCode[] = ["Y1S1", "Y1S2", "Y2S1", "Y2S2", "Y3S1", "Y3S2", "Y4S1", "Y4S2"];
+const SORT_LABELS: Record<SortOption, string> = {
+  updated: "Recently Updated",
+  module: "Module Code",
+  term: "Term",
+};
+
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 const code = (v: unknown) => String(v ?? "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6);
 const sid = (v: unknown) => String(v ?? "").trim();
@@ -48,6 +77,17 @@ const fmtDate = (v?: string | null) => {
   return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(0, 10);
 };
 
+const fmtShortDate = (v?: string | null) => {
+  if (!v) return "-";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(d);
+};
+
 async function readJson<T>(response: Response) {
   const payload = (await response.json().catch(() => null)) as T | { message?: string } | null;
   if (!response.ok) {
@@ -55,6 +95,37 @@ async function readJson<T>(response: Response) {
     throw new Error(msg || "Request failed");
   }
   return (payload ?? ({} as T)) as T;
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: SummaryTone;
+}) {
+  return (
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-current">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{detail}</p>
+    </Card>
+  );
 }
 
 const parseStaff = (value: unknown): OfferingStaffItem[] => {
@@ -411,16 +482,99 @@ export default function ModuleOfferingsPage() {
   }, [isOverlayOpen]);
 
   useEffect(() => {
-    if (modalMode === "add") { setActiveWindow("Create"); return; }
-    if (modalMode === "edit") { setActiveWindow("Edit"); return; }
-    if (quickAssignTarget) { setActiveWindow("Assign"); return; }
-    setActiveWindow("List");
+    if (modalMode === "add") { setActiveWindow("Create Offering"); return; }
+    if (modalMode === "edit") { setActiveWindow("Edit Offering"); return; }
+    if (quickAssignTarget) { setActiveWindow("Assign Lecturers"); return; }
+    setActiveWindow(null);
   }, [modalMode, quickAssignTarget, setActiveWindow]);
 
   useEffect(() => () => setActiveWindow(null), [setActiveWindow]);
 
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(page, pageCount);
+  const contentBlurClass = isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
+  const activeFilterCount = [
+    facultyFilter,
+    degreeFilter,
+    intakeFilter,
+    termFilter,
+    statusFilter,
+  ].filter(Boolean).length;
+  const filtersApplied = Boolean(searchQuery.trim() || activeFilterCount > 0);
+  const activeOfferingsCount = useMemo(
+    () => items.filter((item) => item.status === "ACTIVE").length,
+    [items]
+  );
+  const lecturerAssignmentsCount = useMemo(
+    () => items.reduce((total, item) => total + item.lecturers.length, 0),
+    [items]
+  );
+  const latestUpdatedAt = useMemo(
+    () =>
+      items.reduce<string | null>((latest, item) => {
+        if (!item.updatedAt) return latest;
+        if (!latest || item.updatedAt.localeCompare(latest) > 0) {
+          return item.updatedAt;
+        }
+        return latest;
+      }, null),
+    [items]
+  );
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: SummaryTone;
+    icon: ComponentType<{ size?: number }>;
+  }> = [
+    {
+      label: "Total Offerings",
+      value: totalCount.toLocaleString(),
+      detail: `${items.length.toLocaleString()} rows loaded on this page`,
+      tone: "sky",
+      icon: BookOpen,
+    },
+    {
+      label: "Active Offerings",
+      value: activeOfferingsCount.toLocaleString(),
+      detail:
+        activeOfferingsCount > 0
+          ? `${activeOfferingsCount.toLocaleString()} active offerings in view`
+          : "No active offerings in the current view",
+      tone: "green",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Lecturer Links",
+      value: lecturerAssignmentsCount.toLocaleString(),
+      detail:
+        lecturerAssignmentsCount > 0
+          ? `${lecturerAssignmentsCount.toLocaleString()} lecturer assignments visible`
+          : "No lecturer assignments in the current view",
+      tone: "violet",
+      icon: Users,
+    },
+    {
+      label: "Latest Update",
+      value: fmtShortDate(latestUpdatedAt),
+      detail:
+        latestUpdatedAt !== null
+          ? "Most recent visible offering change"
+          : "No offering updates loaded yet",
+      tone: "amber",
+      icon: Clock3,
+    },
+  ];
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setFacultyFilter("");
+    setDegreeFilter("");
+    setIntakeFilter("");
+    setTermFilter("");
+    setStatusFilter("");
+    setPage(1);
+  };
 
   const closeModal = () => {
     if (isSaving) return;
@@ -653,15 +807,334 @@ export default function ModuleOfferingsPage() {
   }, [quickAssignLecturerLookup, quickAssignSearch]);
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={<Button className="h-11 min-w-[188px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]" onClick={openAddModal}><Plus size={16} />Add Module Offering</Button>}
-        description="Assign lecturers and lab assistants to term-based module offerings."
-        title="Module Offerings"
-      />
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex justify-end", contentBlurClass)}>
+        <Button className="h-11 gap-2 px-5" onClick={openAddModal}>
+          <Plus size={16} />
+          Add Module Offering
+        </Button>
+      </div>
 
-      <Card className={isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px] transition-all" : "transition-all"}>
-        <div className="flex flex-col gap-4 border-b border-border pb-5">
+      <section
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
+        )}
+      >
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">Academic Structure</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Module offering directory
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Search, filter, and manage term-based module offerings, lecturer
+                  assignments, and lab support using the updated admin surface style.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Results
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {totalCount.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {filtersApplied
+                      ? "Matching the current search and filters"
+                      : "Showing the full offering directory"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] lg:items-end">
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Search
+                  </label>
+                  <div className="group flex h-14 w-full min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Search size={17} />
+                    </span>
+                    <input
+                      aria-label="Search module offerings"
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Search by module code or name"
+                      value={searchQuery}
+                    />
+                    {searchQuery.trim() ? (
+                      <button
+                        aria-label="Clear search"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text/45 transition-colors hover:bg-primary/8 hover:text-primary"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setPage(1);
+                        }}
+                        type="button"
+                      >
+                        <X size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Sort
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ArrowUpDown size={16} />
+                    </span>
+                    <select
+                      aria-label="Sort module offerings"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setSortBy(event.target.value as SortOption);
+                        setPage(1);
+                      }}
+                      value={sortBy}
+                    >
+                      <option value="updated">Recently Updated</option>
+                      <option value="module">Module Code</option>
+                      <option value="term">Term</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                <div className="min-w-0 flex flex-col gap-2 xl:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Faculty
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter by faculty"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setFacultyFilter(code(event.target.value));
+                        setPage(1);
+                      }}
+                      value={facultyFilter}
+                    >
+                      <option value="">All faculties</option>
+                      {faculties.map((faculty) => (
+                        <option key={faculty.code} value={faculty.code}>
+                          {faculty.code}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2 xl:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Degree
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter by degree"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none disabled:cursor-not-allowed disabled:text-text/45"
+                      disabled={!facultyFilter}
+                      onChange={(event) => {
+                        setDegreeFilter(code(event.target.value));
+                        setPage(1);
+                      }}
+                      value={degreeFilter}
+                    >
+                      <option value="">All degrees</option>
+                      {filterDegrees
+                        .filter((degree) => !facultyFilter || degree.facultyCode === facultyFilter)
+                        .map((degree) => (
+                          <option key={degree.code} value={degree.code}>
+                            {degree.code}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2 xl:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Intake
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter by intake"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none disabled:cursor-not-allowed disabled:text-text/45"
+                      disabled={!degreeFilter}
+                      onChange={(event) => {
+                        setIntakeFilter(sid(event.target.value));
+                        setPage(1);
+                      }}
+                      value={intakeFilter}
+                    >
+                      <option value="">All intakes</option>
+                      {filterIntakes
+                        .filter(
+                          (intake) =>
+                            (!facultyFilter || intake.facultyCode === facultyFilter) &&
+                            (!degreeFilter || intake.degreeCode === degreeFilter)
+                        )
+                        .map((intake) => (
+                          <option key={intake.id} value={intake.id}>
+                            {intake.name}
+                          </option>
+                        ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2 xl:col-span-3">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] leading-[1.2] text-text/60">
+                    Semester / Term
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter by term"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setTermFilter(String(event.target.value ?? "").trim().toUpperCase() as "" | TermCode);
+                        setPage(1);
+                      }}
+                      value={termFilter}
+                    >
+                      <option value="">All terms</option>
+                      {TERM_OPTIONS.map((term) => (
+                        <option key={term} value={term}>
+                          {term}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex flex-col gap-2 xl:col-span-3">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Status
+                  </label>
+                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <select
+                      aria-label="Filter by offering status"
+                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value as "" | OfferingStatus);
+                        setPage(1);
+                      }}
+                      value={statusFilter}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+                {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+              </Badge>
+              <Badge variant="neutral">{SORT_LABELS[sortBy]}</Badge>
+              {searchQuery.trim() ? (
+                <Badge
+                  className="max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap"
+                  variant="primary"
+                >
+                  Search: {searchQuery.trim()}
+                </Badge>
+              ) : null}
+              {filtersApplied ? (
+                <Button className="h-9 px-3 text-xs" onClick={resetFilters} variant="ghost">
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {summaryCards.map((item) => (
+            <SummaryCard
+              detail={item.detail}
+              icon={item.icon}
+              key={item.label}
+              label={item.label}
+              tone={item.tone}
+              value={item.value}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Module Offering Records</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review academic ownership, term delivery, lecturer links, and lab support
+              from a cleaner table surface.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+              {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+            </Badge>
+            <Badge variant="neutral">{SORT_LABELS[sortBy]}</Badge>
+            {searchQuery.trim() ? (
+              <Badge
+                className="max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap"
+                variant="primary"
+              >
+                Search: {searchQuery.trim()}
+              </Badge>
+            ) : null}
+            {filtersApplied ? (
+              <Button className="h-9 px-3 text-xs" onClick={resetFilters} variant="ghost">
+                Clear
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="hidden border-b border-border px-6 py-5">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(6,minmax(0,1fr))_220px]">
             <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Search</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50" size={16} /><Input className="h-12 pl-10" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} placeholder="Search module code or name" /></div></div>
             <div className="flex flex-col gap-1.5"><label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">Faculty</label><Select className="h-12" value={facultyFilter} onChange={(e) => { setFacultyFilter(code(e.target.value)); setPage(1); }}><option value="">All</option>{faculties.map((f) => <option key={f.code} value={f.code}>{f.code}</option>)}</Select></div>
@@ -674,30 +1147,201 @@ export default function ModuleOfferingsPage() {
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1540px] text-left text-sm">
-            <thead className="border-b border-border bg-tint"><tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60"><th className="px-4 py-3">Module</th><th className="px-4 py-3">Faculty</th><th className="px-4 py-3">Degree</th><th className="px-4 py-3">Intake</th><th className="px-4 py-3">Semester / Term</th><th className="px-4 py-3">Syllabus</th><th className="px-4 py-3">Lecturers</th><th className="px-4 py-3">Lab Assistants</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Last Updated</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-            <tbody>
-              {isLoading ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={11}>Loading module offerings...</td></tr> : null}
-              {!isLoading && items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-text/68" colSpan={11}>No module offerings match the current filters.</td></tr> : null}
-              {!isLoading ? items.map((item) => {
-                const l2 = item.lecturers.slice(0, 2); const a2 = item.labAssistants.slice(0, 2);
-                return <tr className="border-b border-border/70 hover:bg-tint" key={item.id}>
-                  <td className="px-4 py-4"><p className="font-semibold text-heading">{item.moduleCode}</p><p className="text-text/78">{item.moduleName}</p><p className="mt-1 text-xs text-text/60">Updated {fmtDate(item.updatedAt)}</p></td>
-                  <td className="px-4 py-4 text-text/78">{item.facultyId || "—"}</td><td className="px-4 py-4 text-text/78">{item.degreeProgramId || "—"}</td><td className="px-4 py-4 text-text/78">{item.intakeName || item.intakeId}</td><td className="px-4 py-4 text-text/78">{item.termCode || "—"}</td>
-                  <td className="px-4 py-4"><Badge variant={item.syllabusVersion === "OLD" ? "warning" : "primary"}>{item.syllabusVersion}</Badge></td>
-                  <td className="px-4 py-4 text-text/78"><p className="font-semibold text-heading">{item.lecturers.length}</p><div className="mt-1 flex flex-wrap gap-1.5">{l2.map((x) => <span key={x.id} className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70">{x.fullName}</span>)}{item.lecturers.length > 2 ? <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">+{item.lecturers.length - 2}</span> : null}</div></td>
-                  <td className="px-4 py-4 text-text/78"><p className="font-semibold text-heading">{item.labAssistants.length}</p><div className="mt-1 flex flex-wrap gap-1.5">{a2.map((x) => <span key={x.id} className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70">{x.fullName}</span>)}{item.labAssistants.length > 2 ? <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">+{item.labAssistants.length - 2}</span> : null}</div></td>
-                  <td className="px-4 py-4"><Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>{item.status}</Badge></td>
-                  <td className="px-4 py-4 text-text/70">{fmtDate(item.updatedAt)}</td>
-                  <td className="px-4 py-4"><div className="flex justify-end gap-2"><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Assign lecturers for ${item.moduleCode} offering`} onClick={() => openQuickAssignModal(item)}><Plus size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Edit ${item.moduleCode} offering`} onClick={() => openEditModal(item)}><Pencil size={16} /></button><button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading" aria-label={`Delete ${item.moduleCode} offering`} onClick={() => setDeleteTarget(item)}><Trash2 size={16} /></button></div></td>
-                </tr>;
-              }) : null}
-            </tbody>
-          </table>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1540px] text-left text-sm">
+                <thead className="bg-[rgba(255,255,255,0.82)]">
+                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    <th className="px-5 py-4">Module</th>
+                    <th className="px-5 py-4">Faculty</th>
+                    <th className="px-5 py-4">Degree</th>
+                    <th className="px-5 py-4">Intake</th>
+                    <th className="px-5 py-4">Semester / Term</th>
+                    <th className="px-5 py-4">Syllabus</th>
+                    <th className="px-5 py-4">Lecturers</th>
+                    <th className="px-5 py-4">Lab Assistants</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Last Updated</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/70">
+                  {isLoading ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={11}>
+                        Loading module offerings...
+                      </td>
+                    </tr>
+                  ) : null}
+                  {!isLoading
+                    ? items.map((item) => {
+                        const visibleLecturers = item.lecturers.slice(0, 2);
+                        const visibleLabAssistants = item.labAssistants.slice(0, 2);
+
+                        return (
+                          <tr
+                            className="transition-colors duration-200 hover:bg-white/70"
+                            key={item.id}
+                          >
+                            <td className="px-5 py-4 align-top">
+                              <div>
+                                <p className="font-semibold text-heading">{item.moduleCode}</p>
+                                <p className="mt-1 text-text/78">{item.moduleName}</p>
+                                <p className="mt-1 text-xs text-text/55">
+                                  Updated {fmtDate(item.updatedAt)}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-medium text-heading">{item.facultyId || "-"}</p>
+                              <p className="mt-1 text-xs text-text/55">
+                                {item.facultyName || "Owning faculty"}
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-medium text-heading">
+                                {item.degreeProgramId || "-"}
+                              </p>
+                              <p className="mt-1 text-xs text-text/55">
+                                {item.degreeProgramName || "Degree program"}
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 align-top text-text/78">
+                              {item.intakeName || item.intakeId}
+                            </td>
+                            <td className="px-5 py-4 align-top text-text/78">
+                              {item.termCode || "-"}
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="space-y-1.5">
+                                <Badge
+                                  variant={
+                                    item.syllabusVersion === "OLD" ? "warning" : "primary"
+                                  }
+                                >
+                                  {item.syllabusVersion}
+                                </Badge>
+                                <p className="text-xs text-text/55">
+                                  {item.syllabusVersion === "OLD"
+                                    ? "Previous syllabus version"
+                                    : "Current syllabus version"}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-semibold text-heading">
+                                {item.lecturers.length}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {visibleLecturers.map((lecturer) => (
+                                  <span
+                                    className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70"
+                                    key={lecturer.id}
+                                  >
+                                    {lecturer.fullName}
+                                  </span>
+                                ))}
+                                {item.lecturers.length > 2 ? (
+                                  <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">
+                                    +{item.lecturers.length - 2}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-semibold text-heading">
+                                {item.labAssistants.length}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {visibleLabAssistants.map((assistant) => (
+                                  <span
+                                    className="rounded-full border border-border bg-tint px-2 py-0.5 text-xs text-text/70"
+                                    key={assistant.id}
+                                  >
+                                    {assistant.fullName}
+                                  </span>
+                                ))}
+                                {item.labAssistants.length > 2 ? (
+                                  <span className="rounded-full border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text/70">
+                                    +{item.labAssistants.length - 2}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="space-y-1.5">
+                                <Badge variant={item.status === "ACTIVE" ? "success" : "neutral"}>
+                                  {item.status}
+                                </Badge>
+                                <p className="text-xs text-text/55">
+                                  {item.status === "ACTIVE"
+                                    ? "Visible in the active academic setup"
+                                    : "Hidden from active academic setup"}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top text-text/78">
+                              {fmtDate(item.updatedAt)}
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  aria-label={`Assign lecturers for ${item.moduleCode} offering`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-heading hover:shadow-shadow"
+                                  onClick={() => openQuickAssignModal(item)}
+                                  type="button"
+                                >
+                                  <Plus size={16} />
+                                </button>
+                                <button
+                                  aria-label={`Edit ${item.moduleCode} offering`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-heading hover:shadow-shadow"
+                                  onClick={() => openEditModal(item)}
+                                  type="button"
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                <button
+                                  aria-label={`Delete ${item.moduleCode} offering`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-red-200 hover:bg-white hover:text-red-600 hover:shadow-shadow"
+                                  onClick={() => setDeleteTarget(item)}
+                                  type="button"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    : null}
+
+                  {!isLoading && items.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={11}>
+                        No module offerings match the current filters.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <TablePagination page={safePage} pageCount={pageCount} pageSize={pageSize} totalItems={totalCount} onPageChange={setPage} onPageSizeChange={(v) => { setPageSize(v as PageSize); setPage(1); }} />
+        <TablePagination
+          className="mt-0 px-6 pb-6"
+          onPageChange={setPage}
+          onPageSizeChange={(value) => {
+            setPageSize(value as PageSize);
+            setPage(1);
+          }}
+          page={safePage}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalItems={totalCount}
+        />
       </Card>
 
       <EditOfferingModal

@@ -1,14 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, WandSparkles } from "lucide-react";
-import PageHeader from "@/components/admin/PageHeader";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
+import {
+  Building2,
+  CalendarRange,
+  CheckCircle2,
+  ChevronDown,
+  GitBranchPlus,
+  GraduationCap,
+  Loader2,
+  Shuffle,
+  Users,
+  WandSparkles,
+} from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
 
 type TermCode =
@@ -21,6 +36,7 @@ type TermCode =
   | "Y4S1"
   | "Y4S2";
 type AllocationMode = "GROUP_COUNT" | "STUDENTS_PER_SUBGROUP";
+type SummaryTone = "sky" | "teal" | "amber" | "green" | "rose" | "violet";
 
 interface FacultyOption {
   code: string;
@@ -82,6 +98,10 @@ const TERM_OPTIONS: TermCode[] = [
   "Y4S2",
 ];
 
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -140,6 +160,37 @@ async function readJson<T>(response: Response) {
   }
 
   return (payload ?? ({} as T)) as T;
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: SummaryTone;
+}) {
+  return (
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-current">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{detail}</p>
+    </Card>
+  );
 }
 
 function parseIntakes(payload: unknown) {
@@ -347,10 +398,70 @@ export default function SubgroupsPage() {
     () => intakes.find((item) => item.id === selectedIntakeId) ?? null,
     [intakes, selectedIntakeId]
   );
+  const selectedFacultyOption = useMemo(
+    () => faculties.find((item) => item.code === selectedFaculty) ?? null,
+    [faculties, selectedFaculty]
+  );
+  const selectedDegreeOption = useMemo(
+    () => degrees.find((item) => item.code === selectedDegree) ?? null,
+    [degrees, selectedDegree]
+  );
   const parsedSubgroupCount = toPositiveInteger(subgroupCountInput);
   const parsedStudentsPerSubgroup = toPositiveInteger(studentsPerSubgroupInput);
   const activeAllocationInput =
     mode === "GROUP_COUNT" ? subgroupCountInput : studentsPerSubgroupInput;
+  const totalStudentsValue = preview?.totalStudents ?? headcount ?? 0;
+  const plannedSubgroupsValue = preview?.totalSubgroups ?? 0;
+  const changedStudentsValue = preview?.changedCount ?? 0;
+  const unchangedStudentsValue = preview?.unchangedCount ?? 0;
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: SummaryTone;
+    icon: ComponentType<{ size?: number }>;
+  }> = [
+    {
+      label: "Total Students",
+      value: String(totalStudentsValue),
+      detail:
+        headcount === null && !preview
+          ? "Student count will appear after intake selection"
+          : "Filtered intake headcount for the selected term",
+      tone: "sky",
+      icon: Users,
+    },
+    {
+      label: "Planned Subgroups",
+      value: String(plannedSubgroupsValue),
+      detail:
+        preview?.mode === "STUDENTS_PER_SUBGROUP"
+          ? "Calculated from the requested student count per subgroup"
+          : "Calculated from the requested subgroup count",
+      tone: "violet",
+      icon: GitBranchPlus,
+    },
+    {
+      label: "Students To Change",
+      value: String(changedStudentsValue),
+      detail:
+        preview
+          ? "Students that will receive a different subgroup assignment"
+          : "Run preview to estimate how many records will change",
+      tone: "amber",
+      icon: Shuffle,
+    },
+    {
+      label: "Unchanged Students",
+      value: String(unchangedStudentsValue),
+      detail:
+        preview
+          ? "Students that will keep their current subgroup value"
+          : "Unchanged count is shown after preview",
+      tone: "green",
+      icon: CheckCircle2,
+    },
+  ];
 
   const validationError = useMemo(() => {
     if (!selectedFaculty) {
@@ -712,315 +823,460 @@ export default function SubgroupsPage() {
   ]);
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        title="Subgroups"
-        description="Split intake students into subgroup codes such as 1.1, 1.2, 2.1 with an even or fixed-size allocation rule."
-      />
-
-      <Card accent>
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1.2fr_1fr_1fr]">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Faculty
-            </label>
-            <Select
-              className="h-12"
-              disabled={isLoadingFaculties}
-              onChange={(event) => {
-                setSelectedFaculty(normalizeAcademicCode(event.target.value));
-              }}
-              value={selectedFaculty}
-            >
-              <option value="">
-                {isLoadingFaculties ? "Loading faculties..." : "Select faculty"}
-              </option>
-              {faculties.map((faculty) => (
-                <option key={faculty.code} value={faculty.code}>
-                  {faculty.code} - {faculty.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Degree
-            </label>
-            <Select
-              className="h-12"
-              disabled={!selectedFaculty || isLoadingDegrees}
-              onChange={(event) => {
-                setSelectedDegree(normalizeAcademicCode(event.target.value));
-              }}
-              value={selectedDegree}
-            >
-              <option value="">
-                {!selectedFaculty
-                  ? "Select faculty first"
-                  : isLoadingDegrees
-                    ? "Loading degrees..."
-                    : "Select degree"}
-              </option>
-              {degrees.map((degree) => (
-                <option key={degree.code} value={degree.code}>
-                  {degree.code} - {degree.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Intake
-            </label>
-            <Select
-              className="h-12"
-              disabled={!selectedDegree || isLoadingIntakes}
-              onChange={(event) =>
-                setSelectedIntakeId(String(event.target.value ?? "").trim())
-              }
-              value={selectedIntakeId}
-            >
-              <option value="">
-                {!selectedDegree
-                  ? "Select degree first"
-                  : isLoadingIntakes
-                    ? "Loading intakes..."
-                    : "Select intake"}
-              </option>
-              {intakes.map((intake) => (
-                <option key={intake.id} value={intake.id}>
-                  {intake.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Semester
-            </label>
-            <Select
-              className="h-12"
-              disabled={!selectedIntakeId}
-              onChange={(event) => {
-                const nextTerm = parseTermCode(event.target.value);
-                if (nextTerm) {
-                  setSelectedTerm(nextTerm);
-                }
-              }}
-              value={selectedTerm}
-            >
-              {TERM_OPTIONS.map((term) => (
-                <option key={term} value={term}>
-                  {term}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Filtered Intake Student Count
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-heading">
-              {isLoadingHeadcount ? "..." : headcount ?? 0}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Badge variant="neutral">
-                Current Term: {selectedIntake?.currentTerm ?? "-"}
-              </Badge>
-              {preview && !preview.termMatchesCurrent ? (
-                <Badge variant="warning">
-                  Selected semester differs from intake current term
-                </Badge>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Allocation Mode
-            </label>
-            <Select
-              className="h-12"
-              onChange={(event) => {
-                const nextMode =
-                  event.target.value === "STUDENTS_PER_SUBGROUP"
-                    ? "STUDENTS_PER_SUBGROUP"
-                    : "GROUP_COUNT";
-                setMode(nextMode);
-              }}
-              value={mode}
-            >
-              <option value="GROUP_COUNT">Split By Subgroup Count</option>
-              <option value="STUDENTS_PER_SUBGROUP">Split By Students Per Subgroup</option>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Students Per Subgroup
-            </label>
-            <Input
-              className="h-12"
-              disabled={mode !== "STUDENTS_PER_SUBGROUP"}
-              min={1}
-              onChange={(event) => setStudentsPerSubgroupInput(event.target.value)}
-              placeholder="60"
-              type="number"
-              value={studentsPerSubgroupInput}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Subgroup Count
-            </label>
-            <Input
-              className="h-12"
-              disabled={mode !== "GROUP_COUNT"}
-              min={1}
-              onChange={(event) => setSubgroupCountInput(event.target.value)}
-              placeholder="10"
-              type="number"
-              value={subgroupCountInput}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="h-12 min-w-[150px] gap-2 bg-[#034aa6] px-5 text-white hover:bg-[#0339a6]"
-              disabled={Boolean(validationError) || isRunningPreview || isApplying}
-              onClick={() => {
-                void executeAllocation(false);
-              }}
-            >
-              {isRunningPreview ? (
-                <Loader2 className="animate-spin" size={16} />
-              ) : (
-                <WandSparkles size={16} />
-              )}
-              Preview
-            </Button>
-
-            <Button
-              className="h-12 min-w-[150px] gap-2 bg-[#0f766e] px-5 text-white hover:bg-[#0b5f58]"
-              disabled={
-                Boolean(validationError) ||
-                isRunningPreview ||
-                isApplying ||
-                !preview ||
-                preview.totalStudents === 0
-              }
-              onClick={() => {
-                void executeAllocation(true);
-              }}
-            >
-              {isApplying ? <Loader2 className="animate-spin" size={16} /> : null}
-              Assign Subgroups
-            </Button>
-          </div>
-        </div>
-
-        {validationError ? (
-          <p className="mt-3 text-sm font-medium text-[#0339A6]">{validationError}</p>
-        ) : null}
-      </Card>
-
-      <Card>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Total Students
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-heading">
-              {preview?.totalStudents ?? headcount ?? 0}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Planned Subgroups
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-heading">
-              {preview?.totalSubgroups ?? 0}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-tint px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Students To Change
-            </p>
-            <p className="mt-2 text-2xl font-semibold text-heading">
-              {preview?.changedCount ?? 0}
-            </p>
-          </div>
-        </div>
-
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          className="h-11 min-w-[140px] gap-2 px-5"
+          disabled={Boolean(validationError) || isRunningPreview || isApplying}
+          onClick={() => {
+            void executeAllocation(false);
+          }}
+        >
+          {isRunningPreview ? (
+            <Loader2 className="animate-spin" size={16} />
+          ) : (
+            <WandSparkles size={16} />
+          )}
+          Preview
+        </Button>
+        <Button
+          className="h-11 min-w-[180px] gap-2 border-emerald-200 bg-emerald-500 px-5 text-white shadow-[0_12px_28px_rgba(16,185,129,0.18)] hover:bg-emerald-600"
+          disabled={
+            Boolean(validationError) ||
+            isRunningPreview ||
+            isApplying ||
+            !preview ||
+            preview.totalStudents === 0
+          }
+          onClick={() => {
+            void executeAllocation(true);
+          }}
+        >
+          {isApplying ? <Loader2 className="animate-spin" size={16} /> : null}
+          Create Subgroups
+        </Button>
+        <Badge variant="neutral">Selected Term: {selectedTerm}</Badge>
         {preview ? (
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            <div className="rounded-2xl border border-border bg-white p-4">
-              <p className="text-sm font-semibold text-heading">
-                Current Subgroup Distribution
-              </p>
-              <div className="mt-3 space-y-2">
-                {preview.currentDistribution.length === 0 ? (
-                  <p className="text-sm text-text/65">No subgroup values assigned yet.</p>
-                ) : (
-                  preview.currentDistribution.map((item) => (
-                    <div
-                      className="flex items-center justify-between rounded-xl border border-border bg-tint px-3 py-2 text-sm"
-                      key={item.code}
-                    >
-                      <span className="font-semibold text-heading">{item.code}</span>
-                      <Badge variant="neutral">{item.count}</Badge>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+          <Badge variant={preview.applied ? "success" : "primary"}>
+            {preview.applied ? "Allocation Applied" : "Preview Ready"}
+          </Badge>
+        ) : null}
+      </div>
 
-            <div className="rounded-2xl border border-border bg-white p-4">
-              <p className="text-sm font-semibold text-heading">
-                New Subgroup Allocation Preview
-              </p>
-              <div className="mt-3 max-h-[420px] overflow-y-auto pr-1">
-                <table className="w-full text-left text-sm">
-                  <thead className="border-b border-border text-xs uppercase tracking-[0.08em] text-text/60">
-                    <tr>
-                      <th className="px-2 py-2">Subgroup</th>
-                      <th className="px-2 py-2">Students</th>
-                      <th className="px-2 py-2">Range</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.previewDistribution.map((item) => (
-                      <tr className="border-b border-border/70" key={item.code}>
-                        <td className="px-2 py-2 font-semibold text-heading">{item.code}</td>
-                        <td className="px-2 py-2">{item.count}</td>
-                        <td className="px-2 py-2 text-text/70">
-                          {item.count === 0
-                            ? "-"
-                            : `${item.firstStudentId || "-"} to ${item.lastStudentId || "-"}`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)] xl:items-start">
+        <div className="grid gap-4">
+          <Card accent className="p-6 lg:p-7">
+            <div className="grid gap-6">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] xl:items-start">
+                <div className="max-w-2xl">
+                  <Badge variant="neutral">Academic Structure</Badge>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                    Subgroup allocation planner
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                    Split intake students into subgroup codes such as 1.1, 1.2, 2.1, and
+                    2.2 using an even distribution or a fixed-size allocation rule.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Badge variant="neutral">
+                      Faculty {selectedFacultyOption?.code ?? "-"}
+                    </Badge>
+                    <Badge variant="neutral">
+                      Degree {selectedDegreeOption?.code ?? "-"}
+                    </Badge>
+                    <Badge variant="neutral">Intake {selectedIntake?.name ?? "-"}</Badge>
+                  </div>
+                </div>
+
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Filtered Intake Student Count
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {isLoadingHeadcount ? "..." : headcount ?? 0}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {selectedIntake
+                      ? `Current intake term ${selectedIntake.currentTerm}`
+                      : "Select a faculty, degree, and intake to load counts"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Faculty
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Building2 size={16} />
+                    </span>
+                    <select
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      disabled={isLoadingFaculties}
+                      onChange={(event) => {
+                        setSelectedFaculty(normalizeAcademicCode(event.target.value));
+                      }}
+                      value={selectedFaculty}
+                    >
+                      <option value="">
+                        {isLoadingFaculties ? "Loading faculties..." : "Select faculty"}
+                      </option>
+                      {faculties.map((faculty) => (
+                        <option key={faculty.code} value={faculty.code}>
+                          {faculty.code} - {faculty.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Degree
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <GraduationCap size={16} />
+                    </span>
+                    <select
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      disabled={!selectedFaculty || isLoadingDegrees}
+                      onChange={(event) => {
+                        setSelectedDegree(normalizeAcademicCode(event.target.value));
+                      }}
+                      value={selectedDegree}
+                    >
+                      <option value="">
+                        {!selectedFaculty
+                          ? "Select faculty first"
+                          : isLoadingDegrees
+                            ? "Loading degrees..."
+                            : "Select degree"}
+                      </option>
+                      {degrees.map((degree) => (
+                        <option key={degree.code} value={degree.code}>
+                          {degree.code} - {degree.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Intake
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Users size={16} />
+                    </span>
+                    <select
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      disabled={!selectedDegree || isLoadingIntakes}
+                      onChange={(event) =>
+                        setSelectedIntakeId(String(event.target.value ?? "").trim())
+                      }
+                      value={selectedIntakeId}
+                    >
+                      <option value="">
+                        {!selectedDegree
+                          ? "Select degree first"
+                          : isLoadingIntakes
+                            ? "Loading intakes..."
+                            : "Select intake"}
+                      </option>
+                      {intakes.map((intake) => (
+                        <option key={intake.id} value={intake.id}>
+                          {intake.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Semester
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CalendarRange size={16} />
+                    </span>
+                    <select
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      disabled={!selectedIntakeId}
+                      onChange={(event) => {
+                        const nextTerm = parseTermCode(event.target.value);
+                        if (nextTerm) {
+                          setSelectedTerm(nextTerm);
+                        }
+                      }}
+                      value={selectedTerm}
+                    >
+                      {TERM_OPTIONS.map((term) => (
+                        <option key={term} value={term}>
+                          {term}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          </Card>
+
+          <Card className="p-6 lg:p-7">
+            <div className="grid gap-5">
+              <div>
+                <Badge variant="neutral">Allocation Rules</Badge>
+                <p className="mt-3 text-lg font-semibold text-heading">
+                  Configure subgroup sizing
+                </p>
+                <p className="mt-1 text-sm text-text/65">
+                  Choose whether to divide students by a target subgroup count or a fixed
+                  number of students per subgroup before generating the preview.
+                </p>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Allocation Mode
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Shuffle size={16} />
+                    </span>
+                    <select
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        const nextMode =
+                          event.target.value === "STUDENTS_PER_SUBGROUP"
+                            ? "STUDENTS_PER_SUBGROUP"
+                            : "GROUP_COUNT";
+                        setMode(nextMode);
+                      }}
+                      value={mode}
+                    >
+                      <option value="GROUP_COUNT">Split by subgroup count</option>
+                      <option value="STUDENTS_PER_SUBGROUP">
+                        Split by students per subgroup
+                      </option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Students Per Subgroup
+                  </label>
+                  <div
+                    className={cn(
+                      "group flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]",
+                      mode !== "STUDENTS_PER_SUBGROUP" && "opacity-60"
+                    )}
+                  >
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Users size={16} />
+                    </span>
+                    <input
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      disabled={mode !== "STUDENTS_PER_SUBGROUP"}
+                      min={1}
+                      onChange={(event) => setStudentsPerSubgroupInput(event.target.value)}
+                      placeholder="60"
+                      type="number"
+                      value={studentsPerSubgroupInput}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Subgroup Count
+                  </label>
+                  <div
+                    className={cn(
+                      "group flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]",
+                      mode !== "GROUP_COUNT" && "opacity-60"
+                    )}
+                  >
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <GitBranchPlus size={16} />
+                    </span>
+                    <input
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      disabled={mode !== "GROUP_COUNT"}
+                      min={1}
+                      onChange={(event) => setSubgroupCountInput(event.target.value)}
+                      placeholder="10"
+                      type="number"
+                      value={subgroupCountInput}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="neutral">
+                  Current Intake Term: {selectedIntake?.currentTerm ?? "-"}
+                </Badge>
+                {preview && !preview.termMatchesCurrent ? (
+                  <Badge variant="warning">
+                    Selected semester differs from intake current term
+                  </Badge>
+                ) : null}
+              </div>
+
+              {validationError ? (
+                <p className="text-sm font-medium text-primary">{validationError}</p>
+              ) : (
+                <p className="text-sm text-text/60">
+                  Preview shows the new subgroup distribution before the assignment is
+                  applied.
+                </p>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {summaryCards.map((item) => (
+            <SummaryCard
+              detail={item.detail}
+              icon={item.icon}
+              key={item.label}
+              label={item.label}
+              tone={item.tone}
+              value={item.value}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card className="overflow-hidden p-0 transition-all">
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Subgroup Allocation Preview</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review the current distribution and compare it against the planned subgroup
+              allocation before applying changes.
+            </p>
           </div>
-        ) : (
-          <p className="mt-5 text-sm text-text/68">
-            Run preview to see how students will be assigned (example order: 1.1, 1.2, 2.1, 2.2).
-          </p>
-        )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="neutral">
+              {mode === "GROUP_COUNT"
+                ? `Requested groups: ${parsedSubgroupCount ?? 0}`
+                : `Requested size: ${parsedStudentsPerSubgroup ?? 0}`}
+            </Badge>
+            <Badge variant="neutral">Selected Term: {selectedTerm}</Badge>
+            {preview ? (
+              <Badge variant={preview.applied ? "success" : "primary"}>
+                {preview.applied ? "Applied" : "Preview Loaded"}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          {preview ? (
+            <div className="grid gap-5 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.4fr)]">
+              <div className="rounded-[28px] border border-border bg-white/82 p-5 shadow-[0_16px_32px_rgba(15,23,41,0.06)]">
+                <p className="text-lg font-semibold text-heading">
+                  Current Subgroup Distribution
+                </p>
+                <p className="mt-1 text-sm text-text/65">
+                  Existing subgroup values for the selected intake before applying the new
+                  allocation.
+                </p>
+                <div className="mt-4 space-y-2">
+                  {preview.currentDistribution.length === 0 ? (
+                    <p className="text-sm text-text/65">No subgroup values assigned yet.</p>
+                  ) : (
+                    preview.currentDistribution.map((item) => (
+                      <div
+                        className="flex items-center justify-between rounded-[20px] border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.94)_0%,rgba(247,249,253,0.9)_100%)] px-4 py-3 text-sm shadow-[0_8px_20px_rgba(15,23,41,0.04)]"
+                        key={item.code}
+                      >
+                        <span className="font-semibold text-heading">{item.code}</span>
+                        <Badge variant="neutral">{item.count}</Badge>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-border bg-white/82 shadow-[0_16px_32px_rgba(15,23,41,0.06)]">
+                <div className="border-b border-border px-5 py-5">
+                  <p className="text-lg font-semibold text-heading">
+                    New Subgroup Allocation Preview
+                  </p>
+                  <p className="mt-1 text-sm text-text/65">
+                    Proposed subgroup ranges for the selected intake and semester.
+                  </p>
+                </div>
+                <div className="max-h-[460px] overflow-y-auto overflow-x-auto px-4 py-4 sm:px-5 sm:py-5">
+                  <div className="overflow-hidden rounded-[24px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+                    <table className="w-full min-w-[560px] text-left text-sm">
+                      <thead className="bg-[rgba(255,255,255,0.82)]">
+                        <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                          <th className="px-4 py-4">Subgroup</th>
+                          <th className="px-4 py-4">Students</th>
+                          <th className="px-4 py-4">Range</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/70">
+                        {preview.previewDistribution.map((item) => (
+                          <tr className="transition-colors duration-200 hover:bg-white/70" key={item.code}>
+                            <td className="px-4 py-4 font-semibold text-heading">{item.code}</td>
+                            <td className="px-4 py-4 text-text/78">{item.count}</td>
+                            <td className="px-4 py-4 text-text/70">
+                              {item.count === 0
+                                ? "-"
+                                : `${item.firstStudentId || "-"} to ${item.lastStudentId || "-"}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[28px] border border-dashed border-border bg-white/60 px-6 py-12 text-center shadow-[0_10px_28px_rgba(15,23,41,0.04)]">
+              <p className="text-lg font-semibold text-heading">Preview not generated yet</p>
+              <p className="mt-2 text-sm text-text/68">
+                Run preview to see how students will be assigned. Example order: 1.1,
+                1.2, 2.1, 2.2.
+              </p>
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );
