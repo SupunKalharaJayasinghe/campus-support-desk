@@ -6,8 +6,16 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ComponentType,
 } from "react";
 import {
+  ArrowUpDown,
+  Building2,
+  CalendarRange,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  GraduationCap,
   Loader2,
   Pencil,
   Plus,
@@ -18,7 +26,6 @@ import {
   X,
 } from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import TablePagination from "@/components/admin/TablePagination";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -30,6 +37,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 type IntakeStatus = "ACTIVE" | "INACTIVE" | "DRAFT";
 type IntakeSort = "updated" | "created" | "az" | "za";
 type PageSize = 10 | 25 | 50 | 100;
+type SummaryTone = "sky" | "teal" | "amber" | "green" | "rose" | "violet";
 type TermCode =
   | "Y1S1"
   | "Y1S2"
@@ -160,6 +168,12 @@ const NOTIFY_OPTIONS: Array<{ label: string; value: NotifyBeforeDays }> = [
 ];
 
 const DEFAULT_TERM_WEEKS = 16;
+const SORT_LABELS: Record<IntakeSort, string> = {
+  updated: "Recently Updated",
+  created: "Recently Added",
+  az: "A-Z",
+  za: "Z-A",
+};
 
 function cn(...classes: Array<string | undefined | false>) {
   return classes.filter(Boolean).join(" ");
@@ -320,6 +334,17 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "\u2014";
   return parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function intakeLabel(
@@ -568,6 +593,37 @@ async function readJson<T>(response: Response) {
   return (payload ?? ({} as T)) as T;
 }
 
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: SummaryTone;
+}) {
+  return (
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-current">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{detail}</p>
+    </Card>
+  );
+}
+
 export default function IntakesPage() {
   const { setActiveWindow } = useAdminContext();
   const { toast } = useToast();
@@ -608,11 +664,90 @@ export default function IntakesPage() {
     deleteTargetId === null
       ? null
       : items.find((item) => item.id === deleteTargetId) ?? null;
+  const contentBlurClass = isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
+  const activeFilterCount = [facultyFilter, degreeFilter, statusFilter].filter(Boolean).length;
+  const filtersApplied = Boolean(searchQuery.trim() || activeFilterCount > 0);
+  const activeIntakes = useMemo(
+    () => items.filter((item) => item.status === "ACTIVE").length,
+    [items]
+  );
+  const draftIntakes = useMemo(
+    () => items.filter((item) => item.status === "DRAFT").length,
+    [items]
+  );
+  const latestUpdatedAt = useMemo(
+    () =>
+      items.reduce<string | null>((latest, intake) => {
+        if (!intake.updatedAt) {
+          return latest;
+        }
+
+        if (!latest || intake.updatedAt.localeCompare(latest) > 0) {
+          return intake.updatedAt;
+        }
+
+        return latest;
+      }, null),
+    [items]
+  );
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: SummaryTone;
+    icon: ComponentType<{ size?: number }>;
+  }> = [
+    {
+      label: "Total Intakes",
+      value: totalCount.toLocaleString(),
+      detail: `${items.length.toLocaleString()} rows loaded in the current view`,
+      tone: "violet",
+      icon: CalendarRange,
+    },
+    {
+      label: "Active Batches",
+      value: activeIntakes.toLocaleString(),
+      detail:
+        activeIntakes > 0
+          ? `${activeIntakes.toLocaleString()} active intakes visible on this page`
+          : "No active intake rows in the current view",
+      tone: "green",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Draft Batches",
+      value: draftIntakes.toLocaleString(),
+      detail:
+        draftIntakes > 0
+          ? `${draftIntakes.toLocaleString()} draft intakes need review`
+          : "No draft intake rows in the current view",
+      tone: "amber",
+      icon: Pencil,
+    },
+    {
+      label: "Latest Update",
+      value: formatShortDate(latestUpdatedAt),
+      detail:
+        latestUpdatedAt !== null
+          ? "Most recent visible intake change"
+          : "No intake updates loaded yet",
+      tone: "sky",
+      icon: Clock3,
+    },
+  ];
 
   const filteredDegreeOptions = useMemo(() => {
     if (!form.facultyCode) return degrees;
     return degrees.filter((degree) => degree.facultyCode === form.facultyCode);
   }, [degrees, form.facultyCode]);
+
+  const visibleDegreeFilters = useMemo(() => {
+    if (!facultyFilter) {
+      return degrees;
+    }
+
+    return degrees.filter((degree) => degree.facultyCode === facultyFilter);
+  }, [degrees, facultyFilter]);
 
   const filteredAutoModules = useMemo(() => {
     const query = autoModuleSearch.trim().toLowerCase();
@@ -1381,237 +1516,440 @@ export default function IntakesPage() {
     return payload;
   };
 
+  const resetSearchAndFilters = () => {
+    setSearchQuery("");
+    setFacultyFilter("");
+    setDegreeFilter("");
+    setStatusFilter("");
+    setPage(1);
+  };
+
+  const updateFacultyFilter = (nextFacultyCode: string) => {
+    setFacultyFilter(nextFacultyCode);
+    setDegreeFilter((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const matchesSelectedFaculty = degrees.some(
+        (degree) =>
+          degree.code === previous &&
+          (!nextFacultyCode || degree.facultyCode === nextFacultyCode)
+      );
+
+      return matchesSelectedFaculty ? previous : "";
+    });
+    setPage(1);
+  };
+
   const visibleTerms = showAllTerms ? TERM_SEQUENCE : TERM_SEQUENCE.slice(0, 2);
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={
-          <Button
-            className="h-11 min-w-[158px] justify-center gap-2 rounded-2xl bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
-            onClick={openAddModal}
-          >
-            <Plus size={16} />
-            Add Intake
-          </Button>
-        }
-        description="Manage intake cohorts and configure term schedule dates in Add/Edit flow only."
-        title="Intakes / Batches"
-      />
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex justify-end", contentBlurClass)}>
+        <Button className="h-11 gap-2 px-5" onClick={openAddModal}>
+          <Plus size={16} />
+          Add Intake
+        </Button>
+      </div>
 
-      <Card className={cn("transition-all", isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "")}>
-        <div className="grid gap-3 border-b border-border pb-5 lg:grid-cols-[minmax(0,1.4fr)_160px_160px_160px_160px]">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Search
-            </label>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text/50"
-                size={16}
-              />
-              <Input
-                aria-label="Search intakes"
-                className="h-12 pl-10"
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by intake, faculty, degree"
-                value={searchQuery}
-              />
+      <section
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
+        )}
+      >
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">Academic Structure</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Intake and batch directory
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Search, filter, and manage cohort records, current-term progress,
+                  and upcoming schedule windows using the updated admin surface style.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[190px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Results
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {totalCount.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {filtersApplied
+                      ? "Matching the current search and filters"
+                      : "Showing the full intake directory"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Search
+                  </label>
+                  <div className="group flex h-14 w-full min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Search size={17} />
+                    </span>
+                    <input
+                      aria-label="Search intakes"
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Search by intake, faculty, or degree"
+                      value={searchQuery}
+                    />
+                    {searchQuery.trim() ? (
+                      <button
+                        aria-label="Clear search"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text/45 transition-colors hover:bg-primary/8 hover:text-primary"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setPage(1);
+                        }}
+                        type="button"
+                      >
+                        <X size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Sort
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ArrowUpDown size={16} />
+                    </span>
+                    <select
+                      aria-label="Sort intakes"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setSortBy(event.target.value as IntakeSort);
+                        setPage(1);
+                      }}
+                      value={sortBy}
+                    >
+                      <option value="updated">Recently Updated</option>
+                      <option value="created">Recently Added</option>
+                      <option value="az">A-Z</option>
+                      <option value="za">Z-A</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Faculty
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Building2 size={16} />
+                    </span>
+                    <select
+                      aria-label="Filter by faculty"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => updateFacultyFilter(event.target.value)}
+                      value={facultyFilter}
+                    >
+                      <option value="">All faculties</option>
+                      {faculties.map((faculty) => (
+                        <option key={faculty.code} value={faculty.code}>
+                          {faculty.code}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Degree
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <GraduationCap size={16} />
+                    </span>
+                    <select
+                      aria-label="Filter by degree"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setDegreeFilter(event.target.value);
+                        setPage(1);
+                      }}
+                      value={degreeFilter}
+                    >
+                      <option value="">All degrees</option>
+                      {visibleDegreeFilters.map((degree) => (
+                        <option key={degree.code} value={degree.code}>
+                          {degree.code}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    Status
+                  </label>
+                  <div className="group relative flex h-14 w-full items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
+                    <span className="mr-3 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CheckCircle2 size={16} />
+                    </span>
+                    <select
+                      aria-label="Filter by status"
+                      className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value as "" | IntakeStatus);
+                        setPage(1);
+                      }}
+                      value={statusFilter}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="DRAFT">Draft</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
+                      size={17}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+        </Card>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Faculty
-            </label>
-            <Select
-              className="h-12"
-              onChange={(event) => {
-                setFacultyFilter(event.target.value);
-                setPage(1);
-              }}
-              value={facultyFilter}
-            >
-              <option value="">All</option>
-              {faculties.map((faculty) => (
-                <option key={faculty.code} value={faculty.code}>
-                  {faculty.code}
-                </option>
-              ))}
-            </Select>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {summaryCards.map((item) => (
+            <SummaryCard
+              detail={item.detail}
+              icon={item.icon}
+              key={item.label}
+              label={item.label}
+              tone={item.tone}
+              value={item.value}
+            />
+          ))}
+        </div>
+      </section>
+
+      <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
+        <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-heading">Intake Records</p>
+            <p className="mt-1 text-sm text-text/68">
+              Review cohorts, current-term progression, and schedule status from a
+              cleaner table surface.
+            </p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Degree
-            </label>
-            <Select
-              className="h-12"
-              onChange={(event) => {
-                setDegreeFilter(event.target.value);
-                setPage(1);
-              }}
-              value={degreeFilter}
-            >
-              <option value="">All</option>
-              {degrees
-                .filter((degree) =>
-                  facultyFilter ? degree.facultyCode === facultyFilter : true
-                )
-                .map((degree) => (
-                  <option key={degree.code} value={degree.code}>
-                    {degree.code}
-                  </option>
-                ))}
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Status
-            </label>
-            <Select
-              className="h-12"
-              onChange={(event) => {
-                setStatusFilter(event.target.value as "" | IntakeStatus);
-                setPage(1);
-              }}
-              value={statusFilter}
-            >
-              <option value="">All</option>
-              <option value="ACTIVE">Active</option>
-              <option value="DRAFT">Draft</option>
-              <option value="INACTIVE">Inactive</option>
-            </Select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-              Sort
-            </label>
-            <Select
-              className="h-12"
-              onChange={(event) => {
-                setSortBy(event.target.value as IntakeSort);
-                setPage(1);
-              }}
-              value={sortBy}
-            >
-              <option value="updated">Recently Updated</option>
-              <option value="created">Recently Added</option>
-              <option value="az">A-Z</option>
-              <option value="za">Z-A</option>
-            </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
+              {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+            </Badge>
+            <Badge variant="neutral">{SORT_LABELS[sortBy]}</Badge>
+            {searchQuery.trim() ? (
+              <Badge
+                className="max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap"
+                variant="primary"
+              >
+                Search: {searchQuery.trim()}
+              </Badge>
+            ) : null}
+            {filtersApplied ? (
+              <Button className="h-9 px-3 text-xs" onClick={resetSearchAndFilters} variant="ghost">
+                Clear
+              </Button>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-left text-sm">
-            <thead className="border-b border-border bg-tint">
-              <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                <th className="px-4 py-3">Intake</th>
-                <th className="px-4 py-3">Faculty</th>
-                <th className="px-4 py-3">Degree</th>
-                <th className="px-4 py-3">Current Term</th>
-                <th className="px-4 py-3">Next Term Start Date</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Last Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
-                    Loading intakes...
-                  </td>
-                </tr>
-              ) : null}
+        <div className="px-4 py-4 sm:px-6 sm:py-6">
+          <div className="overflow-hidden rounded-[28px] border border-border bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-left text-sm">
+                <thead className="bg-[rgba(255,255,255,0.82)]">
+                  <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
+                    <th className="px-5 py-4">Intake</th>
+                    <th className="px-5 py-4">Faculty</th>
+                    <th className="px-5 py-4">Degree</th>
+                    <th className="px-5 py-4">Current Term</th>
+                    <th className="px-5 py-4">Next Term Start</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Last Updated</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/70">
+                  {isLoading ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={8}>
+                        Loading intakes...
+                      </td>
+                    </tr>
+                  ) : null}
 
-              {!isLoading && loadError ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/72" colSpan={8}>
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <span>Failed to load</span>
-                      <Button
-                        className="h-10 min-w-[108px] border-slate-300 bg-white px-4 text-heading hover:bg-slate-50"
-                        onClick={() => {
-                          void loadIntakes();
-                        }}
-                        variant="secondary"
-                      >
-                        Retry
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
+                  {!isLoading && loadError ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/72" colSpan={8}>
+                        <div className="flex flex-col items-center justify-center gap-3">
+                          <span>Failed to load the intake directory.</span>
+                          <Button
+                            className="h-10 px-4"
+                            onClick={() => {
+                              void loadIntakes();
+                            }}
+                            variant="secondary"
+                          >
+                            Retry
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
 
-              {!isLoading && !loadError
-                ? items.map((intake) => {
-                    const nextTermStartDate = getNextTermStartDate(intake);
-                    return (
-                      <tr
-                        className="border-b border-border/70 transition-colors hover:bg-tint"
-                        key={intake.id}
-                      >
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-heading">{intakeLabel(intake)}</p>
-                        </td>
-                        <td className="px-4 py-4 text-text/78">{intake.facultyCode}</td>
-                        <td className="px-4 py-4 text-text/78">{intake.degreeCode}</td>
-                        <td className="px-4 py-4">
-                          <Badge variant="info">{intake.currentTerm}</Badge>
-                        </td>
-                        <td className="px-4 py-4 text-text/78">
-                          {nextTermStartDate ? formatDate(nextTermStartDate) : "\u2014"}
-                        </td>
-                        <td className="px-4 py-4">
-                          <Badge variant={statusVariant(intake.status)}>
-                            {statusLabel(intake.status)}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-4 text-text/78">{formatDate(intake.updatedAt)}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              aria-label={`Edit ${intakeLabel(intake)}`}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                              onClick={() => openEditModal(intake)}
-                              type="button"
-                            >
-                              <Pencil size={16} />
-                            </button>
-                            <button
-                              aria-label={`Delete ${intakeLabel(intake)}`}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-card text-text/70 hover:bg-tint hover:text-heading"
-                              onClick={() => setDeleteTargetId(intake.id)}
-                              type="button"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                : null}
+                  {!isLoading && !loadError
+                    ? items.map((intake) => {
+                        const nextTermStartDate = getNextTermStartDate(intake);
+                        return (
+                          <tr
+                            className="transition-colors duration-200 hover:bg-white/70"
+                            key={intake.id}
+                          >
+                            <td className="px-5 py-4 align-top">
+                              <div>
+                                <p className="font-semibold text-heading">
+                                  {intakeLabel(intake)}
+                                </p>
+                                <p className="mt-1 text-xs text-text/55">
+                                  Created {formatDate(intake.createdAt)}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-medium text-heading">{intake.facultyCode}</p>
+                              <p className="mt-1 text-xs text-text/55">Faculty assignment</p>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-medium text-heading">{intake.degreeCode}</p>
+                              <p className="mt-1 text-xs text-text/55">Degree program</p>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="space-y-1.5">
+                                <Badge variant="info">{intake.currentTerm}</Badge>
+                                <p className="text-xs text-text/55">
+                                  {intake.autoJumpEnabled
+                                    ? "Auto jump is enabled"
+                                    : "Auto jump is disabled"}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div>
+                                <p className="font-medium text-heading">
+                                  {nextTermStartDate ? formatDate(nextTermStartDate) : "-"}
+                                </p>
+                                <p className="mt-1 text-xs text-text/55">
+                                  {nextTermStartDate
+                                    ? "Next scheduled term date"
+                                    : "No future term start scheduled"}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="space-y-1.5">
+                                <Badge variant={statusVariant(intake.status)}>
+                                  {statusLabel(intake.status)}
+                                </Badge>
+                                <p className="text-xs text-text/55">
+                                  {intake.status === "ACTIVE"
+                                    ? "Visible in the active academic setup"
+                                    : intake.status === "DRAFT"
+                                      ? "Needs review before activation"
+                                      : "Not currently active in the directory"}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div>
+                                <p className="font-medium text-heading">
+                                  {formatDate(intake.updatedAt)}
+                                </p>
+                                <p className="mt-1 text-xs text-text/55">
+                                  Latest saved update
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  aria-label={`Edit ${intakeLabel(intake)}`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-heading hover:shadow-shadow"
+                                  onClick={() => openEditModal(intake)}
+                                  type="button"
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                <button
+                                  aria-label={`Delete ${intakeLabel(intake)}`}
+                                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/75 text-text/70 shadow-[0_8px_20px_rgba(15,23,41,0.04)] transition-all hover:-translate-y-0.5 hover:border-red-200 hover:bg-white hover:text-red-600 hover:shadow-shadow"
+                                  onClick={() => setDeleteTargetId(intake.id)}
+                                  type="button"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    : null}
 
-              {!isLoading && !loadError && items.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-10 text-center text-sm text-text/68" colSpan={8}>
-                    No intakes match the current filters.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  {!isLoading && !loadError && items.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={8}>
+                        No intakes match the current filters.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <TablePagination
+          className="mt-0 px-6 pb-6"
           onPageChange={setPage}
           onPageSizeChange={(value) => {
             setPageSize(value as PageSize);
@@ -1627,7 +1965,7 @@ export default function IntakesPage() {
       {modal ? (
         <>
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[3px]"
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget && !isSaving) closeModal();
             }}
@@ -1635,25 +1973,28 @@ export default function IntakesPage() {
           >
             <div
               aria-modal="true"
-              className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.22)]"
+              className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[30px] border border-border bg-[rgba(255,255,255,0.94)] shadow-[0_32px_80px_rgba(15,23,42,0.24)]"
               role="dialog"
             >
-            <div className="overflow-y-auto px-6 py-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-                    {modal.mode === "add" ? "CREATE" : "EDIT"}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-heading">
-                    {modal.mode === "add" ? "Add Intake" : "Edit Intake"}
-                  </p>
-                  <p className="mt-1 text-sm text-text/65">
-                    Configure intake details and term schedules from this modal.
-                  </p>
-                </div>
+              <div className="overflow-y-auto px-6 py-6 sm:px-7">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="max-w-3xl">
+                    <Badge variant="neutral">
+                      {modal.mode === "add" ? "Create Intake" : "Edit Intake"}
+                    </Badge>
+                    <p className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                      {modal.mode === "add"
+                        ? "Add a new intake cohort"
+                        : `Update ${form.intakeName || "intake"}`}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-text/68">
+                      Configure cohort details, term schedules, and auto-selected modules
+                      from the same updated admin surface.
+                    </p>
+                  </div>
                 <button
                   aria-label="Close modal"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/80 text-text/70 transition-colors hover:bg-white hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isSaving}
                   onClick={closeModal}
                   type="button"
@@ -1776,7 +2117,7 @@ export default function IntakesPage() {
                 </div>
 
                 <div className="flex items-end">
-                  <label className="inline-flex h-12 w-full items-center gap-2 rounded-2xl border border-border bg-tint px-4 text-sm font-medium text-heading">
+                  <label className="inline-flex h-12 w-full items-center gap-2 rounded-2xl border border-border bg-white/70 px-4 text-sm font-medium text-heading shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
                     <input
                       checked={form.autoJumpEnabled}
                       className="h-4 w-4 rounded border-border"
@@ -1794,7 +2135,7 @@ export default function IntakesPage() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-3xl border border-border bg-tint/60 p-4 sm:p-5">
+              <div className="mt-6 rounded-[28px] border border-border bg-[linear-gradient(180deg,rgba(250,252,255,0.95)_0%,rgba(244,247,252,0.9)_100%)] p-4 sm:p-5">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
@@ -1807,7 +2148,7 @@ export default function IntakesPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-border bg-white px-3.5 text-sm font-medium text-heading">
+                    <label className="inline-flex h-10 items-center gap-2 rounded-2xl border border-border bg-white px-3.5 text-sm font-medium text-heading shadow-[0_8px_20px_rgba(15,23,41,0.04)]">
                       <input
                         checked={form.autoGenerateFutureTerms}
                         className="h-4 w-4 rounded border-border"
@@ -1821,7 +2162,7 @@ export default function IntakesPage() {
                     </label>
 
                     <Button
-                      className="h-10 gap-2 border-slate-300 bg-white px-4 text-heading hover:bg-slate-50"
+                      className="h-10 gap-2 px-4"
                       disabled={isSaving}
                       onClick={recalculateFutureTerms}
                       variant="secondary"
@@ -1832,9 +2173,9 @@ export default function IntakesPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 overflow-x-auto rounded-2xl border border-border bg-white">
+                <div className="mt-4 overflow-x-auto rounded-[24px] border border-border bg-white/80">
                   <table className="w-full min-w-[860px] text-left text-sm">
-                    <thead className="border-b border-border bg-tint">
+                    <thead className="border-b border-border bg-[rgba(255,255,255,0.82)]">
                       <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
                         <th className="px-4 py-3">Term Code</th>
                         <th className="px-4 py-3">Start Date</th>
@@ -1852,12 +2193,15 @@ export default function IntakesPage() {
                         const status = getTermScheduleStatus(row, today);
 
                         return (
-                          <tr className="border-b border-border/70" key={termCode}>
+                          <tr
+                            className="border-b border-border/70 transition-colors hover:bg-white/60"
+                            key={termCode}
+                          >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-heading">{termCode}</span>
                                 {row.isManuallyCustomized && status === "FUTURE" ? (
-                                  <span className="rounded-full bg-[#EEF4FF] px-2 py-0.5 text-[11px] font-semibold text-[#0339A6]">
+                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                                     Custom
                                   </span>
                                 ) : null}
@@ -1932,7 +2276,7 @@ export default function IntakesPage() {
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <button
-                    className="text-sm font-semibold text-[#034aa6] hover:text-[#0339a6]"
+                    className="text-sm font-semibold text-primary transition-colors hover:text-primary/80"
                     onClick={() => setShowAllTerms((previous) => !previous)}
                     type="button"
                   >
@@ -1942,7 +2286,7 @@ export default function IntakesPage() {
                   </button>
 
                   {didRequestRecalculate ? (
-                    <p className="text-xs font-medium text-[#0339A6]">
+                    <p className="text-xs font-medium text-primary">
                       Future terms will be saved using the latest recalculation.
                     </p>
                   ) : null}
@@ -1953,7 +2297,7 @@ export default function IntakesPage() {
                 ) : null}
               </div>
 
-              <div className="mt-6 rounded-3xl border border-border bg-white p-4 sm:p-5">
+              <div className="mt-6 rounded-[28px] border border-border bg-white/88 p-4 shadow-[0_16px_32px_rgba(15,23,41,0.06)] sm:p-5">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
@@ -1988,9 +2332,9 @@ export default function IntakesPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
+                <div className="mt-4 overflow-x-auto rounded-[24px] border border-border bg-white/80">
                   <table className="w-full min-w-[740px] text-left text-sm">
-                    <thead className="border-b border-border bg-tint">
+                    <thead className="border-b border-border bg-[rgba(255,255,255,0.82)]">
                       <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
                         <th className="px-4 py-3">Module</th>
                         <th className="px-4 py-3">Syllabus</th>
@@ -2017,7 +2361,10 @@ export default function IntakesPage() {
 
                       {!isLoadingAutoModules
                         ? filteredAutoModules.map((module) => (
-                            <tr className="border-b border-border/70" key={module.id}>
+                            <tr
+                              className="border-b border-border/70 transition-colors hover:bg-white/60"
+                              key={module.id}
+                            >
                               <td className="px-4 py-3">
                                 <label className="inline-flex items-center gap-3">
                                   <input
@@ -2052,7 +2399,7 @@ export default function IntakesPage() {
                 ) : null}
 
                 {moduleSyncWarning ? (
-                  <p className="mt-3 text-sm font-medium text-[#034aa6]">{moduleSyncWarning}</p>
+                  <p className="mt-3 text-sm font-medium text-primary">{moduleSyncWarning}</p>
                 ) : null}
 
                 {errors.moduleSync ? (
@@ -2061,10 +2408,10 @@ export default function IntakesPage() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4 shadow-[0_-1px_0_rgba(15,23,42,0.04)]">
+            <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-[rgba(255,255,255,0.9)] px-6 py-4 shadow-[0_-1px_0_rgba(15,23,42,0.04)] backdrop-blur-sm">
               <div className="flex flex-wrap items-center justify-end gap-2.5">
                 <Button
-                  className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                  className="h-11 min-w-[112px] px-5"
                   disabled={isSaving}
                   onClick={closeModal}
                   variant="secondary"
@@ -2072,7 +2419,7 @@ export default function IntakesPage() {
                   Cancel
                 </Button>
                 <Button
-                  className="h-11 min-w-[132px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+                  className="h-11 min-w-[148px] gap-2 px-5"
                   disabled={isSaving}
                   onClick={() => void saveIntake()}
                 >
@@ -2084,7 +2431,7 @@ export default function IntakesPage() {
                   ) : (
                     <>
                       <Save size={16} />
-                      Save
+                      Save Intake
                     </>
                   )}
                 </Button>
@@ -2098,7 +2445,7 @@ export default function IntakesPage() {
 
       {deleteTarget ? (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !isDeleting) setDeleteTargetId(null);
           }}
@@ -2106,12 +2453,15 @@ export default function IntakesPage() {
         >
           <div
             aria-modal="true"
-            className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_36px_rgba(15,23,42,0.2)]"
+            className="w-full max-w-lg overflow-hidden rounded-[30px] border border-border bg-[rgba(255,255,255,0.95)] shadow-[0_28px_72px_rgba(15,23,42,0.24)]"
             role="dialog"
           >
-            <div className="px-6 py-6">
-              <p className="text-lg font-semibold text-heading">Delete Intake</p>
-              <p className="mt-2 text-sm leading-6 text-text/70">
+            <div className="px-6 py-6 sm:px-7">
+              <Badge variant="warning">Delete Intake</Badge>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                Remove {intakeLabel(deleteTarget)}?
+              </p>
+              <p className="mt-2 text-sm leading-6 text-text/68">
                 Are you sure you want to delete intake{" "}
                 <span className="font-semibold text-heading">
                   &lsquo;{intakeLabel(deleteTarget)} / {deleteTarget.facultyCode} / {deleteTarget.degreeCode}&rsquo;
@@ -2120,9 +2470,9 @@ export default function IntakesPage() {
               </p>
             </div>
 
-            <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
+            <div className="flex justify-end gap-2.5 border-t border-border bg-[rgba(255,255,255,0.9)] px-6 py-4 backdrop-blur-sm">
               <Button
-                className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                className="h-11 min-w-[112px] px-5"
                 disabled={isDeleting}
                 onClick={() => setDeleteTargetId(null)}
                 variant="secondary"
@@ -2142,7 +2492,7 @@ export default function IntakesPage() {
                 ) : (
                   <>
                     <Trash2 size={16} />
-                    Delete
+                    Delete Intake
                   </>
                 )}
               </Button>

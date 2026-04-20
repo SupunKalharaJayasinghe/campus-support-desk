@@ -55,7 +55,7 @@ export default function EditTermModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isSaving) {
           onClose();
@@ -65,22 +65,24 @@ export default function EditTermModal({
     >
       <div
         aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.28)]"
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-[30px] border border-border bg-[rgba(255,255,255,0.94)] shadow-[0_32px_80px_rgba(15,23,42,0.24)]"
         role="dialog"
       >
-        <div className="overflow-y-auto px-6 py-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
-                Edit Term
+        <div className="overflow-y-auto px-6 py-6 sm:px-7">
+          <div className="flex items-start justify-between gap-4">
+            <div className="max-w-lg">
+              <Badge variant="neutral">Edit Term</Badge>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                Update {draft.termCode}
               </p>
-              <p className="mt-1 text-2xl font-semibold text-heading">
-                Edit Term ({draft.termCode})
+              <p className="mt-2 text-sm leading-6 text-text/68">
+                Adjust the term start date, default week count, and reminder timing for
+                this calendar row.
               </p>
             </div>
             <button
               aria-label="Close modal"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white text-text/70 hover:bg-tint hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-white/80 text-text/70 transition-colors hover:bg-white hover:text-heading disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSaving}
               onClick={onClose}
               type="button"
@@ -89,7 +91,7 @@ export default function EditTermModal({
             </button>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Badge variant={termStatusVariant(draft.status)}>
               {termStatusLabel(draft.status)}
             </Badge>
@@ -100,7 +102,10 @@ export default function EditTermModal({
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="termStartDate">
+              <label
+                className="mb-1.5 block text-sm font-medium text-heading"
+                htmlFor="termStartDate"
+              >
                 Start Date
               </label>
               <Input
@@ -146,11 +151,14 @@ export default function EditTermModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="termEndDate">
+              <label
+                className="mb-1.5 block text-sm font-medium text-heading"
+                htmlFor="termEndDate"
+              >
                 End Date
               </label>
               <Input
-                className="h-11"
+                className="h-11 bg-white/80"
                 disabled
                 id="termEndDate"
                 type="date"
@@ -159,7 +167,10 @@ export default function EditTermModal({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-heading" htmlFor="notifyBeforeDays">
+              <label
+                className="mb-1.5 block text-sm font-medium text-heading"
+                htmlFor="notifyBeforeDays"
+              >
                 Notify Before
               </label>
               <Select
@@ -182,16 +193,16 @@ export default function EditTermModal({
           </div>
 
           {draft.locked ? (
-            <p className="mt-4 rounded-2xl border border-border bg-tint px-3 py-2 text-sm text-text/72">
-              Past terms are locked.
+            <p className="mt-4 rounded-2xl border border-border bg-white/76 px-4 py-3 text-sm text-text/72 shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
+              Past terms are locked and cannot be edited.
             </p>
           ) : null}
         </div>
 
-        <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-white px-6 py-4">
+        <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-[rgba(255,255,255,0.9)] px-6 py-4 backdrop-blur-sm">
           <div className="flex flex-wrap items-center justify-end gap-2.5">
             <Button
-              className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+              className="h-11 min-w-[112px] px-5"
               disabled={isSaving}
               onClick={onClose}
               variant="secondary"
@@ -199,7 +210,7 @@ export default function EditTermModal({
               Cancel
             </Button>
             <Button
-              className="h-11 min-w-[132px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+              className="h-11 min-w-[148px] gap-2 px-5"
               disabled={isSaving || draft.locked}
               onClick={onSave}
             >
@@ -211,7 +222,7 @@ export default function EditTermModal({
               ) : (
                 <>
                   <Save size={16} />
-                  Save
+                  Save Term
                 </>
               )}
             </Button>

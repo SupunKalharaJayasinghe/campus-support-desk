@@ -1,9 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCcw } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+} from "react";
+import {
+  CalendarRange,
+  CheckCircle2,
+  Loader2,
+  LockKeyhole,
+  Pencil,
+  RefreshCcw,
+} from "lucide-react";
 import { useAdminContext } from "@/components/admin/AdminContext";
-import PageHeader from "@/components/admin/PageHeader";
 import EditTermModal, {
   type EditTermDraft,
   type NotifyBeforeDays as EditNotifyBeforeDays,
@@ -32,6 +44,7 @@ type TermCode =
   | "Y4S2";
 
 type PageSize = 10 | 25 | 50 | 100;
+type SummaryTone = "sky" | "teal" | "amber" | "green" | "rose" | "violet";
 
 interface ScheduleApiRow {
   termCode?: string;
@@ -88,6 +101,10 @@ const DEFAULT_POLICIES: TermPoliciesView = {
   defaultNotifyBeforeDays: 3,
   autoGenerateFutureTerms: true,
 };
+
+function cn(...classes: Array<string | undefined | false>) {
+  return classes.filter(Boolean).join(" ");
+}
 
 function collapseSpaces(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -146,6 +163,24 @@ function compareDateOnly(left: string, right: string) {
   const rightDate = sanitizeDateOnly(right);
   if (!leftDate || !rightDate) return 0;
   return leftDate.localeCompare(rightDate);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function getTermStatus(row: Pick<ScheduleRow, "startDate" | "endDate">, today: string): TermScheduleStatus {
@@ -238,6 +273,37 @@ async function readJson<T>(response: Response) {
   return payload as T;
 }
 
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: SummaryTone;
+}) {
+  return (
+    <Card accent className="admin-stat-card h-full p-5" data-tone={tone}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+            {label}
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-heading">{value}</p>
+        </div>
+        <span className="admin-stat-icon inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-current">
+          <Icon size={18} />
+        </span>
+      </div>
+      <p className="mt-4 text-xs text-text/60">{detail}</p>
+    </Card>
+  );
+}
+
 export default function AcademicTermsPage() {
   const { scope, setActiveWindow } = useAdminContext();
   const { toast } = useToast();
@@ -279,6 +345,7 @@ export default function AcademicTermsPage() {
   const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(page, pageCount);
   const paginatedRows = viewRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const contentBlurClass = isOverlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
 
   const currentTermRow = useMemo(() => {
     return viewRows.find((row) => row.termCode === currentTerm) ?? null;
@@ -299,6 +366,77 @@ export default function AcademicTermsPage() {
 
     return { label: "Planned", variant: "primary" as const };
   }, [currentTermRow]);
+  const lockedTermsCount = useMemo(
+    () => viewRows.filter((row) => row.locked).length,
+    [viewRows]
+  );
+  const manuallyEditedCount = useMemo(
+    () => schedules.filter((row) => row.manuallyEdited).length,
+    [schedules]
+  );
+  const currentTermRange = currentTermRow?.startDate
+    ? `${formatDate(currentTermRow.startDate)} to ${formatDate(currentTermRow.endDate)}`
+    : "Start and end dates are not set yet";
+  const latestConfiguredDate = useMemo(
+    () =>
+      schedules.reduce<string | null>((latest, row) => {
+        if (!row.endDate) {
+          return latest;
+        }
+
+        if (!latest || row.endDate.localeCompare(latest) > 0) {
+          return row.endDate;
+        }
+
+        return latest;
+      }, null),
+    [schedules]
+  );
+  const summaryCards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: SummaryTone;
+    icon: ComponentType<{ size?: number }>;
+  }> = [
+    {
+      label: "Current Term",
+      value: currentTerm,
+      detail: currentTermRange,
+      tone: "violet",
+      icon: CalendarRange,
+    },
+    {
+      label: "Schedule Status",
+      value: headerStatus.label,
+      detail:
+        currentTermRow?.endDate
+          ? `Current cycle tracked through ${formatShortDate(currentTermRow.endDate)}`
+          : "The current term schedule is still being planned",
+      tone: "green",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Locked Terms",
+      value: lockedTermsCount.toLocaleString(),
+      detail:
+        lockedTermsCount > 0
+          ? `${lockedTermsCount.toLocaleString()} past terms are read-only`
+          : "No past terms are locked yet",
+      tone: "amber",
+      icon: LockKeyhole,
+    },
+    {
+      label: "Custom Terms",
+      value: manuallyEditedCount.toLocaleString(),
+      detail:
+        manuallyEditedCount > 0
+          ? `${manuallyEditedCount.toLocaleString()} rows have manual schedule changes`
+          : "No term rows have been manually adjusted",
+      tone: "sky",
+      icon: Pencil,
+    },
+  ];
 
   const reloadTerms = useCallback(async () => {
     setIsLoading(true);
@@ -351,7 +489,7 @@ export default function AcademicTermsPage() {
   }, [reloadTerms]);
 
   useEffect(() => {
-    setActiveWindow(editingDraft ? "Edit" : "List");
+    setActiveWindow(editingDraft ? "Edit Term" : "Academic Terms");
   }, [editingDraft, setActiveWindow]);
 
   useEffect(() => {
@@ -591,86 +729,141 @@ export default function AcademicTermsPage() {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
-      <PageHeader
-        actions={<Badge variant={headerStatus.variant}>{headerStatus.label}</Badge>}
-        description="Configure academic terms (Y1S1, Y1S2, etc.) and term-based policies."
-        title="Academic Terms"
-      />
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card title="Scope">
-          <ul className="space-y-2 text-sm text-text/75">
-            <li>Faculty, degree, intake, term, stream, subgroup</li>
-            <li>Role-based visibility for navigation</li>
-            <li>Enterprise-ready layout patterns</li>
-          </ul>
-        </Card>
-
-        <Card title="Workflows">
-          <ul className="space-y-2 text-sm text-text/75">
-            <li>Search + filters + pagination</li>
-            <li>Add / Edit / Delete actions</li>
-            <li>Audit-friendly, minimal UI</li>
-          </ul>
-        </Card>
-
-        <Card title="Highlights">
-          <ul className="space-y-2 text-sm text-text/75">
-            <li>Term calendar & teaching weeks</li>
-            <li>Assessment windows and grade release</li>
-            <li>Term locking for audit compliance</li>
-          </ul>
-        </Card>
+    <div className="admin-dashboard space-y-6 lg:space-y-8">
+      <div className={cn("flex flex-wrap justify-end gap-2", contentBlurClass)}>
+        <Badge variant="neutral">Current Term: {currentTerm}</Badge>
+        <Badge variant={headerStatus.variant}>{headerStatus.label}</Badge>
       </div>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold text-heading">Term Settings</h2>
-          <p className="mt-1 text-sm text-text/70">
-            Manage term schedules and term-level policies for the selected intake.
-          </p>
-        </div>
+      <section
+        className={cn(
+          "grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]",
+          contentBlurClass
+        )}
+      >
+        <Card accent className="p-6 lg:p-7">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <Badge variant="neutral">Academic Structure</Badge>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                  Academic term calendar
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
+                  Review and maintain term schedules, teaching weeks, notification timing,
+                  and audit-safe calendar policies for the selected intake.
+                </p>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-          <TermScheduleTable
-            isLoading={isLoading}
-            isSaving={isSavingPolicies || isSavingTerm || isRecalculating}
-            loadError={loadError}
-            onEditRow={onEditRow}
-            onPageChange={setPage}
-            onPageSizeChange={(value) => {
-              setPageSize(value as PageSize);
-              setPage(1);
-            }}
-            onRetry={() => {
-              void reloadTerms();
-            }}
-            page={safePage}
-            pageCount={pageCount}
-            pageSize={pageSize}
-            rows={paginatedRows}
-            totalItems={totalItems}
-          />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Badge variant="neutral">Faculty {scope.faculty || "-"}</Badge>
+                  <Badge variant="neutral">Degree {scope.degree || "-"}</Badge>
+                  <Badge variant="neutral">Intake {scope.intake || "-"}</Badge>
+                </div>
+              </div>
 
-          <TermPolicyPanel
-            isDisabled={
-              isLoading ||
-              Boolean(loadError) ||
-              !intakeId ||
-              isSavingPolicies ||
-              isSavingTerm
-            }
-            isRecalculating={isRecalculating}
-            isSaving={isSavingPolicies}
-            onOpenRecalculate={() => setIsRecalculateConfirmOpen(true)}
-            onPolicyChange={setPolicies}
-            onSave={() => {
-              void onSavePolicies();
-            }}
-            policies={policies}
-          />
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="admin-inline-stat rounded-[24px] border border-border bg-card p-4 sm:min-w-[210px]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                    Visible Terms
+                  </p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-heading">
+                    {totalItems.toLocaleString()}
+                  </p>
+                  <p className="mt-1 text-sm text-text/60">
+                    {latestConfiguredDate
+                      ? `Calendar configured through ${formatShortDate(latestConfiguredDate)}`
+                      : "Complete term sequence for the selected intake"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[22px] border border-border bg-white/72 px-4 py-3 shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                  Current Range
+                </p>
+                <p className="mt-2 text-sm font-medium text-heading">{currentTermRange}</p>
+              </div>
+              <div className="rounded-[22px] border border-border bg-white/72 px-4 py-3 shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                  Automation
+                </p>
+                <p className="mt-2 text-sm font-medium text-heading">
+                  {policies.autoJump ? "Auto jump enabled" : "Auto jump disabled"}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-border bg-white/72 px-4 py-3 shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-text/55">
+                  Future Generation
+                </p>
+                <p className="mt-2 text-sm font-medium text-heading">
+                  {policies.autoGenerateFutureTerms
+                    ? "Future terms generate automatically"
+                    : "Future terms require manual updates"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {summaryCards.map((item) => (
+            <SummaryCard
+              detail={item.detail}
+              icon={item.icon}
+              key={item.label}
+              label={item.label}
+              tone={item.tone}
+              value={item.value}
+            />
+          ))}
         </div>
+      </section>
+
+      <section
+        className={cn(
+          "grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]",
+          contentBlurClass
+        )}
+      >
+        <TermScheduleTable
+          isLoading={isLoading}
+          isSaving={isSavingPolicies || isSavingTerm || isRecalculating}
+          loadError={loadError}
+          onEditRow={onEditRow}
+          onPageChange={setPage}
+          onPageSizeChange={(value) => {
+            setPageSize(value as PageSize);
+            setPage(1);
+          }}
+          onRetry={() => {
+            void reloadTerms();
+          }}
+          page={safePage}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          rows={paginatedRows}
+          totalItems={totalItems}
+        />
+
+        <TermPolicyPanel
+          isDisabled={
+            isLoading ||
+            Boolean(loadError) ||
+            !intakeId ||
+            isSavingPolicies ||
+            isSavingTerm
+          }
+          isRecalculating={isRecalculating}
+          isSaving={isSavingPolicies}
+          onOpenRecalculate={() => setIsRecalculateConfirmOpen(true)}
+          onPolicyChange={setPolicies}
+          onSave={() => {
+            void onSavePolicies();
+          }}
+          policies={policies}
+        />
       </section>
 
       <EditTermModal
@@ -685,7 +878,7 @@ export default function AcademicTermsPage() {
 
       {isRecalculateConfirmOpen ? (
         <div
-          className="fixed inset-0 z-[115] flex items-center justify-center bg-slate-950/75 p-4"
+          className="fixed inset-0 z-[115] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !isRecalculating) {
               setIsRecalculateConfirmOpen(false);
@@ -695,17 +888,20 @@ export default function AcademicTermsPage() {
         >
           <div
             aria-modal="true"
-            className="w-full max-w-xl overflow-hidden rounded-3xl border border-border bg-white shadow-[0_24px_56px_rgba(15,23,42,0.28)]"
+            className="w-full max-w-xl overflow-hidden rounded-[30px] border border-border bg-[rgba(255,255,255,0.95)] shadow-[0_28px_72px_rgba(15,23,42,0.24)]"
             role="dialog"
           >
-            <div className="px-6 py-6">
-              <p className="text-lg font-semibold text-heading">Recalculate future terms</p>
-              <p className="mt-2 text-sm leading-6 text-text/72">
+            <div className="px-6 py-6 sm:px-7">
+              <Badge variant="warning">Recalculate Terms</Badge>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+                Recalculate future terms?
+              </p>
+              <p className="mt-2 text-sm leading-6 text-text/68">
                 Recalculate future term dates? Past terms will not change. Manually edited
                 future terms will not be overwritten unless you confirm overwrite.
               </p>
 
-              <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-heading">
+              <label className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-border bg-white/72 px-4 py-3 text-sm font-medium text-heading shadow-[0_10px_24px_rgba(15,23,41,0.04)]">
                 <input
                   checked={overwriteManuallyEditedFuture}
                   className="h-4 w-4 rounded border-border"
@@ -719,9 +915,9 @@ export default function AcademicTermsPage() {
               </label>
             </div>
 
-            <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
+            <div className="flex justify-end gap-2.5 border-t border-border bg-[rgba(255,255,255,0.9)] px-6 py-4 backdrop-blur-sm">
               <Button
-                className="h-11 min-w-[112px] border-slate-300 bg-white px-5 text-heading hover:bg-slate-50"
+                className="h-11 min-w-[112px] px-5"
                 disabled={isRecalculating}
                 onClick={() => setIsRecalculateConfirmOpen(false)}
                 variant="secondary"
@@ -729,7 +925,7 @@ export default function AcademicTermsPage() {
                 Cancel
               </Button>
               <Button
-                className="h-11 min-w-[148px] gap-2 bg-[#034aa6] px-5 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+                className="h-11 min-w-[172px] gap-2 px-5"
                 disabled={isRecalculating}
                 onClick={() => {
                   void onConfirmRecalculate();
@@ -743,7 +939,7 @@ export default function AcademicTermsPage() {
                 ) : (
                   <>
                     <RefreshCcw size={15} />
-                    Recalculate
+                    Recalculate Terms
                   </>
                 )}
               </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, RefreshCcw, Save } from "lucide-react";
+import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Select from "@/components/ui/Select";
@@ -39,7 +40,7 @@ function ToggleField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="block rounded-2xl border border-border bg-white p-3.5">
+    <label className="block rounded-[24px] border border-border bg-white/76 p-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)]">
       <div className="flex items-start gap-3">
         <input
           checked={checked}
@@ -67,31 +68,40 @@ export default function TermPolicyPanel({
   onOpenRecalculate,
 }: TermPolicyPanelProps) {
   return (
-    <Card className="h-full" description="Configure term-level behavior for this intake." title="Policies">
-      <div className="space-y-3">
+    <Card accent className="h-full p-6 lg:p-7" data-tone="sky">
+      <Badge variant="neutral">Policy Controls</Badge>
+      <p className="mt-3 text-2xl font-semibold tracking-tight text-heading">
+        Term policies
+      </p>
+      <p className="mt-2 text-sm leading-6 text-text/68">
+        Configure term-level automation, locking, default duration, and reminder
+        timing for the selected intake.
+      </p>
+
+      <div className="mt-6 space-y-3">
         <ToggleField
           checked={policies.autoJump}
           description="Automatically move the intake to the next term when the current term end date passes."
           disabled={isDisabled}
           onChange={(value) => onPolicyChange({ ...policies, autoJump: value })}
-          title="Auto Jump to next term when current ends"
+          title="Auto jump to the next term"
         />
 
         <ToggleField
           checked={policies.lockPastTerms}
-          description="When enabled, past term rows are read-only to keep audit-safe historical records."
+          description="Keep historical term rows read-only so previously completed terms stay audit-safe."
           disabled={isDisabled}
           onChange={(value) => onPolicyChange({ ...policies, lockPastTerms: value })}
-          title="Lock past terms (audit safe)"
+          title="Lock past terms"
         />
 
-        <div className="rounded-2xl border border-border bg-white p-3.5">
+        <div className="rounded-[24px] border border-border bg-white/76 p-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)]">
           <p className="text-sm font-semibold text-heading">Default Weeks Per Term</p>
           <p className="mt-1 text-xs leading-5 text-text/68">
-            Used when creating schedules and when only a term start date is provided.
+            Used when generating schedules and when only a start date is provided.
           </p>
           <Select
-            className="mt-3 h-10"
+            className="mt-3 h-11"
             disabled={isDisabled}
             onChange={(event) =>
               onPolicyChange({
@@ -101,20 +111,20 @@ export default function TermPolicyPanel({
             }
             value={policies.defaultWeeksPerTerm}
           >
-            <option value={12}>12</option>
-            <option value={14}>14</option>
-            <option value={16}>16</option>
-            <option value={18}>18</option>
+            <option value={12}>12 weeks</option>
+            <option value={14}>14 weeks</option>
+            <option value={16}>16 weeks</option>
+            <option value={18}>18 weeks</option>
           </Select>
         </div>
 
-        <div className="rounded-2xl border border-border bg-white p-3.5">
+        <div className="rounded-[24px] border border-border bg-white/76 p-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)]">
           <p className="text-sm font-semibold text-heading">Default Notify Before Days</p>
           <p className="mt-1 text-xs leading-5 text-text/68">
-            This value is used as the default for newly generated term rows.
+            This value is used as the default reminder window for generated term rows.
           </p>
           <Select
-            className="mt-3 h-10"
+            className="mt-3 h-11"
             disabled={isDisabled}
             onChange={(event) =>
               onPolicyChange({
@@ -132,18 +142,18 @@ export default function TermPolicyPanel({
 
         <ToggleField
           checked={policies.autoGenerateFutureTerms}
-          description="Use +6 month sequential generation for future terms based on Y1S1."
+          description="Generate future terms in sequence using the Y1S1 baseline and the +6 month pattern."
           disabled={isDisabled}
           onChange={(value) =>
             onPolicyChange({ ...policies, autoGenerateFutureTerms: value })
           }
-          title="Auto-generate future terms (+6 months)"
+          title="Auto-generate future terms"
         />
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-end gap-2.5 border-t border-border pt-4">
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-2.5 border-t border-border pt-5">
         <Button
-          className="h-10 gap-2 border-slate-300 bg-white px-4 text-heading hover:bg-slate-50"
+          className="h-10 gap-2 px-4"
           disabled={isDisabled || isRecalculating}
           onClick={onOpenRecalculate}
           variant="secondary"
@@ -156,12 +166,12 @@ export default function TermPolicyPanel({
           ) : (
             <>
               <RefreshCcw size={14} />
-              Recalculate future terms
+              Recalculate Terms
             </>
           )}
         </Button>
         <Button
-          className="h-10 min-w-[120px] gap-2 bg-[#034aa6] px-4 text-white shadow-[0_8px_24px_rgba(3,74,166,0.24)] hover:bg-[#0339a6]"
+          className="h-10 min-w-[132px] gap-2 px-4"
           disabled={isDisabled || isSaving || isRecalculating}
           onClick={onSave}
         >
@@ -173,7 +183,7 @@ export default function TermPolicyPanel({
           ) : (
             <>
               <Save size={14} />
-              Save
+              Save Policies
             </>
           )}
         </Button>
