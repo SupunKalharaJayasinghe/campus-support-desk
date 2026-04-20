@@ -1,17 +1,9 @@
-import PlaceholderPage from "@/components/admin/PlaceholderPage";
+"use client";
+
+import TeachingWorkspacePage from "../_components/TeachingWorkspacePage";
+import { subgroupAllocationConfig } from "../_components/teaching-page-data";
 
 export default function SubgroupAllocationPage() {
-  return (
-    <PlaceholderPage
-      description="Allocate students into subgroups and synchronize with timetable and assessments."
-      highlights={[
-        "Auto-allocation rules and overrides",
-        "Subgroup move history",
-        "Sync to module offerings",
-      ]}
-      status="Planned"
-      title="Subgroup Allocation"
-    />
-  );
+  return <TeachingWorkspacePage config={subgroupAllocationConfig} />;
 }
 
