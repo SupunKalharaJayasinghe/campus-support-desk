@@ -237,6 +237,7 @@ export default function StudentTicketPage() {
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
                 <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
               </Select>
             </div>
           </div>
@@ -287,7 +288,8 @@ export default function StudentTicketPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-base font-semibold text-slate-800">{ticket.subject}</p>
                       <p className="truncate text-xs text-slate-600">
-                        {ticket.category} | Priority: {ticket.priority}
+                        {ticket.category}
+                        {ticket.subcategory ? ` / ${ticket.subcategory}` : ""} | Priority: {ticket.priority}
                       </p>
                     </div>
                   </div>
@@ -309,9 +311,16 @@ export default function StudentTicketPage() {
                 {expandedTicketId === ticket.id ? (
                   <div className="mt-3 border-t border-slate-200 pt-3">
                     <p className="text-sm whitespace-pre-wrap text-slate-700">{ticket.description}</p>
-                    {ticket.preferredContactType && ticket.contactDetails ? (
+                    {ticket.contactEmail || ticket.contactPhone || ticket.contactWhatsapp ? (
                       <p className="mt-2 text-xs text-slate-600">
-                        Preferred contact: {ticket.preferredContactType} ({ticket.contactDetails})
+                        Contact:{" "}
+                        {[
+                          ticket.contactEmail ? `Email: ${ticket.contactEmail}` : null,
+                          ticket.contactPhone ? `Phone: ${ticket.contactPhone}` : null,
+                          ticket.contactWhatsapp ? `WhatsApp: ${ticket.contactWhatsapp}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" | ")}
                       </p>
                     ) : null}
                     <p className="mt-2 text-xs text-slate-500">{formatTicketDate(ticket.createdAt)}</p>

@@ -1,6 +1,6 @@
 import mongoose, { Schema, Types } from "mongoose";
 
-export const SUPPORT_TICKET_PRIORITIES = ["Low", "Medium", "High"] as const;
+export const SUPPORT_TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
 export const SUPPORT_TICKET_STATUSES = ["Open", "In progress", "Resolved"] as const;
 
 export type SupportTicketPriority = (typeof SUPPORT_TICKET_PRIORITIES)[number];
@@ -17,9 +17,11 @@ export interface ISupportTicket {
   studentId: Types.ObjectId;
   subject: string;
   category: string;
+  subcategory: string;
   description: string;
-  preferredContactType?: string;
-  contactDetails?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
   priority: SupportTicketPriority;
   status: SupportTicketStatus;
   evidence?: ISupportTicketEvidence[];
@@ -56,23 +58,32 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       trim: true,
       maxlength: 80,
     },
+    subcategory: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
     description: {
       type: String,
       required: true,
       trim: true,
       maxlength: 10000,
     },
-    preferredContactType: {
+    contactEmail: {
       type: String,
-      required: true,
+      trim: true,
+      maxlength: 160,
+    },
+    contactPhone: {
+      type: String,
       trim: true,
       maxlength: 30,
     },
-    contactDetails: {
+    contactWhatsapp: {
       type: String,
-      required: true,
       trim: true,
-      maxlength: 500,
+      maxlength: 30,
     },
     priority: {
       type: String,

@@ -1,7 +1,7 @@
 "use client";
 
+import { Loader2, Paperclip, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { Paperclip, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -9,15 +9,26 @@ import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   createStudentTicketRemote,
-  type StudentTicket,
   type StudentTicketPriority,
   type TicketEvidence,
 } from "@/lib/support-ticket-client";
 
 const MAX_EVIDENCE_FILES = 5;
-const MAX_FILE_BYTES = 512 * 1024;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ACCEPT = "image/*,.pdf,application/pdf";
-const TITLE_SUGGESTIONS_BY_CATEGORY: Record<string, string[]> = {
+const TITLE_MIN_LENGTH = 5;
+const DESCRIPTION_MIN_LENGTH = 20;
+const CATEGORY_OPTIONS = ["Academic", "Technical", "Facility", "Finance", "Transport", "Other"] as const;
+type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
+const SUBCATEGORY_OPTIONS: Record<CategoryOption, string[]> = {
+  Academic: ["Exams", "Assignments", "Lectures", "Attendance", "Other"],
+  Technical: ["Portal login", "LMS issue", "Wi-Fi", "Lab system", "Other"],
+  Facility: ["Classroom", "Library", "Laboratory", "Campus maintenance", "Other"],
+  Finance: ["Fees", "Scholarship", "Refund", "Payment issue", "Other"],
+  Transport: ["Bus pass", "Route issue", "Timing issue", "Driver complaint", "Other"],
+  Other: ["General inquiry", "Complaint", "Suggestion"],
+};
+const TITLE_SUGGESTIONS_BY_CATEGORY: Record<CategoryOption, string[]> = {
   Technical: [
     "Wi-Fi not working in room",
     "Unable to log in to student portal",
@@ -30,17 +41,23 @@ const TITLE_SUGGESTIONS_BY_CATEGORY: Record<string, string[]> = {
     "Issue with grade shown on portal",
     "Request appointment with lecturer",
   ],
-  Booking: [
-    "Consultation booking not confirmed",
-    "Need to reschedule my consultation",
-    "Lab booking request",
-    "Room booking issue",
+  Finance: [
+    "Tuition fee payment issue",
+    "Scholarship amount not received",
+    "Need invoice for semester fees",
+    "Refund request status",
   ],
-  "Lost item": [
-    "Lost student ID card",
-    "Lost wallet in campus",
-    "Lost laptop charger",
-    "Missing notebook from classroom",
+  Facility: [
+    "Classroom air-conditioner not working",
+    "Library seating issue",
+    "Lab equipment maintenance request",
+    "Campus lighting issue",
+  ],
+  Transport: [
+    "Bus pass not activated",
+    "Campus bus timing issue",
+    "Transport route clarification",
+    "Complaint about bus service",
   ],
   Other: [
     "Need general support",
@@ -48,6 +65,14 @@ const TITLE_SUGGESTIONS_BY_CATEGORY: Record<string, string[]> = {
     "Feedback about student service",
     "Other issue requiring assistance",
   ],
+};
+const CATEGORY_KEYWORDS: Record<CategoryOption, string[]> = {
+  Academic: ["exam", "assignment", "lecture", "grade", "attendance", "course", "class"],
+  Technical: ["wifi", "wi-fi", "portal", "login", "system", "bug", "error", "lms", "network"],
+  Facility: ["classroom", "library", "lab", "maintenance", "light", "chair", "ac", "facility"],
+  Finance: ["fee", "fees", "payment", "invoice", "refund", "scholarship", "finance"],
+  Transport: ["bus", "transport", "route", "driver", "timing", "pass"],
+  Other: [],
 };
 
 function readFileAsEvidence(file: File): Promise<TicketEvidence> {
@@ -97,18 +122,42 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const titleId = useId();
   const titleSuggestionListId = useId();
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("Technical");
+  const [category, setCategory] = useState<CategoryOption | "">("");
+  const [subcategory, setSubcategory] = useState("");
   const [description, setDescription] = useState("");
-  const [preferredContactType, setPreferredContactType] =
-    useState<NonNullable<StudentTicket["preferredContactType"]>>("Phone");
-  const [contactDetails, setContactDetails] = useState("");
   const [priority, setPriority] = useState<StudentTicketPriority>("Medium");
+  const [contactEmailEnabled, setContactEmailEnabled] = useState(false);
+  const [contactPhoneEnabled, setContactPhoneEnabled] = useState(false);
+  const [contactWhatsappEnabled, setContactWhatsappEnabled] = useState(false);
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactWhatsapp, setContactWhatsapp] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [selectedFileNames, setSelectedFileNames] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const suggestedCategory = useMemo(() => {
+    const t = title.trim().toLowerCase();
+    if (!t) {
+      return null;
+    }
+    for (const [cat, words] of Object.entries(CATEGORY_KEYWORDS) as Array<[CategoryOption, string[]]>) {
+      if (cat === "Other") {
+        continue;
+      }
+      if (words.some((word) => t.includes(word))) {
+        return cat;
+      }
+    }
+    return "Other" as CategoryOption;
+  }, [title]);
+
   const titleSuggestions = useMemo(() => {
-    const categorySuggestions = TITLE_SUGGESTIONS_BY_CATEGORY[category] ?? [];
+    const effectiveCategory = category || suggestedCategory;
+    const categorySuggestions = effectiveCategory
+      ? (TITLE_SUGGESTIONS_BY_CATEGORY[effectiveCategory] ?? [])
+      : [];
     const typed = title.trim().toLowerCase();
     if (!typed) {
       return categorySuggestions.slice(0, 4);
@@ -116,16 +165,63 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
     return categorySuggestions
       .filter((item) => item.toLowerCase().includes(typed))
       .slice(0, 4);
-  }, [category, title]);
+  }, [category, suggestedCategory, title]);
+
+  const descriptionCount = description.trim().length;
+  const atLeastOneContactEnabled =
+    contactEmailEnabled || contactPhoneEnabled || contactWhatsappEnabled;
+
+  const isFormValid = useMemo(() => {
+    if (title.trim().length < TITLE_MIN_LENGTH) {
+      return false;
+    }
+    if (!category || !subcategory) {
+      return false;
+    }
+    if (description.trim().length < DESCRIPTION_MIN_LENGTH) {
+      return false;
+    }
+    if (!atLeastOneContactEnabled) {
+      return false;
+    }
+    if (contactEmailEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      return false;
+    }
+    if (contactPhoneEnabled && !/^\d{10}$/.test(contactPhone.trim())) {
+      return false;
+    }
+    if (contactWhatsappEnabled && !/^\d{10}$/.test(contactWhatsapp.trim())) {
+      return false;
+    }
+    return true;
+  }, [
+    atLeastOneContactEnabled,
+    category,
+    contactEmail,
+    contactEmailEnabled,
+    contactPhone,
+    contactPhoneEnabled,
+    contactWhatsapp,
+    contactWhatsappEnabled,
+    description,
+    subcategory,
+    title,
+  ]);
 
   const reset = useCallback(() => {
     setTitle("");
-    setCategory("Technical");
+    setCategory("");
+    setSubcategory("");
     setDescription("");
-    setPreferredContactType("Phone");
-    setContactDetails("");
     setPriority("Medium");
+    setContactEmailEnabled(false);
+    setContactPhoneEnabled(false);
+    setContactWhatsappEnabled(false);
+    setContactEmail("");
+    setContactPhone("");
+    setContactWhatsapp("");
     setPendingFiles([]);
+    setSelectedFileNames([]);
     setErrors({});
   }, []);
 
@@ -149,20 +245,42 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!category && suggestedCategory) {
+      setCategory(suggestedCategory);
+      setSubcategory(SUBCATEGORY_OPTIONS[suggestedCategory][0] ?? "");
+    }
+  }, [category, suggestedCategory]);
+
   if (!open) {
     return null;
   }
 
   function validate() {
     const next: Record<string, string> = {};
-    if (!title.trim()) {
-      next.title = "Title is required.";
+    if (title.trim().length < TITLE_MIN_LENGTH) {
+      next.title = `Title must be at least ${TITLE_MIN_LENGTH} characters.`;
     }
-    if (!description.trim()) {
-      next.description = "Description is required.";
+    if (!category) {
+      next.category = "Category is required.";
     }
-    if (!contactDetails.trim()) {
-      next.contactDetails = "Contact details are required.";
+    if (!subcategory) {
+      next.subcategory = "Subcategory is required.";
+    }
+    if (description.trim().length < DESCRIPTION_MIN_LENGTH) {
+      next.description = `Description must be at least ${DESCRIPTION_MIN_LENGTH} characters.`;
+    }
+    if (!atLeastOneContactEnabled) {
+      next.contacts = "Select at least one contact method.";
+    }
+    if (contactEmailEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      next.contactEmail = "Enter a valid email address.";
+    }
+    if (contactPhoneEnabled && !/^\d{10}$/.test(contactPhone.trim())) {
+      next.contactPhone = "Phone number must be exactly 10 digits.";
+    }
+    if (contactWhatsappEnabled && !/^\d{10}$/.test(contactWhatsapp.trim())) {
+      next.contactWhatsapp = "WhatsApp number must be exactly 10 digits.";
     }
     return next;
   }
@@ -192,7 +310,7 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       if (file.size > MAX_FILE_BYTES) {
         setErrors((p) => ({
           ...p,
-          files: `"${file.name}" is too large (max ${Math.round(MAX_FILE_BYTES / 1024)} KB per file).`,
+          files: `"${file.name}" is too large (max ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB per file).`,
         }));
         continue;
       }
@@ -209,10 +327,13 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       next.push({ key: generateKey(), file });
     }
     setPendingFiles(next);
+    setSelectedFileNames(next.map((item) => item.file.name));
   }
 
   function removePending(key: string) {
-    setPendingFiles((prev) => prev.filter((p) => p.key !== key));
+    const next = pendingFiles.filter((p) => p.key !== key);
+    setPendingFiles(next);
+    setSelectedFileNames(next.map((item) => item.file.name));
     setErrors((prev) => {
       const copy = { ...prev };
       delete copy.files;
@@ -236,9 +357,11 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
       await createStudentTicketRemote({
         subject: title.trim(),
         category,
+        subcategory,
         description: description.trim(),
-        preferredContactType,
-        contactDetails: contactDetails.trim(),
+        ...(contactEmailEnabled ? { contactEmail: contactEmail.trim() } : {}),
+        ...(contactPhoneEnabled ? { contactPhone: contactPhone.trim() } : {}),
+        ...(contactWhatsappEnabled ? { contactWhatsapp: contactWhatsapp.trim() } : {}),
         priority,
         ...(evidence?.length ? { evidence } : {}),
       });
@@ -322,6 +445,11 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
               {errors.title ? (
                 <p className="mt-1 text-xs text-primaryHover">{errors.title}</p>
               ) : null}
+              {!category && suggestedCategory ? (
+                <p className="mt-1 text-xs text-text/70">
+                  Suggested category: <span className="font-medium text-heading">{suggestedCategory}</span>
+                </p>
+              ) : null}
             </div>
 
             <div>
@@ -333,15 +461,47 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
               </label>
               <Select
                 id="modal-ticket-category"
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => {
+                  const nextCategory = e.target.value as CategoryOption | "";
+                  setCategory(nextCategory);
+                  setSubcategory(nextCategory ? (SUBCATEGORY_OPTIONS[nextCategory][0] ?? "Other") : "");
+                }}
                 value={category}
               >
-                <option value="Technical">Technical</option>
+                <option value="">Select category</option>
                 <option value="Academic">Academic</option>
-                <option value="Booking">Booking</option>
-                <option value="Lost item">Lost item</option>
+                <option value="Technical">Technical</option>
+                <option value="Facility">Facility</option>
+                <option value="Finance">Finance</option>
+                <option value="Transport">Transport</option>
                 <option value="Other">Other</option>
               </Select>
+              {errors.category ? <p className="mt-1 text-xs text-primaryHover">{errors.category}</p> : null}
+            </div>
+
+            <div>
+              <label
+                className="mb-2 block text-sm font-medium text-heading"
+                htmlFor="modal-ticket-subcategory"
+              >
+                Subcategory
+              </label>
+              <Select
+                id="modal-ticket-subcategory"
+                onChange={(e) => setSubcategory(e.target.value)}
+                value={subcategory}
+                disabled={!category}
+              >
+                <option value="">{category ? "Select subcategory" : "Select category first"}</option>
+                {(category ? SUBCATEGORY_OPTIONS[category] : []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </Select>
+              {errors.subcategory ? (
+                <p className="mt-1 text-xs text-primaryHover">{errors.subcategory}</p>
+              ) : null}
             </div>
 
             <div>
@@ -358,49 +518,102 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 value={description}
                 rows={4}
               />
+              <p className="mt-1 text-right text-[11px] text-text/60">
+                {descriptionCount} characters
+              </p>
               {errors.description ? (
                 <p className="mt-1 text-xs text-primaryHover">{errors.description}</p>
               ) : null}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label
-                  className="mb-2 block text-sm font-medium text-heading"
-                  htmlFor="modal-ticket-contact-type"
-                >
-                  Preferred contact type
+            <div className="rounded-2xl border border-border bg-slate-50/50 p-4">
+              <p className="mb-3 text-sm font-medium text-heading">Contact information</p>
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex items-center gap-2 text-sm text-text">
+                  <input
+                    checked={contactEmailEnabled}
+                    className="h-4 w-4 accent-primary"
+                    onChange={(e) => setContactEmailEnabled(e.target.checked)}
+                    type="checkbox"
+                  />
+                  Email
                 </label>
-                <Select
-                  id="modal-ticket-contact-type"
-                  onChange={(e) =>
-                    setPreferredContactType(
-                      e.target.value as NonNullable<StudentTicket["preferredContactType"]>
-                    )
-                  }
-                  value={preferredContactType}
-                >
-                  <option value="Phone">Phone</option>
-                  <option value="Email">Email</option>
-                  <option value="WhatsApp">WhatsApp</option>
-                </Select>
+                <label className="inline-flex items-center gap-2 text-sm text-text">
+                  <input
+                    checked={contactPhoneEnabled}
+                    className="h-4 w-4 accent-primary"
+                    onChange={(e) => setContactPhoneEnabled(e.target.checked)}
+                    type="checkbox"
+                  />
+                  Phone Number
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-text">
+                  <input
+                    checked={contactWhatsappEnabled}
+                    className="h-4 w-4 accent-primary"
+                    onChange={(e) => setContactWhatsappEnabled(e.target.checked)}
+                    type="checkbox"
+                  />
+                  WhatsApp Number
+                </label>
               </div>
-              <div>
-                <label
-                  className="mb-2 block text-sm font-medium text-heading"
-                  htmlFor="modal-ticket-contact-details"
+              {errors.contacts ? <p className="mt-2 text-xs text-primaryHover">{errors.contacts}</p> : null}
+              <div className="mt-3 space-y-3">
+                <div
+                  className={`grid overflow-hidden transition-all duration-300 ${
+                    contactEmailEnabled ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
+                  }`}
                 >
-                  Contact details
-                </label>
-                <Input
-                  id="modal-ticket-contact-details"
-                  onChange={(e) => setContactDetails(e.target.value)}
-                  placeholder="Phone number or email"
-                  value={contactDetails}
-                />
-                {errors.contactDetails ? (
-                  <p className="mt-1 text-xs text-primaryHover">{errors.contactDetails}</p>
-                ) : null}
+                  <div>
+                    <Input
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder="Email address"
+                      type="email"
+                      value={contactEmail}
+                    />
+                    {errors.contactEmail ? (
+                      <p className="mt-1 text-xs text-primaryHover">{errors.contactEmail}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div
+                  className={`grid overflow-hidden transition-all duration-300 ${
+                    contactPhoneEnabled ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div>
+                    <Input
+                      inputMode="numeric"
+                      maxLength={10}
+                      onChange={(e) => setContactPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      placeholder="Phone number (10 digits)"
+                      value={contactPhone}
+                    />
+                    {errors.contactPhone ? (
+                      <p className="mt-1 text-xs text-primaryHover">{errors.contactPhone}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div
+                  className={`grid overflow-hidden transition-all duration-300 ${
+                    contactWhatsappEnabled ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div>
+                    <Input
+                      inputMode="numeric"
+                      maxLength={10}
+                      onChange={(e) =>
+                        setContactWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 10))
+                      }
+                      placeholder="WhatsApp number (10 digits)"
+                      value={contactWhatsapp}
+                    />
+                    {errors.contactWhatsapp ? (
+                      <p className="mt-1 text-xs text-primaryHover">{errors.contactWhatsapp}</p>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -429,7 +642,7 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
               <p className="mb-2 text-sm font-medium text-heading">Evidence (optional)</p>
               <p className="mb-2 text-xs text-text/65">
                 Attach images or PDFs (up to {MAX_EVIDENCE_FILES} files,{" "}
-                {Math.round(MAX_FILE_BYTES / 1024)} KB each).
+                {Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB each).
               </p>
               <label className="student-soft-card flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-tint/40 px-4 py-6 text-center transition-colors hover:border-primary/35 hover:bg-tint">
                 <Paperclip className="h-5 w-5 text-text/60" aria-hidden />
@@ -467,6 +680,11 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                   ))}
                 </ul>
               ) : null}
+              {selectedFileNames.length > 0 ? (
+                <p className="mt-2 text-xs text-text/70">
+                  Selected: {selectedFileNames.join(", ")}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -482,10 +700,17 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
             </Button>
             <Button
               className="rounded-full bg-[#034aa6] px-5 text-white hover:bg-[#033d8a]"
-              disabled={submitting}
+              disabled={submitting || !isFormValid}
               type="submit"
             >
-              {submitting ? "Creating…" : "Create ticket"}
+              {submitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating…
+                </span>
+              ) : (
+                "Create ticket"
+              )}
             </Button>
           </div>
         </form>

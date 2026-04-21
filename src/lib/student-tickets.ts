@@ -1,4 +1,4 @@
-export type StudentTicketPriority = "Low" | "Medium" | "High";
+export type StudentTicketPriority = "Low" | "Medium" | "High" | "Urgent";
 
 export type StudentTicketStatus = "Open" | "In progress" | "Resolved";
 
@@ -13,9 +13,11 @@ export interface StudentTicket {
   id: string;
   subject: string;
   category: string;
+  subcategory?: string;
   description: string;
-  preferredContactType?: "Phone" | "Email" | "WhatsApp";
-  contactDetails?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
   priority: StudentTicketPriority;
   status: StudentTicketStatus;
   createdAt: string;

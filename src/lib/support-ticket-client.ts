@@ -30,11 +30,18 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
   const id = typeof row.id === "string" ? row.id.trim() : "";
   const subject = typeof row.subject === "string" ? row.subject.trim() : "";
   const category = typeof row.category === "string" ? row.category.trim() : "";
+  const subcategory = typeof row.subcategory === "string" ? row.subcategory.trim() : "";
   const description = typeof row.description === "string" ? row.description.trim() : "";
   const priority = row.priority;
   const status = row.status;
-  const preferredContactType = row.preferredContactType;
-  const contactDetails = row.contactDetails;
+  const contactEmail =
+    typeof row.contactEmail === "string" && row.contactEmail.trim() ? row.contactEmail.trim() : undefined;
+  const contactPhone =
+    typeof row.contactPhone === "string" && row.contactPhone.trim() ? row.contactPhone.trim() : undefined;
+  const contactWhatsapp =
+    typeof row.contactWhatsapp === "string" && row.contactWhatsapp.trim()
+      ? row.contactWhatsapp.trim()
+      : undefined;
   const createdAt = typeof row.createdAt === "string" ? row.createdAt : "";
   if (
     !id ||
@@ -42,30 +49,24 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     !category ||
     !description ||
     !createdAt ||
-    (priority !== "Low" && priority !== "Medium" && priority !== "High") ||
+    (priority !== "Low" && priority !== "Medium" && priority !== "High" && priority !== "Urgent") ||
     (status !== "Open" && status !== "In progress" && status !== "Resolved")
   ) {
     return null;
   }
   const evidence = parseEvidenceField(row.evidence);
-  const contactType =
-    preferredContactType === "Phone" ||
-    preferredContactType === "Email" ||
-    preferredContactType === "WhatsApp"
-      ? preferredContactType
-      : undefined;
-  const contact =
-    typeof contactDetails === "string" && contactDetails.trim() ? contactDetails.trim() : undefined;
   return {
     id,
     subject,
     category,
+    ...(subcategory ? { subcategory } : {}),
     description,
     priority,
     status,
     createdAt,
-    ...(contactType ? { preferredContactType: contactType } : {}),
-    ...(contact ? { contactDetails: contact } : {}),
+    ...(contactEmail ? { contactEmail } : {}),
+    ...(contactPhone ? { contactPhone } : {}),
+    ...(contactWhatsapp ? { contactWhatsapp } : {}),
     ...(evidence?.length ? { evidence } : {}),
   };
 }

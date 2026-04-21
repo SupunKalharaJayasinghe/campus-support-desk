@@ -12,13 +12,21 @@ import {
 import { resolveCurrentStudentId } from "@/app/api/consultation-bookings/shared";
 
 const ALLOWED_CATEGORIES = new Set([
+  "Finance",
+  "Facility",
+  "Transport",
   "Technical",
   "Academic",
-  "Booking",
-  "Lost item",
   "Other",
 ]);
-const ALLOWED_CONTACT_TYPES = new Set(["Phone", "Email", "WhatsApp"]);
+const SUBCATEGORY_OPTIONS: Record<string, string[]> = {
+  Academic: ["Exams", "Assignments", "Lectures", "Attendance", "Other"],
+  Technical: ["Portal login", "LMS issue", "Wi-Fi", "Lab system", "Other"],
+  Facility: ["Classroom", "Library", "Laboratory", "Campus maintenance", "Other"],
+  Finance: ["Fees", "Scholarship", "Refund", "Payment issue", "Other"],
+  Transport: ["Bus pass", "Route issue", "Timing issue", "Driver complaint", "Other"],
+  Other: ["General inquiry", "Complaint", "Suggestion"],
+};
 
 const MAX_EVIDENCE_FILES = 5;
 /** ~550KB base64 per file (raw ~400KB). */
@@ -92,6 +100,14 @@ function toIso(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidPhone10(value: string) {
+  return /^\d{10}$/.test(value);
+}
+
 function evidenceFromDoc(raw: unknown): ISupportTicketEvidence[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) {
     return undefined;
@@ -116,9 +132,11 @@ function toApiTicket(row: {
   _id: unknown;
   subject?: string;
   category?: string;
+  subcategory?: string;
   description?: string;
-  preferredContactType?: string;
-  contactDetails?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
   priority?: string;
   status?: string;
   createdAt?: Date | string;
@@ -130,9 +148,11 @@ function toApiTicket(row: {
     id: String(row._id),
     subject: collapseSpaces(row.subject),
     category: collapseSpaces(row.category),
+    subcategory: collapseSpaces(row.subcategory),
     description: collapseSpaces(row.description),
-    preferredContactType: collapseSpaces(row.preferredContactType),
-    contactDetails: collapseSpaces(row.contactDetails),
+    contactEmail: collapseSpaces(row.contactEmail),
+    contactPhone: collapseSpaces(row.contactPhone),
+    contactWhatsapp: collapseSpaces(row.contactWhatsapp),
     priority: row.priority as SupportTicketPriority,
     status: row.status as SupportTicketStatus,
     ...(evidence?.length ? { evidence } : {}),
@@ -182,10 +202,11 @@ export async function GET(request: Request) {
           _id: r._id,
           subject: typeof r.subject === "string" ? r.subject : "",
           category: typeof r.category === "string" ? r.category : "",
+          subcategory: typeof r.subcategory === "string" ? r.subcategory : "",
           description: typeof r.description === "string" ? r.description : "",
-          preferredContactType:
-            typeof r.preferredContactType === "string" ? r.preferredContactType : "",
-          contactDetails: typeof r.contactDetails === "string" ? r.contactDetails : "",
+          contactEmail: typeof r.contactEmail === "string" ? r.contactEmail : "",
+          contactPhone: typeof r.contactPhone === "string" ? r.contactPhone : "",
+          contactWhatsapp: typeof r.contactWhatsapp === "string" ? r.contactWhatsapp : "",
           priority: typeof r.priority === "string" ? r.priority : "",
           status: typeof r.status === "string" ? r.status : "",
           createdAt,
@@ -209,9 +230,11 @@ export async function GET(request: Request) {
 type CreateBody = {
   subject?: unknown;
   category?: unknown;
+  subcategory?: unknown;
   description?: unknown;
-  preferredContactType?: unknown;
-  contactDetails?: unknown;
+  contactEmail?: unknown;
+  contactPhone?: unknown;
+  contactWhatsapp?: unknown;
   priority?: unknown;
   evidence?: unknown;
 };
@@ -235,8 +258,10 @@ export async function POST(request: Request) {
     const subject = collapseSpaces(body?.subject);
     const description = collapseSpaces(body?.description);
     const category = collapseSpaces(body?.category);
-    const preferredContactType = collapseSpaces(body?.preferredContactType);
-    const contactDetails = collapseSpaces(body?.contactDetails);
+    const subcategory = collapseSpaces(body?.subcategory);
+    const contactEmail = collapseSpaces(body?.contactEmail);
+    const contactPhone = collapseSpaces(body?.contactPhone);
+    const contactWhatsapp = collapseSpaces(body?.contactWhatsapp);
     const priority = sanitizePriority(body?.priority);
     const evidenceParsed = sanitizeEvidence(body?.evidence);
     if (!evidenceParsed.ok) {
@@ -253,30 +278,43 @@ export async function POST(request: Request) {
     if (!ALLOWED_CATEGORIES.has(category)) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
+    const allowedSubcategories = SUBCATEGORY_OPTIONS[category] ?? [];
+    if (!subcategory || !allowedSubcategories.includes(subcategory)) {
+      return NextResponse.json({ message: "Invalid subcategory" }, { status: 400 });
+    }
 
     if (!priority) {
       return NextResponse.json(
-        { message: "Priority must be Low, Medium, or High" },
+        { message: "Priority must be Low, Medium, High, or Urgent" },
         { status: 400 }
       );
     }
-    if (!ALLOWED_CONTACT_TYPES.has(preferredContactType)) {
+    const hasAnyContact = Boolean(contactEmail || contactPhone || contactWhatsapp);
+    if (!hasAnyContact) {
       return NextResponse.json(
-        { message: "Preferred contact type must be Phone, Email, or WhatsApp" },
+        { message: "At least one contact method is required" },
         { status: 400 }
       );
     }
-    if (!contactDetails) {
-      return NextResponse.json({ message: "Contact details are required" }, { status: 400 });
+    if (contactEmail && !isValidEmail(contactEmail)) {
+      return NextResponse.json({ message: "Invalid email format" }, { status: 400 });
+    }
+    if (contactPhone && !isValidPhone10(contactPhone)) {
+      return NextResponse.json({ message: "Phone must have 10 digits" }, { status: 400 });
+    }
+    if (contactWhatsapp && !isValidPhone10(contactWhatsapp)) {
+      return NextResponse.json({ message: "WhatsApp must have 10 digits" }, { status: 400 });
     }
 
     const created = await SupportTicketModel.create({
       studentId: new mongoose.Types.ObjectId(studentId),
       subject,
       category,
+      subcategory,
       description,
-      preferredContactType,
-      contactDetails,
+      ...(contactEmail ? { contactEmail } : {}),
+      ...(contactPhone ? { contactPhone } : {}),
+      ...(contactWhatsapp ? { contactWhatsapp } : {}),
       priority,
       status: "Open",
       evidence: evidenceParsed.value.length > 0 ? evidenceParsed.value : [],
@@ -291,9 +329,11 @@ export async function POST(request: Request) {
         _id: plain._id,
         subject: plain.subject,
         category: plain.category,
+        subcategory: plain.subcategory,
         description: plain.description,
-        preferredContactType: plain.preferredContactType,
-        contactDetails: plain.contactDetails,
+        contactEmail: plain.contactEmail,
+        contactPhone: plain.contactPhone,
+        contactWhatsapp: plain.contactWhatsapp,
         priority: plain.priority,
         status: plain.status,
         evidence: plain.evidence,
