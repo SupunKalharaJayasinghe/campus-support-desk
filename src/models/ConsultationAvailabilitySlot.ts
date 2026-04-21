@@ -14,6 +14,7 @@ export interface IConsultationAvailabilitySlot {
   sessionType: string;
   mode: ConsultationSlotMode;
   location: string;
+  meetingLink: string;
   status: ConsultationSlotStatus;
   bookingId?: Types.ObjectId | null;
   isDeleted?: boolean;
@@ -60,6 +61,11 @@ const ConsultationAvailabilitySlotSchema = new Schema<IConsultationAvailabilityS
       trim: true,
       default: "",
     },
+    meetingLink: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     status: {
       type: String,
       required: true,
@@ -95,6 +101,13 @@ ConsultationAvailabilitySlotSchema.index(
   { unique: true }
 );
 ConsultationAvailabilitySlotSchema.index({ status: 1, date: 1, startTime: 1 });
+
+const existingModel = mongoose.models.ConsultationAvailabilitySlot as
+  | mongoose.Model<IConsultationAvailabilitySlot>
+  | undefined;
+if (existingModel && !existingModel.schema.path("meetingLink")) {
+  delete mongoose.models.ConsultationAvailabilitySlot;
+}
 
 const ConsultationAvailabilitySlotModel =
   (mongoose.models.ConsultationAvailabilitySlot as

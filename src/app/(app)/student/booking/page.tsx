@@ -258,6 +258,16 @@ export default function StudentBookingPage() {
                         <div className="text-xs font-medium text-text/72">
                           {buildSlotSubtitle(slot)}
                         </div>
+                        {slot.meetingLink ? (
+                          <a
+                            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                            href={slot.meetingLink}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Meeting link
+                          </a>
+                        ) : null}
                       </div>
                       <Button
                         className="h-8 px-3 text-xs"
@@ -293,9 +303,19 @@ export default function StudentBookingPage() {
                   <p className="text-sm text-text/72">{booking.purpose}</p>
                   <p className="text-xs text-text/72">
                     {booking.slot
-                      ? `${booking.slot.date} • ${booking.slot.startTime} - ${booking.slot.endTime}`
+                      ? buildSlotSubtitle(booking.slot)
                       : "Slot details unavailable"}
                   </p>
+                  {booking.slot?.meetingLink ? (
+                    <a
+                      className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                      href={booking.slot.meetingLink}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Meeting link
+                    </a>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={bookingVariant(booking.status)}>

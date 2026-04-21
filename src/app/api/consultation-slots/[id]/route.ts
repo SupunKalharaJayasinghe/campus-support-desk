@@ -2,10 +2,8 @@ import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import "@/models/ConsultationAvailabilitySlot";
 import "@/models/Lecturer";
-import "@/models/User";
 import { ConsultationAvailabilitySlotModel } from "@/models/ConsultationAvailabilitySlot";
 import { LecturerModel } from "@/models/Lecturer";
-import { UserModel } from "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
   deleteConsultationAvailabilitySlotInMemory,
@@ -13,6 +11,7 @@ import {
   findOverlappingConsultationAvailabilitySlotInMemory,
   isConsultationSlotTimeRangeValid,
   sanitizeConsultationLocation,
+  sanitizeConsultationMeetingLink,
   sanitizeConsultationSessionType,
   sanitizeConsultationSlotDate,
   sanitizeConsultationSlotMode,
@@ -24,6 +23,7 @@ import {
   type ConsultationAvailabilitySlotWriteInput,
 } from "@/models/consultation-availability-store";
 import { findLecturerInMemoryById } from "@/models/lecturer-store";
+import { resolveCurrentLecturerId } from "@/app/api/consultation-bookings/shared";
 
 type LecturerMeta = {
   id: string;
@@ -113,51 +113,6 @@ async function findLecturerMetaById(
   return toLecturerMeta(row);
 }
 
-async function resolveCurrentLecturerId(
-  request: Request,
-  mongooseConnection: mongoose.Mongoose | null,
-  fallbackLecturerId?: string
-) {
-  const headerUserId = String(request.headers.get("x-user-id") ?? "").trim();
-  const fallbackId = String(fallbackLecturerId ?? "").trim();
-
-  if (!mongooseConnection) {
-    const directLecturerId =
-      (headerUserId && findLecturerInMemoryById(headerUserId)?.id) || fallbackId;
-    if (!directLecturerId) {
-      return "";
-    }
-
-    const lecturer = findLecturerInMemoryById(directLecturerId);
-    if (!lecturer || lecturer.status !== "ACTIVE") {
-      return "";
-    }
-
-    return lecturer.id;
-  }
-
-  if (!headerUserId || !mongoose.Types.ObjectId.isValid(headerUserId)) {
-    return "";
-  }
-
-  const user = await UserModel.findById(headerUserId)
-    .select({ role: 1, status: 1, lecturerRef: 1 })
-    .lean()
-    .exec()
-    .catch(() => null);
-
-  const row = asObject(user);
-  const role = String(row?.role ?? "").trim().toUpperCase();
-  const status = String(row?.status ?? "").trim().toUpperCase();
-  const lecturerId = readId(row?.lecturerRef);
-
-  if (role !== "LECTURER" || status !== "ACTIVE" || !lecturerId) {
-    return "";
-  }
-
-  return lecturerId;
-}
-
 function toApiSlot(
   row: ConsultationAvailabilitySlotPersistedRecord,
   lecturer: LecturerMeta | null
@@ -171,6 +126,7 @@ function toApiSlot(
     sessionType: row.sessionType,
     mode: row.mode,
     location: row.location,
+    meetingLink: row.meetingLink,
     status: row.status,
     bookingId: row.bookingId,
     createdAt: row.createdAt,
@@ -195,6 +151,7 @@ async function findOverlappingSlotForLecturer(input: {
     lecturerId: input.lecturerId,
     date: input.date,
     isDeleted: false,
+    status: { $in: ["AVAILABLE", "BOOKED"] },
     startTime: { $lt: input.endTime },
     endTime: { $gt: input.startTime },
   };
@@ -243,6 +200,10 @@ function mergeWriteInput(
       body.location === undefined
         ? current.location
         : sanitizeConsultationLocation(body.location),
+    meetingLink:
+      body.meetingLink === undefined
+        ? current.meetingLink
+        : sanitizeConsultationMeetingLink(body.meetingLink),
     status:
       body.status === undefined
         ? current.status
@@ -359,9 +320,16 @@ export async function PUT(
         );
       }
 
-      if (input.mode === "IN_PERSON" && !input.location) {
+      if ((input.mode === "IN_PERSON" || input.mode === "HYBRID") && !input.location) {
         return NextResponse.json(
-          { message: "Location is required for in-person slots" },
+          { message: "Location is required for in-person and hybrid slots" },
+          { status: 400 }
+        );
+      }
+
+      if ((input.mode === "ONLINE" || input.mode === "HYBRID") && !input.meetingLink) {
+        return NextResponse.json(
+          { message: "Meeting link is required for online and hybrid slots" },
           { status: 400 }
         );
       }
@@ -431,9 +399,16 @@ export async function PUT(
       );
     }
 
-    if (input.mode === "IN_PERSON" && !input.location) {
+    if ((input.mode === "IN_PERSON" || input.mode === "HYBRID") && !input.location) {
       return NextResponse.json(
-        { message: "Location is required for in-person slots" },
+        { message: "Location is required for in-person and hybrid slots" },
+        { status: 400 }
+      );
+    }
+
+    if ((input.mode === "ONLINE" || input.mode === "HYBRID") && !input.meetingLink) {
+      return NextResponse.json(
+        { message: "Meeting link is required for online and hybrid slots" },
         { status: 400 }
       );
     }
@@ -459,6 +434,7 @@ export async function PUT(
     row.sessionType = input.sessionType;
     row.mode = input.mode;
     row.location = input.location;
+    row.meetingLink = input.meetingLink;
     row.status = input.status;
     row.bookingId =
       input.bookingId && mongoose.Types.ObjectId.isValid(input.bookingId)

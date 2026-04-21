@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   CalendarDays,
   Clock3,
+  Link2,
   MapPin,
   PlusCircle,
   RefreshCw,
@@ -75,6 +76,7 @@ export default function LecturerAvailabilityPage() {
   const [sessionType, setSessionType] = useState(DEFAULT_SESSION_TYPE);
   const [mode, setMode] = useState<ConsultationSlotMode>("IN_PERSON");
   const [location, setLocation] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
 
   const loadData = useCallback(async () => {
     const [slotsPayload, bookingsPayload] = await Promise.all([
@@ -152,6 +154,7 @@ export default function LecturerAvailabilityPage() {
         slot.sessionType,
         toConsultationModeLabel(slot.mode),
         slot.location,
+        slot.meetingLink,
         getConsultationSlotStatusLabel(slot.status),
         studentName,
       ]
@@ -205,10 +208,19 @@ export default function LecturerAvailabilityPage() {
         return;
       }
 
-      if (mode === "IN_PERSON" && !location.trim()) {
+      if ((mode === "IN_PERSON" || mode === "HYBRID") && !location.trim()) {
         toast({
           title: "Location required",
-          message: "Add a location for in-person consultation slots.",
+          message: "Add a location for in-person and hybrid consultation slots.",
+          variant: "error",
+        });
+        return;
+      }
+
+      if ((mode === "ONLINE" || mode === "HYBRID") && !meetingLink.trim()) {
+        toast({
+          title: "Meeting link required",
+          message: "Add a meeting link for online and hybrid consultation slots.",
           variant: "error",
         });
         return;
@@ -223,13 +235,17 @@ export default function LecturerAvailabilityPage() {
           sessionType: sessionType.trim(),
           mode,
           location: location.trim(),
+          meetingLink: meetingLink.trim(),
         });
         toast({
           title: "Slot created",
           message: `${date} ${startTime} - ${endTime} updated successfully.`,
         });
-        if (mode !== "IN_PERSON") {
+        if (mode === "ONLINE") {
           setLocation("");
+        }
+        if (mode === "IN_PERSON") {
+          setMeetingLink("");
         }
         await loadData();
       } catch (requestError) {
@@ -245,7 +261,7 @@ export default function LecturerAvailabilityPage() {
         setSubmitting(false);
       }
     },
-    [date, endTime, loadData, location, mode, sessionType, startTime, submitting, toast]
+    [date, endTime, loadData, location, meetingLink, mode, sessionType, startTime, submitting, toast]
   );
 
   const handleDeleteSlot = useCallback(
@@ -429,7 +445,7 @@ export default function LecturerAvailabilityPage() {
                       </select>
                     </div>
 
-                    {mode !== "ONLINE" ? (
+                    {(mode === "IN_PERSON" || mode === "HYBRID") ? (
                       <div className="form-field" style={{ gridColumn: "1 / -1" }}>
                         <label className="form-label" htmlFor="slot-location">Location</label>
                         <input
@@ -439,6 +455,21 @@ export default function LecturerAvailabilityPage() {
                           placeholder="Main Office / Lab 1 / Meeting room"
                           type="text"
                           value={location}
+                        />
+                      </div>
+                    ) : null}
+
+                    {(mode === "ONLINE" || mode === "HYBRID") ? (
+                      <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+                        <label className="form-label" htmlFor="slot-meeting-link">Meeting Link</label>
+                        <input
+                          className="form-input"
+                          id="slot-meeting-link"
+                          inputMode="url"
+                          onChange={(event) => setMeetingLink(event.target.value)}
+                          placeholder="https://meet.google.com/..."
+                          type="text"
+                          value={meetingLink}
                         />
                       </div>
                     ) : null}
@@ -514,7 +545,7 @@ export default function LecturerAvailabilityPage() {
                 <input
                   className="form-input"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search date, type, location"
+                  placeholder="Search date, type, location, link"
                   style={{ width: 240 }}
                   type="text"
                   value={search}
@@ -528,6 +559,7 @@ export default function LecturerAvailabilityPage() {
                       <th>Type</th>
                       <th>Mode</th>
                       <th>Location</th>
+                      <th>Meeting Link</th>
                       <th>Status</th>
                       <th>Student</th>
                       <th>Action</th>
@@ -568,6 +600,22 @@ export default function LecturerAvailabilityPage() {
                                 <MapPin size={14} />
                                 {slot.location}
                               </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td>
+                            {slot.meetingLink ? (
+                              <a
+                                className="inline-flex"
+                                href={slot.meetingLink}
+                                rel="noreferrer"
+                                style={{ gap: 6 }}
+                                target="_blank"
+                              >
+                                <Link2 size={14} />
+                                Open link
+                              </a>
                             ) : (
                               "-"
                             )}
@@ -618,7 +666,7 @@ export default function LecturerAvailabilityPage() {
                     })}
                     {filteredSlots.length === 0 ? (
                       <tr>
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="empty-state">
                             <div className="empty-text">No slots found for this view.</div>
                           </div>

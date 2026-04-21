@@ -28,6 +28,7 @@ export interface ConsultationSlotApiRecord {
   sessionType: string;
   mode: ConsultationSlotMode;
   location: string;
+  meetingLink: string;
   status: ConsultationSlotStatus;
   bookingId: string | null;
   createdAt: string;
@@ -165,6 +166,7 @@ export async function createLecturerConsultationSlot(input: {
   sessionType: string;
   mode: ConsultationSlotMode;
   location?: string;
+  meetingLink?: string;
 }) {
   const { lecturerId } = getCurrentConsultationActorIds();
 
