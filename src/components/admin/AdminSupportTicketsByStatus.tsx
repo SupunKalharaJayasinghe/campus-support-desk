@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, UserPlus } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, UserPlus } from "lucide-react";
 import AssignTechnicianToTicketModal from "@/components/admin/AssignTechnicianToTicketModal";
 import PageHeader from "@/components/admin/PageHeader";
 import type { AdminTicketsStatusConfig } from "@/components/admin/admin-ticket-status-config";
@@ -65,20 +65,35 @@ function readErrorMessage(payload: unknown) {
   return "Request failed";
 }
 
-export default function AdminSupportTicketsByStatus({ config }: { config: AdminTicketsStatusConfig }) {
+type TechnicianWorkflow = "accept" | "resolve";
+
+export default function AdminSupportTicketsByStatus({
+  config,
+  mineOnly = false,
+  technicianWorkflow,
+}: {
+  config: AdminTicketsStatusConfig;
+  /** Limit to tickets assigned to the signed-in technician (`mine=1`). */
+  mineOnly?: boolean;
+  /** Show Accept / Mark resolved actions for the technician queue. */
+  technicianWorkflow?: TechnicianWorkflow;
+}) {
   const [items, setItems] = useState<AdminSupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [assignTarget, setAssignTarget] = useState<{ id: string; subject: string } | null>(null);
   const [canAssignTechnician, setCanAssignTechnician] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [resolveDrafts, setResolveDrafts] = useState<Record<string, string>>({});
 
   const statusQuery = encodeURIComponent(config.apiStatus);
+  const listQuery = mineOnly ? `${statusQuery}&mine=1` : statusQuery;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/support-tickets?status=${statusQuery}`, {
+      const response = await fetch(`/api/admin/support-tickets?status=${listQuery}`, {
         cache: "no-store",
         headers: { ...authHeaders() },
       });
@@ -99,7 +114,34 @@ export default function AdminSupportTicketsByStatus({ config }: { config: AdminT
     } finally {
       setLoading(false);
     }
-  }, [statusQuery]);
+  }, [listQuery]);
+
+  const runTechnicianAction = useCallback(
+    async (ticketId: string, body: Record<string, unknown>) => {
+      setActionLoadingId(ticketId);
+      setError("");
+      try {
+        const response = await fetch(
+          `/api/technician/support-tickets/${encodeURIComponent(ticketId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(body),
+          }
+        );
+        const payload = (await response.json().catch(() => null)) as unknown;
+        if (!response.ok) {
+          throw new Error(readErrorMessage(payload));
+        }
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Request failed");
+      } finally {
+        setActionLoadingId(null);
+      }
+    },
+    [load]
+  );
 
   useEffect(() => {
     void load();
@@ -192,7 +234,7 @@ export default function AdminSupportTicketsByStatus({ config }: { config: AdminT
                         <span>WhatsApp: {ticket.contactWhatsapp}</span>
                       ) : null}
                     </div>
-                    {ticket.assignedTechnician ? (
+                    {ticket.assignedTechnician && !mineOnly ? (
                       <p className="text-sm text-text/80">
                         <span className="font-medium text-heading">Technician: </span>
                         {ticket.assignedTechnician.fullName}
@@ -217,7 +259,61 @@ export default function AdminSupportTicketsByStatus({ config }: { config: AdminT
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:items-end sm:pt-0.5">
+                  <div className="flex w-full min-w-[200px] shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:items-end sm:pt-0.5">
+                    {technicianWorkflow === "accept" ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
+                        disabled={actionLoadingId === ticket.id}
+                        onClick={() => void runTechnicianAction(ticket.id, { status: "Accepted" })}
+                      >
+                        {actionLoadingId === ticket.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        Accept ticket
+                      </Button>
+                    ) : null}
+                    {technicianWorkflow === "resolve" ? (
+                      <div className="flex w-full flex-col gap-2 sm:max-w-[280px] sm:self-end">
+                        <label className="block text-left text-[11px] font-medium uppercase tracking-wide text-text/55">
+                          Resolution notes (optional)
+                        </label>
+                        <textarea
+                          className="min-h-[72px] w-full rounded-xl border border-border bg-background px-3 py-2 text-left text-sm text-text placeholder:text-text/40"
+                          placeholder="What was done?"
+                          value={resolveDrafts[ticket.id] ?? ""}
+                          onChange={(e) =>
+                            setResolveDrafts((prev) => ({
+                              ...prev,
+                              [ticket.id]: e.target.value,
+                            }))
+                          }
+                          rows={3}
+                        />
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
+                          disabled={actionLoadingId === ticket.id}
+                          onClick={() =>
+                            void runTechnicianAction(ticket.id, {
+                              status: "Resolved",
+                              technicianComments: (resolveDrafts[ticket.id] ?? "").trim() || undefined,
+                            })
+                          }
+                        >
+                          {actionLoadingId === ticket.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          Mark resolved
+                        </Button>
+                      </div>
+                    ) : null}
                     {canAssignTechnician ? (
                       <Button
                         type="button"

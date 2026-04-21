@@ -34,7 +34,7 @@ export const HOME_BY_ROLE: Record<AppRole, string> = {
   LOST_ITEM_STAFF: "/lost-items",
   STUDENT: "/student",
   COMMUNITY_ADMIN: "/community-admin",
-  TECHNICIAN: "/admin/tickets",
+  TECHNICIAN: "/technician",
 };
 
 export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
@@ -43,7 +43,7 @@ export const WORKSPACE_TITLE_BY_ROLE: Record<AppRole, string> = {
   LOST_ITEM_STAFF: "Lost & Found Staff",
   STUDENT: "Student Portal",
   COMMUNITY_ADMIN: "Community Admin",
-  TECHNICIAN: "Technician",
+  TECHNICIAN: "Technician Portal",
 };
 
 export function isDemoModeEnabled() {
@@ -85,6 +85,9 @@ export function getExpectedRoleForPath(pathname: string): AppRole | AppRole[] | 
   }
   if (pathname === "/lost-items" || pathname.startsWith("/lost-items/")) {
     return "LOST_ITEM_STAFF";
+  }
+  if (pathname === "/technician" || pathname.startsWith("/technician/")) {
+    return "TECHNICIAN";
   }
   if (pathname === "/admin/grades" || pathname.startsWith("/admin/grades/")) {
     return ["SUPER_ADMIN", "LECTURER"];

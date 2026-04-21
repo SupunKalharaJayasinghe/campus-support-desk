@@ -12,7 +12,7 @@ import {
   type SupportTicketStatus,
 } from "@/models/SupportTicket";
 import { UserModel } from "@/models/User";
-import { toAppRoleFromUserRole } from "@/models/rbac";
+import { type AppRole, toAppRoleFromUserRole } from "@/models/rbac";
 
 function collapseSpaces(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -31,7 +31,7 @@ function toIso(value: unknown) {
 }
 
 /** Aligned with `getExpectedRoleForPath` for `/admin/tickets`: SUPER_ADMIN and TECHNICIAN. */
-async function authorizeTicketsViewer(request: Request) {
+async function authorizeTicketsViewer(request: Request): Promise<{ id: string; appRole: AppRole } | null> {
   const headerUserId = collapseSpaces(request.headers.get("x-user-id"));
   if (!headerUserId || !mongoose.Types.ObjectId.isValid(headerUserId)) {
     return null;
@@ -52,7 +52,12 @@ async function authorizeTicketsViewer(request: Request) {
     return null;
   }
 
-  return { id: collapseSpaces(row._id) };
+  return { id: collapseSpaces(row._id), appRole };
+}
+
+function parseMineParam(raw: string | null): boolean {
+  const s = collapseSpaces(raw).toLowerCase();
+  return s === "1" || s === "true" || s === "yes";
 }
 
 function parseStatus(param: string | null): SupportTicketStatus | null {
@@ -103,10 +108,29 @@ export async function GET(request: Request) {
     );
   }
 
+  const mine = parseMineParam(url.searchParams.get("mine"));
+  if (mine && authorized.appRole !== "TECHNICIAN") {
+    return NextResponse.json(
+      { message: "mine=1 lists tickets assigned to you and is only for technician accounts." },
+      { status: 400 }
+    );
+  }
+
+  const statusMatch = matchSupportTicketStatusCaseInsensitive(status);
+  const listFilter =
+    mine && authorized.appRole === "TECHNICIAN"
+      ? {
+          $and: [
+            statusMatch,
+            { assignedTechnicianId: new mongoose.Types.ObjectId(authorized.id) },
+          ],
+        }
+      : statusMatch;
+
   /** Omit student `evidence` (large base64 blobs); list UI does not need file bytes. */
   let rows: unknown[];
   try {
-    rows = (await SupportTicketModel.find(matchSupportTicketStatusCaseInsensitive(status))
+    rows = (await SupportTicketModel.find(listFilter)
       .select({ evidence: 0 })
       .populate({
         path: "studentId",

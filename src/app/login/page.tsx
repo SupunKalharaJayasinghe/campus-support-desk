@@ -232,6 +232,7 @@ export default function LoginPage() {
                       <option value="SUPER_ADMIN">Administrator</option>
                       <option value="LECTURER">Lecturer</option>
                       <option value="LOST_ITEM_STAFF">Lost Item Officer</option>
+                      <option value="TECHNICIAN">Technician</option>
                       <option value="STUDENT">Student</option>
                     </select>
                   </div>
