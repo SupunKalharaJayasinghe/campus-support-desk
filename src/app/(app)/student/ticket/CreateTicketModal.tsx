@@ -192,43 +192,6 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const atLeastOneContactEnabled =
     contactEmailEnabled || contactPhoneEnabled || contactWhatsappEnabled;
 
-  const isFormValid = useMemo(() => {
-    if (title.trim().length < TITLE_MIN_LENGTH) {
-      return false;
-    }
-    if (!category || !subcategory) {
-      return false;
-    }
-    if (description.trim().length < DESCRIPTION_MIN_LENGTH) {
-      return false;
-    }
-    if (!atLeastOneContactEnabled) {
-      return false;
-    }
-    if (contactEmailEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
-      return false;
-    }
-    if (contactPhoneEnabled && !/^\d{10}$/.test(contactPhone.trim())) {
-      return false;
-    }
-    if (contactWhatsappEnabled && !/^\d{10}$/.test(contactWhatsapp.trim())) {
-      return false;
-    }
-    return true;
-  }, [
-    atLeastOneContactEnabled,
-    category,
-    contactEmail,
-    contactEmailEnabled,
-    contactPhone,
-    contactPhoneEnabled,
-    contactWhatsapp,
-    contactWhatsappEnabled,
-    description,
-    subcategory,
-    title,
-  ]);
-
   const reset = useCallback(() => {
     setTitle("");
     setCategory("");
@@ -297,20 +260,26 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
 
   function validate() {
     const next: Record<string, string> = {};
-    if (title.trim().length < TITLE_MIN_LENGTH) {
+    const titleTrimmed = title.trim();
+    if (!titleTrimmed) {
+      next.title = "Title is required.";
+    } else if (titleTrimmed.length < TITLE_MIN_LENGTH) {
       next.title = `Title must be at least ${TITLE_MIN_LENGTH} characters.`;
     }
     if (!category) {
-      next.category = "Category is required.";
+      next.category = "Please select a category.";
     }
     if (!subcategory) {
-      next.subcategory = "Subcategory is required.";
+      next.subcategory = "Please select a subcategory.";
     }
-    if (description.trim().length < DESCRIPTION_MIN_LENGTH) {
+    const descriptionTrimmed = description.trim();
+    if (!descriptionTrimmed) {
+      next.description = "Description is required.";
+    } else if (descriptionTrimmed.length < DESCRIPTION_MIN_LENGTH) {
       next.description = `Description must be at least ${DESCRIPTION_MIN_LENGTH} characters.`;
     }
     if (!atLeastOneContactEnabled) {
-      next.contacts = "Select at least one contact method.";
+      next.contacts = "Select at least one contact option (email, phone, or WhatsApp).";
     }
     if (contactEmailEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
       next.contactEmail = "Enter a valid email address.";
@@ -465,9 +434,14 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
             <div>
               <label className="mb-2 block text-sm font-medium text-heading" htmlFor="modal-ticket-title">
                 Title
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
               </label>
               <Input
                 id="modal-ticket-title"
+                aria-invalid={Boolean(errors.title)}
+                aria-required
                 list={titleSuggestionListId}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Short summary"
@@ -497,8 +471,13 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 htmlFor="modal-ticket-category"
               >
                 Category
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
               </label>
               <Select
+                aria-invalid={Boolean(errors.category)}
+                aria-required
                 className={categoryAutoSelected ? "ring-2 ring-primary/35 transition-all duration-300" : ""}
                 id="modal-ticket-category"
                 onChange={(e) => {
@@ -527,8 +506,13 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 htmlFor="modal-ticket-subcategory"
               >
                 Subcategory
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
               </label>
               <Select
+                aria-invalid={Boolean(errors.subcategory)}
+                aria-required
                 id="modal-ticket-subcategory"
                 onChange={(e) => setSubcategory(e.target.value)}
                 value={subcategory}
@@ -552,8 +536,13 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 htmlFor="modal-ticket-description"
               >
                 Description
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
               </label>
               <Textarea
+                aria-invalid={Boolean(errors.description)}
+                aria-required
                 id="modal-ticket-description"
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What happened, and what do you need?"
@@ -569,7 +558,12 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
             </div>
 
             <div className="rounded-2xl border border-border bg-slate-50/50 p-4">
-              <p className="mb-3 text-sm font-medium text-heading">Contact information</p>
+              <p className="mb-3 text-sm font-medium text-heading">
+                Contact information
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
+              </p>
               <div className="flex flex-wrap gap-3">
                 <label className="inline-flex items-center gap-2 text-sm text-text">
                   <input
@@ -660,7 +654,12 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
             </div>
 
             <fieldset>
-              <legend className="mb-2 block text-sm font-medium text-heading">Priority</legend>
+              <legend className="mb-2 block text-sm font-medium text-heading">
+                Priority
+                <span className="ml-0.5 text-red-600" aria-hidden="true">
+                  *
+                </span>
+              </legend>
               <div className="flex flex-wrap gap-3">
                 {(["Low", "Medium", "High"] as const).map((level) => (
                   <label
@@ -742,7 +741,7 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
             </Button>
             <Button
               className="rounded-full bg-[#034aa6] px-5 text-white hover:bg-[#033d8a]"
-              disabled={submitting || !isFormValid}
+              disabled={submitting}
               type="submit"
             >
               {submitting ? (

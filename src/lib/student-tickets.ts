@@ -1,6 +1,8 @@
+import type { SupportTicketStatus } from "@/models/support-ticket-types";
+
 export type StudentTicketPriority = "Low" | "Medium" | "High";
 
-export type StudentTicketStatus = "Open" | "In progress" | "Resolved";
+export type StudentTicketStatus = SupportTicketStatus;
 
 /** Base64 payload (no data-URL prefix), matches Mongo subdocuments. */
 export type TicketEvidence = {

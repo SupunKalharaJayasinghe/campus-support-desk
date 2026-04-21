@@ -1,4 +1,5 @@
 import { authHeaders, readStoredUser } from "@/lib/rbac";
+import { SUPPORT_TICKET_STATUSES, type SupportTicketStatus } from "@/models/support-ticket-types";
 import {
   addStudentTicket,
   listStudentTickets,
@@ -43,6 +44,9 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
       ? row.contactWhatsapp.trim()
       : undefined;
   const createdAt = typeof row.createdAt === "string" ? row.createdAt : "";
+  const statusOk =
+    typeof status === "string" &&
+    (SUPPORT_TICKET_STATUSES as readonly string[]).includes(status);
   if (
     !id ||
     !subject ||
@@ -50,7 +54,7 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     !description ||
     !createdAt ||
     (priority !== "Low" && priority !== "Medium" && priority !== "High") ||
-    (status !== "Open" && status !== "In progress" && status !== "Resolved")
+    !statusOk
   ) {
     return null;
   }
@@ -62,7 +66,7 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     ...(subcategory ? { subcategory } : {}),
     description,
     priority,
-    status,
+    status: status as SupportTicketStatus,
     createdAt,
     ...(contactEmail ? { contactEmail } : {}),
     ...(contactPhone ? { contactPhone } : {}),

@@ -19,7 +19,10 @@ import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { connectMongoose } from "@/models/mongoose";
 import { StudentModel } from "@/models/Student";
-import { SupportTicketModel } from "@/models/SupportTicket";
+import {
+  SupportTicketModel,
+  matchSupportTicketStatusCaseInsensitive,
+} from "@/models/SupportTicket";
 
 type AlertLevel = "High" | "Medium";
 
@@ -185,9 +188,15 @@ export async function GET() {
       .exec()
       .catch(() => []),
     SupportTicketModel.countDocuments({}).catch(() => 0),
-    SupportTicketModel.countDocuments({ status: "Open" }).catch(() => 0),
-    SupportTicketModel.countDocuments({ status: "In progress" }).catch(() => 0),
-    SupportTicketModel.countDocuments({ status: "Resolved" }).catch(() => 0),
+    SupportTicketModel.countDocuments(matchSupportTicketStatusCaseInsensitive("Open")).catch(
+      () => 0
+    ),
+    SupportTicketModel.countDocuments(
+      matchSupportTicketStatusCaseInsensitive("In progress")
+    ).catch(() => 0),
+    SupportTicketModel.countDocuments(matchSupportTicketStatusCaseInsensitive("Resolved")).catch(
+      () => 0
+    ),
     SupportTicketModel.find({})
       .select({ subject: 1, status: 1, priority: 1, createdAt: 1, updatedAt: 1 })
       .sort({ updatedAt: -1 })

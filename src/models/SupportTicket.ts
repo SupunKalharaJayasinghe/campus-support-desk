@@ -1,33 +1,11 @@
-import mongoose, { Schema, Types } from "mongoose";
+import mongoose, { Schema } from "mongoose";
+import {
+  SUPPORT_TICKET_PRIORITIES,
+  SUPPORT_TICKET_STATUSES,
+  type ISupportTicket,
+} from "./support-ticket-types";
 
-export const SUPPORT_TICKET_PRIORITIES = ["Low", "Medium", "High"] as const;
-export const SUPPORT_TICKET_STATUSES = ["Open", "In progress", "Resolved"] as const;
-
-export type SupportTicketPriority = (typeof SUPPORT_TICKET_PRIORITIES)[number];
-export type SupportTicketStatus = (typeof SUPPORT_TICKET_STATUSES)[number];
-
-export interface ISupportTicketEvidence {
-  fileName: string;
-  mimeType: string;
-  /** Base64-encoded file bytes (no data-URL prefix). */
-  data: string;
-}
-
-export interface ISupportTicket {
-  studentId: Types.ObjectId;
-  subject: string;
-  category: string;
-  subcategory: string;
-  description: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  contactWhatsapp?: string;
-  priority: SupportTicketPriority;
-  status: SupportTicketStatus;
-  evidence?: ISupportTicketEvidence[];
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+export * from "./support-ticket-types";
 
 const EvidenceSchema = new Schema(
   {
@@ -101,6 +79,20 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       type: [EvidenceSchema],
       default: [],
     },
+    assignedTechnicianId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
+    technicianComments: {
+      type: String,
+      trim: true,
+      maxlength: 10000,
+    },
+    technicianEvidence: {
+      type: [EvidenceSchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -109,9 +101,20 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
 );
 
 SupportTicketSchema.index({ studentId: 1, createdAt: -1 });
+SupportTicketSchema.index({ assignedTechnicianId: 1, status: 1 });
 
-const SupportTicketModel =
-  mongoose.models.SupportTicket ||
-  mongoose.model<ISupportTicket>("SupportTicket", SupportTicketSchema);
+/**
+ * Next.js dev hot-reload can keep a stale compiled model without newer paths (e.g.
+ * `assignedTechnicianId`), which triggers StrictPopulateError on populate. Drop the cached
+ * model so this file's schema is always the one registered.
+ */
+if (mongoose.models.SupportTicket) {
+  mongoose.deleteModel("SupportTicket");
+}
+
+const SupportTicketModel = mongoose.model<ISupportTicket>(
+  "SupportTicket",
+  SupportTicketSchema
+);
 
 export { SupportTicketModel };

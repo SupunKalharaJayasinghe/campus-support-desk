@@ -12,8 +12,8 @@ import {
   Plus,
   Save,
   Search,
-  ShieldCheck,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
 import AdminSummaryCard from "@/components/admin/AdminSummaryCard";
@@ -25,19 +25,19 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
+import { TICKET_CATEGORY_OPTIONS } from "@/lib/ticket-category-options";
 
-type AdminRole = "ADMIN" | "COMMUNITY_ADMIN";
-type AdminStatus = "ACTIVE" | "INACTIVE";
+type TechnicianStatus = "ACTIVE" | "INACTIVE";
 type SortOption = "updated" | "created" | "az" | "za";
 type PageSize = 10 | 25 | 50 | 100;
 
-interface AdminUserRecord {
+interface TechnicianUserRecord {
   id: string;
   fullName: string;
   username: string;
   email: string;
-  role: AdminRole;
-  status: AdminStatus;
+  specialization: string;
+  status: TechnicianStatus;
   mustChangePassword: boolean;
   updatedAt: string;
 }
@@ -66,15 +66,7 @@ function sanitizeUsername(value: unknown) {
     .slice(0, 64);
 }
 
-function sanitizeRole(value: unknown): AdminRole {
-  const v = String(value ?? "").trim().toUpperCase();
-  if (v === "COMMUNITY_ADMIN" || v === "LOST_ITEM_ADMIN") {
-    return "COMMUNITY_ADMIN";
-  }
-  return "ADMIN";
-}
-
-function sanitizeStatus(value: unknown): AdminStatus {
+function sanitizeStatus(value: unknown): TechnicianStatus {
   return String(value ?? "").trim().toUpperCase() === "INACTIVE"
     ? "INACTIVE"
     : "ACTIVE";
@@ -97,10 +89,6 @@ function formatShortDate(value: string | null | undefined) {
   }).format(parsed);
 }
 
-function roleLabel(role: AdminRole) {
-  return role === "COMMUNITY_ADMIN" ? "Community Admin" : "ADMIN";
-}
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -113,14 +101,14 @@ async function readJson<T>(response: Response) {
   if (!response.ok) {
     throw new Error(
       payload && typeof payload === "object" && "message" in payload && payload.message
-        ? payload.message
+        ? String(payload.message)
         : "Request failed"
     );
   }
   return (payload ?? ({} as T)) as T;
 }
 
-function parseAdmins(payload: unknown) {
+function parseTechnicians(payload: unknown) {
   const root = asObject(payload);
   const rows = Array.isArray(root?.items) ? (root.items as unknown[]) : [];
   const items = rows
@@ -137,13 +125,13 @@ function parseAdmins(payload: unknown) {
         fullName,
         username,
         email,
-        role: sanitizeRole(row.role),
+        specialization: collapseSpaces(row.specialization),
         status: sanitizeStatus(row.status),
         mustChangePassword: Boolean(row.mustChangePassword),
         updatedAt: String(row.updatedAt ?? ""),
-      } satisfies AdminUserRecord;
+      } satisfies TechnicianUserRecord;
     })
-    .filter((row): row is AdminUserRecord => Boolean(row));
+    .filter((row): row is TechnicianUserRecord => Boolean(row));
 
   return {
     items,
@@ -155,28 +143,27 @@ function parseAdmins(payload: unknown) {
   };
 }
 
-export default function AdminsPage() {
+export default function TechniciansPage() {
   const { setActiveWindow } = useAdminContext();
   const { toast } = useToast();
-  const [items, setItems] = useState<AdminUserRecord[]>([]);
+  const [items, setItems] = useState<TechnicianUserRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState<"" | AdminRole>("");
-  const [status, setStatus] = useState<"" | AdminStatus>("");
+  const [status, setStatus] = useState<"" | TechnicianStatus>("");
   const [sort, setSort] = useState<SortOption>("updated");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [modal, setModal] = useState<{ mode: "add" | "edit"; id?: string } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<AdminUserRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TechnicianUserRecord | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     username: "",
-    role: "ADMIN" as AdminRole,
-    status: "ACTIVE" as AdminStatus,
+    specialization: "",
+    status: "ACTIVE" as TechnicianStatus,
     password: "",
     mustChangePassword: true,
   });
@@ -194,11 +181,10 @@ export default function AdminsPage() {
         sort,
       });
       if (deferredQuery.trim()) params.set("search", deferredQuery.trim());
-      if (role) params.set("role", role);
       if (status) params.set("status", status);
 
-      const parsed = parseAdmins(
-        await readJson(await fetch(`/api/admins?${params.toString()}`, { cache: "no-store" }))
+      const parsed = parseTechnicians(
+        await readJson(await fetch(`/api/technicians?${params.toString()}`, { cache: "no-store" }))
       );
       setItems(parsed.items);
       setTotal(parsed.total);
@@ -207,13 +193,13 @@ export default function AdminsPage() {
       setTotal(0);
       toast({
         title: "Failed",
-        message: error instanceof Error ? error.message : "Failed to load admins",
+        message: error instanceof Error ? error.message : "Failed to load technicians",
         variant: "error",
       });
     } finally {
       setLoading(false);
     }
-  }, [deferredQuery, page, pageSize, role, sort, status, toast]);
+  }, [deferredQuery, page, pageSize, sort, status, toast]);
 
   useEffect(() => {
     void loadItems();
@@ -237,14 +223,13 @@ export default function AdminsPage() {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pageCount);
   const contentBlurClass = overlayOpen ? "pointer-events-none opacity-45 blur-[1px]" : "";
-  const activeFilterCount = [role, status].filter(Boolean).length;
-  const filtersApplied = Boolean(query.trim() || activeFilterCount > 0);
-  const activeAdminsCount = useMemo(
+  const filtersApplied = Boolean(query.trim() || status);
+  const activeTechniciansCount = useMemo(
     () => items.filter((item) => item.status === "ACTIVE").length,
     [items]
   );
-  const communityAdminsCount = useMemo(
-    () => items.filter((item) => item.role === "COMMUNITY_ADMIN").length,
+  const mustResetCount = useMemo(
+    () => items.filter((item) => item.mustChangePassword).length,
     [items]
   );
   const latestUpdatedAt = useMemo(
@@ -273,7 +258,7 @@ export default function AdminsPage() {
       fullName: "",
       email: "",
       username: "",
-      role: "ADMIN",
+      specialization: "",
       status: "ACTIVE",
       password: "",
       mustChangePassword: true,
@@ -282,13 +267,13 @@ export default function AdminsPage() {
     setFormError("");
   };
 
-  const openEdit = (row: AdminUserRecord) => {
+  const openEdit = (row: TechnicianUserRecord) => {
     setModal({ mode: "edit", id: row.id });
     setForm({
       fullName: row.fullName,
       email: row.email,
       username: row.username,
-      role: row.role,
+      specialization: row.specialization,
       status: row.status,
       password: "",
       mustChangePassword: row.mustChangePassword,
@@ -306,6 +291,7 @@ export default function AdminsPage() {
     const email = sanitizeEmail(form.email);
     const username = sanitizeUsername(form.username) || email;
     const password = String(form.password ?? "").trim();
+    const specialization = collapseSpaces(form.specialization);
 
     if (!fullName) {
       setFormError("Full name is required");
@@ -329,10 +315,10 @@ export default function AdminsPage() {
     try {
       const endpoint =
         modal?.mode === "add"
-          ? "/api/admins"
-          : `/api/admins/${encodeURIComponent(String(modal?.id ?? ""))}`;
+          ? "/api/technicians"
+          : `/api/technicians/${encodeURIComponent(String(modal?.id ?? ""))}`;
       const payload = await readJson<{
-        item?: AdminUserRecord;
+        item?: TechnicianUserRecord;
         generatedPassword?: string;
       }>(
         await fetch(endpoint, {
@@ -342,7 +328,7 @@ export default function AdminsPage() {
             fullName,
             email,
             username,
-            role: form.role,
+            specialization,
             status: form.status,
             password,
             mustChangePassword: form.mustChangePassword,
@@ -355,20 +341,20 @@ export default function AdminsPage() {
         setGeneratedPassword(temporaryPassword);
         toast({
           title: "Saved",
-          message: `Admin created. Temporary password: ${temporaryPassword}`,
+          message: `Technician created. Temporary password: ${temporaryPassword}`,
           variant: "success",
         });
       } else {
         toast({
           title: "Saved",
-          message: modal?.mode === "add" ? "Admin created" : "Admin updated",
+          message: modal?.mode === "add" ? "Technician created" : "Technician updated",
           variant: "success",
         });
       }
       setModal(null);
       await loadItems();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save admin";
+      const message = error instanceof Error ? error.message : "Failed to save technician";
       setFormError(message);
       toast({ title: "Failed", message, variant: "error" });
     } finally {
@@ -381,7 +367,7 @@ export default function AdminsPage() {
       <div className={cn("flex justify-end", contentBlurClass)}>
         <Button className="h-11 gap-2 px-5" onClick={openAdd}>
           <Plus size={16} />
-          Add Admin
+          Add Technician
         </Button>
       </div>
 
@@ -392,7 +378,7 @@ export default function AdminsPage() {
               Temporary Password
             </p>
             <p className="text-sm text-heading">
-              Newly created admin temporary password:{" "}
+              Newly created technician temporary password:{" "}
               <span className="font-semibold">{generatedPassword}</span>
             </p>
           </div>
@@ -411,11 +397,11 @@ export default function AdminsPage() {
               <div className="max-w-2xl">
                 <Badge variant="neutral">User Management</Badge>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-heading">
-                  Admin directory
+                  Technician accounts
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
-                  Register and manage admin accounts for main admin access and
-                  community administration using the updated users section surface.
+                  Manage technician logins for support tickets. Technicians use the same identity fields as other
+                  admin-style accounts, plus an optional area of specialization.
                 </p>
               </div>
 
@@ -430,7 +416,7 @@ export default function AdminsPage() {
                   <p className="mt-1 text-sm text-text/60">
                     {filtersApplied
                       ? "Matching the current search and filters"
-                      : "Showing the full admin directory"}
+                      : "Showing the full technician directory"}
                   </p>
                 </div>
               </div>
@@ -447,13 +433,13 @@ export default function AdminsPage() {
                       <Search size={17} />
                     </span>
                     <input
-                      aria-label="Search admins"
+                      aria-label="Search technicians"
                       className="h-full min-w-0 flex-1 border-0 bg-transparent pr-2 text-[15px] text-heading outline-none placeholder:text-text/48"
                       onChange={(event) => {
                         setQuery(event.target.value);
                         setPage(1);
                       }}
-                      placeholder="Search by name, username, or email"
+                      placeholder="Search by name, username, email, or specialization"
                       value={query}
                     />
                     {query.trim() ? (
@@ -481,7 +467,7 @@ export default function AdminsPage() {
                       <ArrowUpDown size={16} />
                     </span>
                     <select
-                      aria-label="Sort admins"
+                      aria-label="Sort technicians"
                       className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
                       onChange={(event) => {
                         setSort(event.target.value as SortOption);
@@ -505,39 +491,14 @@ export default function AdminsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="min-w-0 flex flex-col gap-2">
                   <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                    Admin Type
-                  </label>
-                  <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
-                    <select
-                      aria-label="Filter by admin type"
-                      className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
-                      onChange={(event) => {
-                        setRole(event.target.value as "" | AdminRole);
-                        setPage(1);
-                      }}
-                      value={role}
-                    >
-                      <option value="">All admin types</option>
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="COMMUNITY_ADMIN">Community Admin</option>
-                    </select>
-                    <ChevronDown
-                      className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
-                      size={17}
-                    />
-                  </div>
-                </div>
-
-                <div className="min-w-0 flex flex-col gap-2">
-                  <label className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
                     Status
                   </label>
                   <div className="relative flex h-14 min-w-0 items-center rounded-[22px] border border-[rgba(180,190,220,0.44)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,249,253,0.92)_100%)] px-4 shadow-[0_12px_28px_rgba(15,23,41,0.05)] transition-all focus-within:-translate-y-0.5 focus-within:border-[rgba(52,97,255,0.28)] focus-within:shadow-[0_18px_36px_rgba(52,97,255,0.10)]">
                     <select
-                      aria-label="Filter admins by status"
+                      aria-label="Filter technicians by status"
                       className="h-full w-full appearance-none border-0 bg-transparent pr-8 text-[15px] text-heading outline-none"
                       onChange={(event) => {
-                        setStatus(event.target.value as "" | AdminStatus);
+                        setStatus(event.target.value as "" | TechnicianStatus);
                         setPage(1);
                       }}
                       value={status}
@@ -556,8 +517,8 @@ export default function AdminsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
-                {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+              <Badge variant={status ? "primary" : "neutral"}>
+                {status ? "Status filter applied" : "No status filter"}
               </Badge>
               <Badge variant="neutral">{sortLabel}</Badge>
               {query.trim() ? (
@@ -573,7 +534,6 @@ export default function AdminsPage() {
                   className="h-9 px-3 text-xs"
                   onClick={() => {
                     setQuery("");
-                    setRole("");
                     setStatus("");
                     setSort("updated");
                     setPage(1);
@@ -590,36 +550,36 @@ export default function AdminsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <AdminSummaryCard
             detail={`${items.length.toLocaleString()} rows loaded on this page`}
-            icon={ShieldCheck}
-            label="Total Admins"
+            icon={Wrench}
+            label="Total Technicians"
             tone="sky"
             value={total.toLocaleString()}
           />
           <AdminSummaryCard
             detail={
-              activeAdminsCount > 0
-                ? `${activeAdminsCount.toLocaleString()} active admin accounts in view`
-                : "No active admin accounts in the current view"
+              activeTechniciansCount > 0
+                ? `${activeTechniciansCount.toLocaleString()} active technician accounts in view`
+                : "No active technician accounts in the current view"
             }
             icon={CheckCircle2}
-            label="Active Admins"
+            label="Active Technicians"
             tone="green"
-            value={activeAdminsCount.toLocaleString()}
+            value={activeTechniciansCount.toLocaleString()}
           />
           <AdminSummaryCard
             detail={
-              communityAdminsCount > 0
-                ? `${communityAdminsCount.toLocaleString()} community admin accounts visible`
-                : "No community admin accounts in the current view"
+              mustResetCount > 0
+                ? `${mustResetCount.toLocaleString()} accounts must change password on next login`
+                : "No forced password resets in the current view"
             }
             icon={KeyRound}
-            label="Community Admins"
+            label="Password Resets"
             tone="violet"
-            value={communityAdminsCount.toLocaleString()}
+            value={mustResetCount.toLocaleString()}
           />
           <AdminSummaryCard
             detail={
-              latestUpdatedAt ? "Most recent visible admin account change" : "No admin updates loaded yet"
+              latestUpdatedAt ? "Most recent visible technician account change" : "No technician updates loaded yet"
             }
             icon={Clock3}
             label="Latest Update"
@@ -632,15 +592,15 @@ export default function AdminsPage() {
       <Card className={cn("overflow-hidden p-0 transition-all", contentBlurClass)}>
         <div className="flex flex-col gap-4 border-b border-border px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-lg font-semibold text-heading">Admin Records</p>
+            <p className="text-lg font-semibold text-heading">Technician records</p>
             <p className="mt-1 text-sm text-text/68">
-              Review login identity, access type, account status, and password policy from a cleaner table surface.
+              Review login identity, specialization, account status, and password policy.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={activeFilterCount > 0 ? "primary" : "neutral"}>
-              {activeFilterCount > 0 ? `${activeFilterCount} filters applied` : "No extra filters"}
+            <Badge variant={status ? "primary" : "neutral"}>
+              {status ? "Status filter applied" : "No status filter"}
             </Badge>
             <Badge variant="neutral">{sortLabel}</Badge>
             {query.trim() ? (
@@ -660,9 +620,9 @@ export default function AdminsPage() {
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead className="bg-[rgba(255,255,255,0.82)]">
                   <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-text/60">
-                    <th className="px-5 py-4">Admin</th>
+                    <th className="px-5 py-4">Technician</th>
                     <th className="px-5 py-4">Login</th>
-                    <th className="px-5 py-4">Type</th>
+                    <th className="px-5 py-4">Specialization</th>
                     <th className="px-5 py-4">Status</th>
                     <th className="px-5 py-4">Password Policy</th>
                     <th className="px-5 py-4">Updated</th>
@@ -673,13 +633,13 @@ export default function AdminsPage() {
                   {loading ? (
                     <tr>
                       <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
-                        Loading admins...
+                        Loading technicians...
                       </td>
                     </tr>
                   ) : items.length === 0 ? (
                     <tr>
                       <td className="px-5 py-12 text-center text-sm text-text/68" colSpan={7}>
-                        No admins match the current filters.
+                        No technicians match the current filters.
                       </td>
                     </tr>
                   ) : (
@@ -692,10 +652,8 @@ export default function AdminsPage() {
                           </div>
                         </td>
                         <td className="px-5 py-4 align-top text-text/78">{row.email}</td>
-                        <td className="px-5 py-4 align-top">
-                          <Badge variant={row.role === "ADMIN" ? "primary" : "info"}>
-                            {roleLabel(row.role)}
-                          </Badge>
+                        <td className="px-5 py-4 align-top text-text/78">
+                          {row.specialization || "—"}
                         </td>
                         <td className="px-5 py-4 align-top">
                           <Badge variant={row.status === "ACTIVE" ? "success" : "neutral"}>
@@ -769,7 +727,7 @@ export default function AdminsPage() {
                     {modal.mode === "add" ? "CREATE" : "EDIT"}
                   </p>
                   <p className="mt-1 text-2xl font-semibold text-heading">
-                    {modal.mode === "add" ? "Add Admin" : "Edit Admin"}
+                    {modal.mode === "add" ? "Add Technician" : "Edit Technician"}
                   </p>
                 </div>
                 <button
@@ -820,18 +778,30 @@ export default function AdminsPage() {
                     value={form.username}
                   />
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-heading">Admin Type</label>
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-heading">
+                    Specialization (Optional)
+                  </label>
                   <Select
                     className="h-12"
                     disabled={saving}
                     onChange={(event) =>
-                      setForm((prev) => ({ ...prev, role: sanitizeRole(event.target.value) }))
+                      setForm((prev) => ({ ...prev, specialization: event.target.value }))
                     }
-                    value={form.role}
+                    value={form.specialization}
                   >
-                    <option value="ADMIN">ADMIN</option>
-                    <option value="COMMUNITY_ADMIN">Community Admin</option>
+                    <option value="">Select specialization</option>
+                    {form.specialization &&
+                    !(TICKET_CATEGORY_OPTIONS as readonly string[]).includes(form.specialization) ? (
+                      <option value={form.specialization}>
+                        {form.specialization} (other value)
+                      </option>
+                    ) : null}
+                    {TICKET_CATEGORY_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div>
@@ -926,10 +896,11 @@ export default function AdminsPage() {
             role="dialog"
           >
             <div className="px-6 py-6">
-              <p className="text-lg font-semibold text-heading">Delete Admin</p>
+              <p className="text-lg font-semibold text-heading">Delete Technician</p>
               <p className="mt-2 text-sm leading-6 text-text/70">
-                Delete admin <span className="font-semibold text-heading">{deleteTarget.fullName}</span>? This
-                action cannot be undone.
+                Delete technician{" "}
+                <span className="font-semibold text-heading">{deleteTarget.fullName}</span>? This action cannot be
+                undone.
               </p>
             </div>
             <div className="flex justify-end gap-2.5 border-t border-border bg-white px-6 py-4">
@@ -949,13 +920,13 @@ export default function AdminsPage() {
                     setDeleting(true);
                     try {
                       await readJson(
-                        await fetch(`/api/admins/${encodeURIComponent(deleteTarget.id)}`, {
+                        await fetch(`/api/technicians/${encodeURIComponent(deleteTarget.id)}`, {
                           method: "DELETE",
                         })
                       );
                       toast({
                         title: "Deleted",
-                        message: "Admin deleted successfully",
+                        message: "Technician deleted successfully",
                         variant: "success",
                       });
                       setDeleteTarget(null);
@@ -963,7 +934,7 @@ export default function AdminsPage() {
                     } catch (error) {
                       toast({
                         title: "Failed",
-                        message: error instanceof Error ? error.message : "Failed to delete admin",
+                        message: error instanceof Error ? error.message : "Failed to delete technician",
                         variant: "error",
                       });
                     } finally {

@@ -1,4 +1,11 @@
-export type AdminUserRole = "ADMIN" | "LOST_ITEM_ADMIN";
+export type AdminUserRole = "ADMIN" | "COMMUNITY_ADMIN";
+
+/** Roles included when listing admin-directory users (legacy `LOST_ITEM_ADMIN` rows still appear). */
+export const ADMIN_DIRECTORY_ROLE_FILTER = [
+  "ADMIN",
+  "COMMUNITY_ADMIN",
+  "LOST_ITEM_ADMIN",
+] as const;
 export type AdminUserStatus = "ACTIVE" | "INACTIVE";
 export type AdminUserSort = "updated" | "created" | "az" | "za";
 
@@ -47,11 +54,11 @@ const INITIAL_ADMIN_USERS: AdminUserMemoryRecord[] = [
     updatedAt: "2026-01-04T08:00:00.000Z",
   },
   {
-    id: "adm-lost-001",
-    fullName: "Lost Item Desk",
-    username: "lost.item",
-    email: "lost.item@campus.local",
-    role: "LOST_ITEM_ADMIN",
+    id: "adm-community-001",
+    fullName: "Community Admin",
+    username: "community.admin",
+    email: "community.admin@campus.local",
+    role: "COMMUNITY_ADMIN",
     status: "ACTIVE",
     mustChangePassword: false,
     passwordHash: "",
@@ -113,9 +120,11 @@ export function sanitizeAdminUsername(value: unknown) {
 }
 
 export function sanitizeAdminRole(value: unknown): AdminUserRole {
-  return String(value ?? "").trim().toUpperCase() === "LOST_ITEM_ADMIN"
-    ? "LOST_ITEM_ADMIN"
-    : "ADMIN";
+  const v = String(value ?? "").trim().toUpperCase();
+  if (v === "COMMUNITY_ADMIN" || v === "LOST_ITEM_ADMIN") {
+    return "COMMUNITY_ADMIN";
+  }
+  return "ADMIN";
 }
 
 export function sanitizeAdminStatus(value: unknown): AdminUserStatus {

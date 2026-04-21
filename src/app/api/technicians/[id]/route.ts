@@ -3,33 +3,30 @@ import { NextResponse } from "next/server";
 import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
-  ADMIN_DIRECTORY_ROLE_FILTER,
   sanitizeAdminEmail,
   sanitizeAdminFullName,
   sanitizeAdminPassword,
-  sanitizeAdminRole,
   sanitizeAdminStatus,
   sanitizeAdminUsername,
-  toAdminUserPersistedRecordFromUnknown,
-  type AdminUserRole,
-  type AdminUserStatus,
 } from "@/models/admin-user-store";
+import {
+  sanitizeTechnicianSpecialization,
+  toTechnicianUserPersistedRecordFromUnknown,
+} from "@/models/technician-user-store";
 import { getMongoDuplicateField } from "@/models/student-registration";
 import { UserModel } from "@/models/User";
 
-const ADMIN_ROLES_QUERY = [...ADMIN_DIRECTORY_ROLE_FILTER];
-
-interface AdminUserWriteInput {
+interface TechnicianWriteInput {
   fullName: string;
   username: string;
   email: string;
-  role: AdminUserRole;
-  status: AdminUserStatus;
+  specialization: string;
+  status: "ACTIVE" | "INACTIVE";
   password: string;
   mustChangePassword?: boolean;
 }
 
-function toWriteInput(body: Partial<Record<string, unknown>>): AdminUserWriteInput | null {
+function toWriteInput(body: Partial<Record<string, unknown>>): TechnicianWriteInput | null {
   const fullName = sanitizeAdminFullName(body.fullName);
   const email = sanitizeAdminEmail(body.email);
   const username = sanitizeAdminUsername(body.username) || email;
@@ -44,7 +41,7 @@ function toWriteInput(body: Partial<Record<string, unknown>>): AdminUserWriteInp
     fullName,
     username,
     email,
-    role: sanitizeAdminRole(body.role),
+    specialization: sanitizeTechnicianSpecialization(body.specialization),
     status: sanitizeAdminStatus(body.status),
     password: sanitizeAdminPassword(body.password),
     mustChangePassword,
@@ -57,22 +54,23 @@ export async function GET(
 ) {
   const userId = String(params.id ?? "").trim();
   if (!userId) {
-    return NextResponse.json({ message: "Admin user id is required" }, { status: 400 });
+    return NextResponse.json({ message: "Technician user id is required" }, { status: 400 });
   }
 
   const mongooseConnection = await connectMongoose().catch(() => null);
-    if (!mongooseConnection) {
-    return NextResponse.json(
-      { message: "Database connection is required" },
-      { status: 503 }
-    );
+  if (!mongooseConnection) {
+    return NextResponse.json({ message: "Database connection is required" }, { status: 503 });
   }
 
-  const row = await UserModel.findOne({ _id: userId, role: { $in: ADMIN_ROLES_QUERY } })
+  const row = await UserModel.findOne({
+    _id: userId,
+    role: { $in: ["TECHNICIAN", "TECHNISIAN"] },
+  })
     .select({
       fullName: 1,
       username: 1,
       email: 1,
+      specialization: 1,
       role: 1,
       status: 1,
       mustChangePassword: 1,
@@ -83,12 +81,12 @@ export async function GET(
     .exec()
     .catch(() => null);
   if (!row) {
-    return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
+    return NextResponse.json({ message: "Technician user not found" }, { status: 404 });
   }
 
-  const parsed = toAdminUserPersistedRecordFromUnknown(row);
+  const parsed = toTechnicianUserPersistedRecordFromUnknown(row);
   if (!parsed) {
-    return NextResponse.json({ message: "Failed to map admin user" }, { status: 500 });
+    return NextResponse.json({ message: "Failed to map technician user" }, { status: 500 });
   }
 
   return NextResponse.json(parsed);
@@ -101,7 +99,7 @@ export async function PUT(
   try {
     const userId = String(params.id ?? "").trim();
     if (!userId) {
-      return NextResponse.json({ message: "Admin user id is required" }, { status: 400 });
+      return NextResponse.json({ message: "Technician user id is required" }, { status: 400 });
     }
 
     const rawBody = (await request.json().catch(() => null)) as
@@ -124,25 +122,22 @@ export async function PUT(
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-        if (!mongooseConnection) {
-      return NextResponse.json(
-        { message: "Database connection is required" },
-        { status: 503 }
-      );
+    if (!mongooseConnection) {
+      return NextResponse.json({ message: "Database connection is required" }, { status: 503 });
     }
 
     const row = await UserModel.findOne({
       _id: userId,
-      role: { $in: ADMIN_ROLES_QUERY },
+      role: { $in: ["TECHNICIAN", "TECHNISIAN"] },
     }).exec();
     if (!row) {
-      return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
+      return NextResponse.json({ message: "Technician user not found" }, { status: 404 });
     }
 
     row.fullName = input.fullName;
     row.username = input.username;
     row.email = input.email;
-    row.role = input.role;
+    row.specialization = input.specialization;
     row.status = input.status;
     if (input.password) {
       row.passwordHash = await bcrypt.hash(input.password, 10);
@@ -164,16 +159,16 @@ export async function PUT(
       throw error;
     }
 
-    const parsed = toAdminUserPersistedRecordFromUnknown(row.toObject());
+    const parsed = toTechnicianUserPersistedRecordFromUnknown(row.toObject());
     if (!parsed) {
-      return NextResponse.json({ message: "Failed to map admin user" }, { status: 500 });
+      return NextResponse.json({ message: "Failed to map technician user" }, { status: 500 });
     }
 
     return NextResponse.json(parsed);
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Failed to update admin user",
+        message: error instanceof Error ? error.message : "Failed to update technician user",
       },
       { status: 500 }
     );
@@ -187,33 +182,30 @@ export async function DELETE(
   try {
     const userId = String(params.id ?? "").trim();
     if (!userId) {
-      return NextResponse.json({ message: "Admin user id is required" }, { status: 400 });
+      return NextResponse.json({ message: "Technician user id is required" }, { status: 400 });
     }
 
     const mongooseConnection = await connectMongoose().catch(() => null);
-        if (!mongooseConnection) {
-      return NextResponse.json(
-        { message: "Database connection is required" },
-        { status: 503 }
-      );
+    if (!mongooseConnection) {
+      return NextResponse.json({ message: "Database connection is required" }, { status: 503 });
     }
 
     const deletedRow = await UserModel.findOneAndDelete({
       _id: userId,
-      role: { $in: ADMIN_ROLES_QUERY },
+      role: { $in: ["TECHNICIAN", "TECHNISIAN"] },
     })
       .lean()
       .exec()
       .catch(() => null);
     if (!deletedRow) {
-      return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
+      return NextResponse.json({ message: "Technician user not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Failed to delete admin user",
+        message: error instanceof Error ? error.message : "Failed to delete technician user",
       },
       { status: 500 }
     );

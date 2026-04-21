@@ -15,15 +15,9 @@ import {
   type TicketEvidence,
 } from "@/lib/support-ticket-client";
 import CreateTicketModal from "./CreateTicketModal";
+import { TICKET_CATEGORY_OPTIONS } from "@/lib/ticket-category-options";
 
-const CATEGORY_FILTER_OPTIONS = [
-  "Academic",
-  "Technical",
-  "Facility",
-  "Finance",
-  "Transport",
-  "Other",
-] as const;
+const CATEGORY_FILTER_OPTIONS = TICKET_CATEGORY_OPTIONS;
 
 const PRIORITY_FILTER_OPTIONS = ["Low", "Medium", "High"] as const;
 
@@ -33,6 +27,12 @@ function statusBadgeVariant(status: StudentTicket["status"]) {
   }
   if (status === "In progress") {
     return "warning" as const;
+  }
+  if (status === "Withdrawn") {
+    return "neutral" as const;
+  }
+  if (status === "Accepted") {
+    return "primary" as const;
   }
   return "info" as const;
 }
@@ -215,7 +215,9 @@ export default function StudentTicketPage() {
                 <option value="all">All statuses</option>
                 <option value="Open">Open</option>
                 <option value="In progress">In progress</option>
+                <option value="Accepted">Accepted</option>
                 <option value="Resolved">Resolved</option>
+                <option value="Withdrawn">Withdrawn</option>
               </Select>
             </div>
             <div>

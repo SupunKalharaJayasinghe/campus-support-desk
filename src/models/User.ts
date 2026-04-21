@@ -2,6 +2,12 @@ import mongoose, { Schema } from "mongoose";
 
 const UserSchema = new Schema(
   {
+    fullName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 160,
+    },
     username: {
       type: String,
       required: true,
@@ -18,7 +24,14 @@ const UserSchema = new Schema(
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT","COMMUNITY_ADMIN"],
+      enum: [
+        "ADMIN",
+        "LECTURER",
+        "LAB_ASSISTANT",
+        "STUDENT",
+        "COMMUNITY_ADMIN",
+        "TECHNICIAN",
+      ],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },
@@ -28,6 +41,13 @@ const UserSchema = new Schema(
       required: true,
       enum: ["ACTIVE", "INACTIVE"],
       default: "ACTIVE",
+    },
+    /** Area of focus (e.g. hardware, networking); used for technicians (`TECHNICIAN`). */
+    specialization: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 200,
     },
     studentRef: {
       type: Schema.Types.ObjectId,
@@ -63,10 +83,12 @@ const existingModel = mongoose.models.User as
 const existingRoleEnums = existingModel?.schema?.path("role") as
   | { enumValues?: string[] }
   | undefined;
+/** Drop stale compiled model so enum updates (e.g. TECHNICIAN) apply in dev/hot reload. */
+const roleEnum = existingRoleEnums?.enumValues;
 if (
   existingModel &&
-  Array.isArray(existingRoleEnums?.enumValues) &&
-  !existingRoleEnums.enumValues.includes("COMMUNITY_ADMIN")
+  Array.isArray(roleEnum) &&
+  (!roleEnum.includes("COMMUNITY_ADMIN") || !roleEnum.includes("TECHNICIAN"))
 ) {
   delete mongoose.models.User;
 }
