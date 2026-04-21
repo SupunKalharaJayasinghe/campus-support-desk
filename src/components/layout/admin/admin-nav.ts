@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   MessageSquareText,
   ShieldCheck,
   University,
@@ -132,6 +133,19 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     items: [
       { label: "Announcements", href: "/admin/communication/announcements" },
       { label: "Targeted Notifications", href: "/admin/communication/targeted-notifications" },
+    ],
+  },
+  {
+    key: "tickets",
+    label: "Tickets",
+    icon: LifeBuoy,
+    roles: ["SUPER_ADMIN"],
+    items: [
+      { label: "Open Tickets", href: "/admin/tickets/open" },
+      { label: "In Progress Tickets", href: "/admin/tickets/in-progress" },
+      { label: "Resolved Tickets", href: "/admin/tickets/resolved" },
+      { label: "Withdraw Tickets", href: "/admin/tickets/withdraw" },
+      { label: "Add Technicians", href: "/admin/tickets/add-technicians" },
     ],
   },
   {

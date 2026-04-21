@@ -1,6 +1,6 @@
 import mongoose, { Schema, Types } from "mongoose";
 
-export const SUPPORT_TICKET_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
+export const SUPPORT_TICKET_PRIORITIES = ["Low", "Medium", "High"] as const;
 export const SUPPORT_TICKET_STATUSES = ["Open", "In progress", "Resolved"] as const;
 
 export type SupportTicketPriority = (typeof SUPPORT_TICKET_PRIORITIES)[number];

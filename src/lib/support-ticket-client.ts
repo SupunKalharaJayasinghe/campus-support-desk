@@ -49,7 +49,7 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     !category ||
     !description ||
     !createdAt ||
-    (priority !== "Low" && priority !== "Medium" && priority !== "High" && priority !== "Urgent") ||
+    (priority !== "Low" && priority !== "Medium" && priority !== "High") ||
     (status !== "Open" && status !== "In progress" && status !== "Resolved")
   ) {
     return null;

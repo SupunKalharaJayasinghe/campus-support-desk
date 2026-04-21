@@ -16,6 +16,17 @@ import {
 } from "@/lib/support-ticket-client";
 import CreateTicketModal from "./CreateTicketModal";
 
+const CATEGORY_FILTER_OPTIONS = [
+  "Academic",
+  "Technical",
+  "Facility",
+  "Finance",
+  "Transport",
+  "Other",
+] as const;
+
+const PRIORITY_FILTER_OPTIONS = ["Low", "Medium", "High"] as const;
+
 function statusBadgeVariant(status: StudentTicket["status"]) {
   if (status === "Resolved") {
     return "success" as const;
@@ -78,14 +89,6 @@ export default function StudentTicketPage() {
       });
     }
   }, [toast]);
-
-  const categoryOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const ticket of tickets) {
-      set.add(ticket.category);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [tickets]);
 
   const filteredTickets = useMemo(
     () =>
@@ -221,7 +224,7 @@ export default function StudentTicketPage() {
               </label>
               <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                 <option value="all">All categories</option>
-                {categoryOptions.map((category) => (
+                {CATEGORY_FILTER_OPTIONS.map((category) => (
                   <option key={category} value={category}>
                     {category}
                   </option>
@@ -234,10 +237,11 @@ export default function StudentTicketPage() {
               </label>
               <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
                 <option value="all">All priorities</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
+                {PRIORITY_FILTER_OPTIONS.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>

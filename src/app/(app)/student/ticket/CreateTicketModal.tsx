@@ -21,10 +21,10 @@ const DESCRIPTION_MIN_LENGTH = 20;
 const CATEGORY_OPTIONS = ["Academic", "Technical", "Facility", "Finance", "Transport", "Other"] as const;
 type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
 const SUBCATEGORY_OPTIONS: Record<CategoryOption, string[]> = {
-  Academic: ["Exams", "Assignments", "Lectures", "Attendance", "Other"],
-  Technical: ["Portal login", "LMS issue", "Wi-Fi", "Lab system", "Other"],
-  Facility: ["Classroom", "Library", "Laboratory", "Campus maintenance", "Other"],
+  Academic: ["Exams", "Assignments", "Lectures", "Class", "Marks", "Subject", "Other"],
+  Technical: ["Login", "Error", "Bug", "System", "Website", "Crash", "Other"],
   Finance: ["Fees", "Scholarship", "Refund", "Payment issue", "Other"],
+  Facility: ["Classroom", "Library", "Laboratory", "Campus maintenance", "Other"],
   Transport: ["Bus pass", "Route issue", "Timing issue", "Driver complaint", "Other"],
   Other: ["General inquiry", "Complaint", "Suggestion"],
 };
@@ -67,11 +67,11 @@ const TITLE_SUGGESTIONS_BY_CATEGORY: Record<CategoryOption, string[]> = {
   ],
 };
 const CATEGORY_KEYWORDS: Record<CategoryOption, string[]> = {
-  Academic: ["exam", "assignment", "lecture", "grade", "attendance", "course", "class"],
-  Technical: ["wifi", "wi-fi", "portal", "login", "system", "bug", "error", "lms", "network"],
-  Facility: ["classroom", "library", "lab", "maintenance", "light", "chair", "ac", "facility"],
-  Finance: ["fee", "fees", "payment", "invoice", "refund", "scholarship", "finance"],
-  Transport: ["bus", "transport", "route", "driver", "timing", "pass"],
+  Academic: ["exam", "assignment", "lecture", "class", "marks", "subject"],
+  Technical: ["login", "error", "bug", "system", "website", "crash"],
+  Finance: ["payment", "fee", "refund", "card", "transaction"],
+  Facility: ["classroom", "library", "lab", "maintenance", "facility", "water", "electricity"],
+  Transport: ["bus", "shuttle", "transport", "route", "parking"],
   Other: [],
 };
 
@@ -124,6 +124,10 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<CategoryOption | "">("");
   const [subcategory, setSubcategory] = useState("");
+  const [debouncedTitle, setDebouncedTitle] = useState("");
+  const [suggestedCategory, setSuggestedCategory] = useState<CategoryOption | null>(null);
+  const [categoryManuallyChanged, setCategoryManuallyChanged] = useState(false);
+  const [categoryAutoSelected, setCategoryAutoSelected] = useState(false);
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<StudentTicketPriority>("Medium");
   const [contactEmailEnabled, setContactEmailEnabled] = useState(false);
@@ -137,21 +141,38 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const suggestedCategory = useMemo(() => {
-    const t = title.trim().toLowerCase();
-    if (!t) {
+  const detectCategoryFromTitle = useCallback((rawTitle: string): CategoryOption | null => {
+    const text = rawTitle.trim().toLowerCase();
+    if (!text) {
       return null;
     }
-    for (const [cat, words] of Object.entries(CATEGORY_KEYWORDS) as Array<[CategoryOption, string[]]>) {
-      if (cat === "Other") {
+    const scores = new Map<CategoryOption, number>();
+    for (const option of CATEGORY_OPTIONS) {
+      scores.set(option, 0);
+    }
+    for (const [option, words] of Object.entries(CATEGORY_KEYWORDS) as Array<[CategoryOption, string[]]>) {
+      if (option === "Other") {
         continue;
       }
-      if (words.some((word) => t.includes(word))) {
-        return cat;
+      let score = 0;
+      for (const word of words) {
+        if (text.includes(word)) {
+          score += 1;
+        }
+      }
+      scores.set(option, score);
+    }
+    let best: CategoryOption | null = null;
+    let bestScore = 0;
+    for (const option of CATEGORY_OPTIONS) {
+      const score = scores.get(option) ?? 0;
+      if (score > bestScore) {
+        best = option;
+        bestScore = score;
       }
     }
-    return "Other" as CategoryOption;
-  }, [title]);
+    return bestScore > 0 ? best : null;
+  }, []);
 
   const titleSuggestions = useMemo(() => {
     const effectiveCategory = category || suggestedCategory;
@@ -212,6 +233,10 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
     setTitle("");
     setCategory("");
     setSubcategory("");
+    setDebouncedTitle("");
+    setSuggestedCategory(null);
+    setCategoryManuallyChanged(false);
+    setCategoryAutoSelected(false);
     setDescription("");
     setPriority("Medium");
     setContactEmailEnabled(false);
@@ -246,11 +271,25 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   }, [open, onClose]);
 
   useEffect(() => {
-    if (!category && suggestedCategory) {
-      setCategory(suggestedCategory);
-      setSubcategory(SUBCATEGORY_OPTIONS[suggestedCategory][0] ?? "");
+    const timerId = window.setTimeout(() => {
+      setDebouncedTitle(title);
+    }, 400);
+    return () => window.clearTimeout(timerId);
+  }, [title]);
+
+  useEffect(() => {
+    const detected = detectCategoryFromTitle(debouncedTitle);
+    setSuggestedCategory(detected);
+    if (!categoryManuallyChanged && detected) {
+      setCategory(detected);
+      setSubcategory((current) =>
+        current && SUBCATEGORY_OPTIONS[detected].includes(current)
+          ? current
+          : (SUBCATEGORY_OPTIONS[detected][0] ?? "")
+      );
+      setCategoryAutoSelected(true);
     }
-  }, [category, suggestedCategory]);
+  }, [categoryManuallyChanged, debouncedTitle, detectCategoryFromTitle]);
 
   if (!open) {
     return null;
@@ -445,7 +484,7 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
               {errors.title ? (
                 <p className="mt-1 text-xs text-primaryHover">{errors.title}</p>
               ) : null}
-              {!category && suggestedCategory ? (
+              {suggestedCategory ? (
                 <p className="mt-1 text-xs text-text/70">
                   Suggested category: <span className="font-medium text-heading">{suggestedCategory}</span>
                 </p>
@@ -460,9 +499,12 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 Category
               </label>
               <Select
+                className={categoryAutoSelected ? "ring-2 ring-primary/35 transition-all duration-300" : ""}
                 id="modal-ticket-category"
                 onChange={(e) => {
                   const nextCategory = e.target.value as CategoryOption | "";
+                  setCategoryManuallyChanged(true);
+                  setCategoryAutoSelected(false);
                   setCategory(nextCategory);
                   setSubcategory(nextCategory ? (SUBCATEGORY_OPTIONS[nextCategory][0] ?? "Other") : "");
                 }}
@@ -471,8 +513,8 @@ export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
                 <option value="">Select category</option>
                 <option value="Academic">Academic</option>
                 <option value="Technical">Technical</option>
-                <option value="Facility">Facility</option>
                 <option value="Finance">Finance</option>
+                <option value="Facility">Facility</option>
                 <option value="Transport">Transport</option>
                 <option value="Other">Other</option>
               </Select>

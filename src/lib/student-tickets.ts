@@ -1,4 +1,4 @@
-export type StudentTicketPriority = "Low" | "Medium" | "High" | "Urgent";
+export type StudentTicketPriority = "Low" | "Medium" | "High";
 
 export type StudentTicketStatus = "Open" | "In progress" | "Resolved";
 

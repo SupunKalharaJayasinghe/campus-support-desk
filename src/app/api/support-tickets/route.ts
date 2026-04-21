@@ -285,7 +285,7 @@ export async function POST(request: Request) {
 
     if (!priority) {
       return NextResponse.json(
-        { message: "Priority must be Low, Medium, High, or Urgent" },
+        { message: "Priority must be Low, Medium, or High" },
         { status: 400 }
       );
     }
