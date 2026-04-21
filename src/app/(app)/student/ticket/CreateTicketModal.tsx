@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -9,6 +9,7 @@ import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   createStudentTicketRemote,
+  type StudentTicket,
   type StudentTicketPriority,
   type TicketEvidence,
 } from "@/lib/support-ticket-client";
@@ -16,6 +17,38 @@ import {
 const MAX_EVIDENCE_FILES = 5;
 const MAX_FILE_BYTES = 512 * 1024;
 const ACCEPT = "image/*,.pdf,application/pdf";
+const TITLE_SUGGESTIONS_BY_CATEGORY: Record<string, string[]> = {
+  Technical: [
+    "Wi-Fi not working in room",
+    "Unable to log in to student portal",
+    "Projector not turning on",
+    "Lab computer is very slow",
+  ],
+  Academic: [
+    "Need clarification about assignment deadline",
+    "Cannot access course materials",
+    "Issue with grade shown on portal",
+    "Request appointment with lecturer",
+  ],
+  Booking: [
+    "Consultation booking not confirmed",
+    "Need to reschedule my consultation",
+    "Lab booking request",
+    "Room booking issue",
+  ],
+  "Lost item": [
+    "Lost student ID card",
+    "Lost wallet in campus",
+    "Lost laptop charger",
+    "Missing notebook from classroom",
+  ],
+  Other: [
+    "Need general support",
+    "Campus facility request",
+    "Feedback about student service",
+    "Other issue requiring assistance",
+  ],
+};
 
 function readFileAsEvidence(file: File): Promise<TicketEvidence> {
   return new Promise((resolve, reject) => {
@@ -57,24 +90,40 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: () => void | Promise<void>;
-  userId: string | null;
 };
 
-export default function CreateTicketModal({ open, onClose, onCreated, userId }: Props) {
+export default function CreateTicketModal({ open, onClose, onCreated }: Props) {
   const { toast } = useToast();
   const titleId = useId();
+  const titleSuggestionListId = useId();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Technical");
   const [description, setDescription] = useState("");
+  const [preferredContactType, setPreferredContactType] =
+    useState<NonNullable<StudentTicket["preferredContactType"]>>("Phone");
+  const [contactDetails, setContactDetails] = useState("");
   const [priority, setPriority] = useState<StudentTicketPriority>("Medium");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const titleSuggestions = useMemo(() => {
+    const categorySuggestions = TITLE_SUGGESTIONS_BY_CATEGORY[category] ?? [];
+    const typed = title.trim().toLowerCase();
+    if (!typed) {
+      return categorySuggestions.slice(0, 4);
+    }
+    return categorySuggestions
+      .filter((item) => item.toLowerCase().includes(typed))
+      .slice(0, 4);
+  }, [category, title]);
+
   const reset = useCallback(() => {
     setTitle("");
     setCategory("Technical");
     setDescription("");
+    setPreferredContactType("Phone");
+    setContactDetails("");
     setPriority("Medium");
     setPendingFiles([]);
     setErrors({});
@@ -111,6 +160,9 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
     }
     if (!description.trim()) {
       next.description = "Description is required.";
+    }
+    if (!contactDetails.trim()) {
+      next.contactDetails = "Contact details are required.";
     }
     return next;
   }
@@ -175,15 +227,6 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
-    if (!userId) {
-      toast({
-        title: "Session required",
-        message: "Sign in again to create a ticket.",
-        variant: "error",
-      });
-      return;
-    }
-
     setSubmitting(true);
     try {
       let evidence: TicketEvidence[] | undefined;
@@ -194,6 +237,8 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
         subject: title.trim(),
         category,
         description: description.trim(),
+        preferredContactType,
+        contactDetails: contactDetails.trim(),
         priority,
         ...(evidence?.length ? { evidence } : {}),
       });
@@ -218,17 +263,16 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-hidden bg-slate-950/45 px-4 pb-4 pt-16 backdrop-blur-[2px] sm:px-6 sm:pb-6 sm:pt-12"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
       role="presentation"
     >
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-        aria-label="Close dialog"
-        onClick={onClose}
-      />
       <div
-        className="relative z-10 flex max-h-[min(90vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-xl"
+        className="relative z-10 my-4 flex max-h-[calc(100dvh-6rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-xl sm:my-6 sm:max-h-[calc(100dvh-7rem)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -262,11 +306,19 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
               </label>
               <Input
                 id="modal-ticket-title"
+                list={titleSuggestionListId}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Short summary"
                 value={title}
                 autoFocus
               />
+              {titleSuggestions.length > 0 ? (
+                <datalist id={titleSuggestionListId}>
+                  {titleSuggestions.map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+              ) : null}
               {errors.title ? (
                 <p className="mt-1 text-xs text-primaryHover">{errors.title}</p>
               ) : null}
@@ -304,11 +356,52 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What happened, and what do you need?"
                 value={description}
-                rows={5}
+                rows={4}
               />
               {errors.description ? (
                 <p className="mt-1 text-xs text-primaryHover">{errors.description}</p>
               ) : null}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  className="mb-2 block text-sm font-medium text-heading"
+                  htmlFor="modal-ticket-contact-type"
+                >
+                  Preferred contact type
+                </label>
+                <Select
+                  id="modal-ticket-contact-type"
+                  onChange={(e) =>
+                    setPreferredContactType(
+                      e.target.value as NonNullable<StudentTicket["preferredContactType"]>
+                    )
+                  }
+                  value={preferredContactType}
+                >
+                  <option value="Phone">Phone</option>
+                  <option value="Email">Email</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                </Select>
+              </div>
+              <div>
+                <label
+                  className="mb-2 block text-sm font-medium text-heading"
+                  htmlFor="modal-ticket-contact-details"
+                >
+                  Contact details
+                </label>
+                <Input
+                  id="modal-ticket-contact-details"
+                  onChange={(e) => setContactDetails(e.target.value)}
+                  placeholder="Phone number or email"
+                  value={contactDetails}
+                />
+                {errors.contactDetails ? (
+                  <p className="mt-1 text-xs text-primaryHover">{errors.contactDetails}</p>
+                ) : null}
+              </div>
             </div>
 
             <fieldset>
@@ -377,11 +470,21 @@ export default function CreateTicketModal({ open, onClose, onCreated, userId }: 
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-            <Button disabled={submitting} onClick={onClose} type="button" variant="secondary">
+          <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
+            <Button
+              className="rounded-full px-5"
+              disabled={submitting}
+              onClick={onClose}
+              type="button"
+              variant="secondary"
+            >
               Cancel
             </Button>
-            <Button disabled={!userId || submitting} type="submit">
+            <Button
+              className="rounded-full bg-[#034aa6] px-5 text-white hover:bg-[#033d8a]"
+              disabled={submitting}
+              type="submit"
+            >
               {submitting ? "Creating…" : "Create ticket"}
             </Button>
           </div>

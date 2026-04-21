@@ -18,6 +18,7 @@ const ALLOWED_CATEGORIES = new Set([
   "Lost item",
   "Other",
 ]);
+const ALLOWED_CONTACT_TYPES = new Set(["Phone", "Email", "WhatsApp"]);
 
 const MAX_EVIDENCE_FILES = 5;
 /** ~550KB base64 per file (raw ~400KB). */
@@ -116,6 +117,8 @@ function toApiTicket(row: {
   subject?: string;
   category?: string;
   description?: string;
+  preferredContactType?: string;
+  contactDetails?: string;
   priority?: string;
   status?: string;
   createdAt?: Date | string;
@@ -128,6 +131,8 @@ function toApiTicket(row: {
     subject: collapseSpaces(row.subject),
     category: collapseSpaces(row.category),
     description: collapseSpaces(row.description),
+    preferredContactType: collapseSpaces(row.preferredContactType),
+    contactDetails: collapseSpaces(row.contactDetails),
     priority: row.priority as SupportTicketPriority,
     status: row.status as SupportTicketStatus,
     ...(evidence?.length ? { evidence } : {}),
@@ -178,6 +183,9 @@ export async function GET(request: Request) {
           subject: typeof r.subject === "string" ? r.subject : "",
           category: typeof r.category === "string" ? r.category : "",
           description: typeof r.description === "string" ? r.description : "",
+          preferredContactType:
+            typeof r.preferredContactType === "string" ? r.preferredContactType : "",
+          contactDetails: typeof r.contactDetails === "string" ? r.contactDetails : "",
           priority: typeof r.priority === "string" ? r.priority : "",
           status: typeof r.status === "string" ? r.status : "",
           createdAt,
@@ -202,6 +210,8 @@ type CreateBody = {
   subject?: unknown;
   category?: unknown;
   description?: unknown;
+  preferredContactType?: unknown;
+  contactDetails?: unknown;
   priority?: unknown;
   evidence?: unknown;
 };
@@ -225,6 +235,8 @@ export async function POST(request: Request) {
     const subject = collapseSpaces(body?.subject);
     const description = collapseSpaces(body?.description);
     const category = collapseSpaces(body?.category);
+    const preferredContactType = collapseSpaces(body?.preferredContactType);
+    const contactDetails = collapseSpaces(body?.contactDetails);
     const priority = sanitizePriority(body?.priority);
     const evidenceParsed = sanitizeEvidence(body?.evidence);
     if (!evidenceParsed.ok) {
@@ -248,12 +260,23 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (!ALLOWED_CONTACT_TYPES.has(preferredContactType)) {
+      return NextResponse.json(
+        { message: "Preferred contact type must be Phone, Email, or WhatsApp" },
+        { status: 400 }
+      );
+    }
+    if (!contactDetails) {
+      return NextResponse.json({ message: "Contact details are required" }, { status: 400 });
+    }
 
     const created = await SupportTicketModel.create({
       studentId: new mongoose.Types.ObjectId(studentId),
       subject,
       category,
       description,
+      preferredContactType,
+      contactDetails,
       priority,
       status: "Open",
       evidence: evidenceParsed.value.length > 0 ? evidenceParsed.value : [],
@@ -269,6 +292,8 @@ export async function POST(request: Request) {
         subject: plain.subject,
         category: plain.category,
         description: plain.description,
+        preferredContactType: plain.preferredContactType,
+        contactDetails: plain.contactDetails,
         priority: plain.priority,
         status: plain.status,
         evidence: plain.evidence,

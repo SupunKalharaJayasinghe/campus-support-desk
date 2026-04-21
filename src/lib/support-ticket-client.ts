@@ -33,6 +33,8 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
   const description = typeof row.description === "string" ? row.description.trim() : "";
   const priority = row.priority;
   const status = row.status;
+  const preferredContactType = row.preferredContactType;
+  const contactDetails = row.contactDetails;
   const createdAt = typeof row.createdAt === "string" ? row.createdAt : "";
   if (
     !id ||
@@ -46,6 +48,14 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     return null;
   }
   const evidence = parseEvidenceField(row.evidence);
+  const contactType =
+    preferredContactType === "Phone" ||
+    preferredContactType === "Email" ||
+    preferredContactType === "WhatsApp"
+      ? preferredContactType
+      : undefined;
+  const contact =
+    typeof contactDetails === "string" && contactDetails.trim() ? contactDetails.trim() : undefined;
   return {
     id,
     subject,
@@ -54,6 +64,8 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     priority,
     status,
     createdAt,
+    ...(contactType ? { preferredContactType: contactType } : {}),
+    ...(contact ? { contactDetails: contact } : {}),
     ...(evidence?.length ? { evidence } : {}),
   };
 }

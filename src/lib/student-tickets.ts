@@ -14,6 +14,8 @@ export interface StudentTicket {
   subject: string;
   category: string;
   description: string;
+  preferredContactType?: "Phone" | "Email" | "WhatsApp";
+  contactDetails?: string;
   priority: StudentTicketPriority;
   status: StudentTicketStatus;
   createdAt: string;

@@ -18,6 +18,8 @@ export interface ISupportTicket {
   subject: string;
   category: string;
   description: string;
+  preferredContactType?: string;
+  contactDetails?: string;
   priority: SupportTicketPriority;
   status: SupportTicketStatus;
   evidence?: ISupportTicketEvidence[];
@@ -59,6 +61,18 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       required: true,
       trim: true,
       maxlength: 10000,
+    },
+    preferredContactType: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 30,
+    },
+    contactDetails: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500,
     },
     priority: {
       type: String,
