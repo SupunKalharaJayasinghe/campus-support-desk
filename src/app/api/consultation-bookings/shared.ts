@@ -230,6 +230,44 @@ export async function findStudentMetaById(
   return toStudentMeta(row);
 }
 
+async function resolveActiveLecturerIdFromDb(lecturerId: string) {
+  const targetId = String(lecturerId ?? "").trim();
+  if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+    return "";
+  }
+
+  const row = await LecturerModel.findById(targetId)
+    .select({ status: 1 })
+    .lean()
+    .exec()
+    .catch(() => null);
+  const status = collapseSpaces(asObject(row)?.status).toUpperCase();
+  if (!row || (status && status !== "ACTIVE")) {
+    return "";
+  }
+
+  return targetId;
+}
+
+async function resolveActiveStudentIdFromDb(studentId: string) {
+  const targetId = String(studentId ?? "").trim();
+  if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+    return "";
+  }
+
+  const row = await StudentModel.findById(targetId)
+    .select({ status: 1 })
+    .lean()
+    .exec()
+    .catch(() => null);
+  const status = collapseSpaces(asObject(row)?.status).toUpperCase();
+  if (!row || (status && status !== "ACTIVE")) {
+    return "";
+  }
+
+  return targetId;
+}
+
 export async function resolveCurrentLecturerId(
   request: Request,
   mongooseConnection: mongoose.Mongoose | null,
@@ -258,26 +296,36 @@ export async function resolveCurrentLecturerId(
     return lecturer.id;
   }
 
-  if (!headerUserId || !mongoose.Types.ObjectId.isValid(headerUserId)) {
-    return "";
+  if (headerUserId && mongoose.Types.ObjectId.isValid(headerUserId)) {
+    const user = await UserModel.findById(headerUserId)
+      .select({ role: 1, status: 1, lecturerRef: 1 })
+      .lean()
+      .exec()
+      .catch(() => null);
+
+    const row = asObject(user);
+    const role = collapseSpaces(row?.role).toUpperCase();
+    const status = collapseSpaces(row?.status).toUpperCase();
+    const lecturerId = readId(row?.lecturerRef);
+
+    if (role === "LECTURER" && status === "ACTIVE" && lecturerId) {
+      return lecturerId;
+    }
   }
 
-  const user = await UserModel.findById(headerUserId)
-    .select({ role: 1, status: 1, lecturerRef: 1 })
-    .lean()
-    .exec()
-    .catch(() => null);
-
-  const row = asObject(user);
-  const role = collapseSpaces(row?.role).toUpperCase();
-  const status = collapseSpaces(row?.status).toUpperCase();
-  const lecturerId = readId(row?.lecturerRef);
-
-  if (role !== "LECTURER" || status !== "ACTIVE" || !lecturerId) {
-    return "";
+  if (headerRole === "LECTURER") {
+    const fallbackCandidates = Array.from(new Set([fallbackId, headerUserId])).filter(
+      Boolean
+    );
+    for (const candidateId of fallbackCandidates) {
+      const resolvedId = await resolveActiveLecturerIdFromDb(candidateId);
+      if (resolvedId) {
+        return resolvedId;
+      }
+    }
   }
 
-  return lecturerId;
+  return "";
 }
 
 export async function resolveCurrentStudentId(
@@ -300,26 +348,36 @@ export async function resolveCurrentStudentId(
     return directStudentId || "";
   }
 
-  if (!headerUserId || !mongoose.Types.ObjectId.isValid(headerUserId)) {
-    return "";
+  if (headerUserId && mongoose.Types.ObjectId.isValid(headerUserId)) {
+    const user = await UserModel.findById(headerUserId)
+      .select({ role: 1, status: 1, studentRef: 1 })
+      .lean()
+      .exec()
+      .catch(() => null);
+
+    const row = asObject(user);
+    const role = collapseSpaces(row?.role).toUpperCase();
+    const status = collapseSpaces(row?.status).toUpperCase();
+    const studentId = readId(row?.studentRef);
+
+    if (role === "STUDENT" && status === "ACTIVE" && studentId) {
+      return studentId;
+    }
   }
 
-  const user = await UserModel.findById(headerUserId)
-    .select({ role: 1, status: 1, studentRef: 1 })
-    .lean()
-    .exec()
-    .catch(() => null);
-
-  const row = asObject(user);
-  const role = collapseSpaces(row?.role).toUpperCase();
-  const status = collapseSpaces(row?.status).toUpperCase();
-  const studentId = readId(row?.studentRef);
-
-  if (role !== "STUDENT" || status !== "ACTIVE" || !studentId) {
-    return "";
+  if (headerRole === "STUDENT") {
+    const fallbackCandidates = Array.from(new Set([fallbackId, headerUserId])).filter(
+      Boolean
+    );
+    for (const candidateId of fallbackCandidates) {
+      const resolvedId = await resolveActiveStudentIdFromDb(candidateId);
+      if (resolvedId) {
+        return resolvedId;
+      }
+    }
   }
 
-  return studentId;
+  return "";
 }
 
 export async function resolveCurrentConsultationActor(
@@ -383,6 +441,7 @@ export function toApiBooking(
           sessionType: slot.sessionType,
           mode: slot.mode,
           location: slot.location,
+          meetingLink: slot.meetingLink,
           status: slot.status,
           bookingId: slot.bookingId,
         }

@@ -114,7 +114,7 @@ export async function GET(
       .populate({
         path: "slotId",
         select:
-          "date startTime endTime sessionType mode location status bookingId lecturerId isDeleted",
+          "date startTime endTime sessionType mode location meetingLink status bookingId lecturerId isDeleted",
       })
       .populate({ path: "lecturerId", select: "fullName email" })
       .populate({
@@ -290,6 +290,7 @@ export async function PATCH(
               sessionType: currentSlot.sessionType,
               mode: currentSlot.mode,
               location: currentSlot.location,
+              meetingLink: currentSlot.meetingLink,
               status: "AVAILABLE",
               bookingId: null,
             }) ?? currentSlot

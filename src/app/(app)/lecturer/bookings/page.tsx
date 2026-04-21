@@ -3,7 +3,7 @@
 import "../lecturer-experience.css";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarCheck, History, Hourglass } from "lucide-react";
+import { CalendarCheck, History, Hourglass, Link2 } from "lucide-react";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   listLecturerConsultationBookings,
@@ -174,7 +174,27 @@ export default function LecturerBookingsPage() {
                           </td>
                           <td>{booking.slot ? `${booking.slot.date} ${booking.slot.startTime} - ${booking.slot.endTime}` : "Unavailable"}</td>
                           <td>{booking.slot?.sessionType ?? booking.purpose}</td>
-                          <td>{booking.slot ? toConsultationModeLabel(booking.slot.mode) : "-"}</td>
+                          <td>
+                            {booking.slot ? (
+                              <div>
+                                <div>{toConsultationModeLabel(booking.slot.mode)}</div>
+                                {booking.slot.meetingLink ? (
+                                  <a
+                                    className="inline-flex text-xs"
+                                    href={booking.slot.meetingLink}
+                                    rel="noreferrer"
+                                    style={{ gap: 6 }}
+                                    target="_blank"
+                                  >
+                                    <Link2 size={13} />
+                                    Meeting link
+                                  </a>
+                                ) : null}
+                              </div>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td><span className={`badge ${statusClass(booking.status)}`}>{getConsultationBookingStatusLabel(booking.status)}</span></td>
                           <td>
                             {tab === "history" ? (

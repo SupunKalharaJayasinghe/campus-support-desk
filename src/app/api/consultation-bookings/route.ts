@@ -90,7 +90,8 @@ async function findStudentBookingConflict(input: {
   })
     .populate({
       path: "slotId",
-      select: "date startTime endTime isDeleted",
+      select:
+        "date startTime endTime sessionType mode location meetingLink status bookingId lecturerId isDeleted createdAt updatedAt",
     })
     .lean()
     .exec()
@@ -178,7 +179,7 @@ export async function GET(request: Request) {
         .populate({
           path: "slotId",
           select:
-            "date startTime endTime sessionType mode location status bookingId lecturerId isDeleted",
+            "date startTime endTime sessionType mode location meetingLink status bookingId lecturerId isDeleted",
         })
         .populate({ path: "lecturerId", select: "fullName email" })
         .populate({
@@ -245,7 +246,7 @@ export async function GET(request: Request) {
       .populate({
         path: "slotId",
         select:
-          "date startTime endTime sessionType mode location status bookingId lecturerId isDeleted",
+          "date startTime endTime sessionType mode location meetingLink status bookingId lecturerId isDeleted",
       })
       .populate({ path: "lecturerId", select: "fullName email" })
       .populate({
@@ -382,6 +383,7 @@ export async function POST(request: Request) {
         sessionType: slot.sessionType,
         mode: slot.mode,
         location: slot.location,
+        meetingLink: slot.meetingLink,
         status: "BOOKED",
         bookingId: created.id,
       });
@@ -401,6 +403,7 @@ export async function POST(request: Request) {
         sessionType: 1,
         mode: 1,
         location: 1,
+        meetingLink: 1,
         status: 1,
         bookingId: 1,
         isDeleted: 1,

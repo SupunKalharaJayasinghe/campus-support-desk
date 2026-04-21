@@ -13,6 +13,7 @@ export interface ConsultationAvailabilitySlotPersistedRecord {
   sessionType: string;
   mode: ConsultationSlotMode;
   location: string;
+  meetingLink: string;
   status: ConsultationSlotStatus;
   bookingId: string | null;
   createdAt: string;
@@ -28,6 +29,7 @@ export interface ConsultationAvailabilitySlotWriteInput {
   sessionType: string;
   mode: ConsultationSlotMode;
   location: string;
+  meetingLink: string;
   status: ConsultationSlotStatus;
   bookingId?: string | null;
 }
@@ -44,6 +46,7 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
           sessionType: "Academic Consultation",
           mode: "IN_PERSON",
           location: "Main Office",
+          meetingLink: "",
           status: "AVAILABLE",
           bookingId: null,
           createdAt: "2026-03-31T08:00:00.000Z",
@@ -59,6 +62,7 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
           sessionType: "Project Feedback",
           mode: "ONLINE",
           location: "",
+          meetingLink: "",
           status: "AVAILABLE",
           bookingId: null,
           createdAt: "2026-03-31T08:05:00.000Z",
@@ -74,6 +78,7 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
           sessionType: "Thesis Review",
           mode: "HYBRID",
           location: "Room 203",
+          meetingLink: "",
           status: "AVAILABLE",
           bookingId: null,
           createdAt: "2026-03-31T09:00:00.000Z",
@@ -89,6 +94,7 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
           sessionType: "Career Guidance",
           mode: "IN_PERSON",
           location: "Faculty Lounge",
+          meetingLink: "",
           status: "BOOKED",
           bookingId: "booking-demo-1",
           createdAt: "2026-03-31T09:10:00.000Z",
@@ -104,6 +110,7 @@ const INITIAL_CONSULTATION_AVAILABILITY_SLOTS: ConsultationAvailabilitySlotPersi
           sessionType: "Academic Consultation",
           mode: "ONLINE",
           location: "",
+          meetingLink: "",
           status: "BOOKED",
           bookingId: "booking-demo-2",
           createdAt: "2026-04-01T10:00:00.000Z",
@@ -190,12 +197,18 @@ export function sanitizeConsultationSlotDate(value: unknown) {
     return "";
   }
 
-  const parsed = new Date(`${raw}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
+  const [year, month, day] = raw.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
     return "";
   }
 
-  return parsed.toISOString().slice(0, 10);
+  return raw;
 }
 
 export function sanitizeConsultationSlotTime(value: unknown) {
@@ -209,6 +222,15 @@ export function sanitizeConsultationSessionType(value: unknown) {
 
 export function sanitizeConsultationLocation(value: unknown) {
   return collapseSpaces(value).slice(0, 160);
+}
+
+export function sanitizeConsultationMeetingLink(value: unknown) {
+  const raw = collapseSpaces(value).slice(0, 300);
+  if (!raw) {
+    return "";
+  }
+
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
 export function sanitizeConsultationSlotMode(value: unknown): ConsultationSlotMode {
@@ -347,6 +369,10 @@ export function findOverlappingConsultationAvailabilitySlotInMemory(input: {
         return false;
       }
 
+      if (row.status === "CANCELLED") {
+        return false;
+      }
+
       if (excludeId && row.id === excludeId) {
         return false;
       }
@@ -369,6 +395,7 @@ export function createConsultationAvailabilitySlotInMemory(
     sessionType: sanitizeConsultationSessionType(input.sessionType),
     mode: sanitizeConsultationSlotMode(input.mode),
     location: sanitizeConsultationLocation(input.location),
+    meetingLink: sanitizeConsultationMeetingLink(input.meetingLink),
     status: sanitizeConsultationSlotStatus(input.status),
     bookingId: readId(input.bookingId) || null,
     createdAt: now,
@@ -400,6 +427,7 @@ export function updateConsultationAvailabilitySlotInMemory(
     sessionType: sanitizeConsultationSessionType(input.sessionType),
     mode: sanitizeConsultationSlotMode(input.mode),
     location: sanitizeConsultationLocation(input.location),
+    meetingLink: sanitizeConsultationMeetingLink(input.meetingLink),
     status: sanitizeConsultationSlotStatus(input.status),
     bookingId: readId(input.bookingId) || null,
     updatedAt: new Date().toISOString(),
@@ -455,6 +483,7 @@ export function toConsultationAvailabilitySlotPersistedRecordFromUnknown(
     sessionType,
     mode: sanitizeConsultationSlotMode(row.mode),
     location: sanitizeConsultationLocation(row.location),
+    meetingLink: sanitizeConsultationMeetingLink(row.meetingLink),
     status: sanitizeConsultationSlotStatus(row.status),
     bookingId: readId(row.bookingId) || null,
     createdAt: toIsoTimestamp(row.createdAt),
