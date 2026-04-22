@@ -96,8 +96,11 @@ async function authorizeTechnician(request: Request): Promise<{ id: string } | n
   return { id: collapseSpaces(row._id) };
 }
 
-function parseTargetStatus(raw: unknown): "Accepted" | "Resolved" | null {
+function parseTargetStatus(raw: unknown): "Open" | "Accepted" | "Resolved" | null {
   const s = collapseSpaces(raw);
+  if (s === "Open" || s.toLowerCase() === "open") {
+    return "Open";
+  }
   if (s === "Accepted" || s.toLowerCase() === "accepted") {
     return "Accepted";
   }
@@ -139,7 +142,7 @@ export async function PATCH(
   const nextStatus = parseTargetStatus(body.status);
   if (!nextStatus) {
     return NextResponse.json(
-      { message: 'status must be "Accepted" or "Resolved"' },
+      { message: 'status must be "Open", "Accepted", or "Resolved"' },
       { status: 400 }
     );
   }
@@ -159,10 +162,18 @@ export async function PATCH(
 
   const current = normalizeSupportTicketStatus(ticket.status);
 
-  if (nextStatus === "Accepted") {
-    if (current !== "In progress") {
+  if (nextStatus === "Open") {
+    if (current !== "In progress" && current !== "Accepted") {
       return NextResponse.json(
-        { message: 'Only tickets "In progress" can be accepted' },
+        { message: 'Only tickets "In progress" or "Accepted" can be rejected back to open' },
+        { status: 400 }
+      );
+    }
+    ticket.status = "Open";
+  } else if (nextStatus === "Accepted") {
+    if (current !== "In progress" && current !== "Resolved") {
+      return NextResponse.json(
+        { message: 'Only tickets "In progress" or "Resolved" can be moved to accepted' },
         { status: 400 }
       );
     }

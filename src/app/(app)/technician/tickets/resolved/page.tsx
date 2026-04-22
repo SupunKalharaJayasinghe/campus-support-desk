@@ -4,5 +4,11 @@ import AdminSupportTicketsByStatus from "@/components/admin/AdminSupportTicketsB
 import { TECHNICIAN_MY_TICKETS_RESOLVED } from "@/components/admin/admin-ticket-status-config";
 
 export default function TechnicianResolvedTicketsPage() {
-  return <AdminSupportTicketsByStatus config={TECHNICIAN_MY_TICKETS_RESOLVED} mineOnly />;
+  return (
+    <AdminSupportTicketsByStatus
+      config={TECHNICIAN_MY_TICKETS_RESOLVED}
+      mineOnly
+      technicianWorkflow="reopen-accepted"
+    />
+  );
 }

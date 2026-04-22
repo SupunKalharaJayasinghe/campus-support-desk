@@ -78,7 +78,7 @@ export const TECHNICIAN_MY_TICKETS_IN_PROGRESS: AdminTicketsStatusConfig = {
   apiStatus: "In progress",
   pageTitle: "My in-progress tickets",
   pageDescription:
-    "Support tickets assigned to you that are still in progress. Accept a ticket when you start handling it.",
+    "Support tickets assigned to you that are still in progress. Accept to move forward, or reject to return the ticket to Open.",
   cardTitle: "In progress",
   cardDescription: "Assigned to you · status In progress",
   statusBadgeLabel: "In progress",
@@ -91,7 +91,7 @@ export const TECHNICIAN_MY_TICKETS_ACCEPTED: AdminTicketsStatusConfig = {
   apiStatus: "Accepted",
   pageTitle: "My accepted tickets",
   pageDescription:
-    "Tickets you accepted — mark them resolved when the work is finished (add optional resolution notes).",
+    "Tickets you accepted — mark resolved when finished, or reject to return the ticket to Open.",
   cardTitle: "Accepted",
   cardDescription: "Assigned to you · status Accepted",
   statusBadgeLabel: "Accepted",
@@ -103,7 +103,7 @@ export const TECHNICIAN_MY_TICKETS_ACCEPTED: AdminTicketsStatusConfig = {
 export const TECHNICIAN_MY_TICKETS_RESOLVED: AdminTicketsStatusConfig = {
   apiStatus: "Resolved",
   pageTitle: "My resolved tickets",
-  pageDescription: "Tickets you completed (status Resolved).",
+  pageDescription: "Tickets you completed (status Resolved). Move back to Accepted if more work is needed.",
   cardTitle: "Resolved",
   cardDescription: "Assigned to you · status Resolved",
   statusBadgeLabel: "Resolved",

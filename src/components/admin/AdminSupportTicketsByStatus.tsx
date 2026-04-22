@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw, UserPlus } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, UserPlus, XCircle } from "lucide-react";
 import AssignTechnicianToTicketModal from "@/components/admin/AssignTechnicianToTicketModal";
 import PageHeader from "@/components/admin/PageHeader";
 import type { AdminTicketsStatusConfig } from "@/components/admin/admin-ticket-status-config";
@@ -65,7 +65,7 @@ function readErrorMessage(payload: unknown) {
   return "Request failed";
 }
 
-type TechnicianWorkflow = "accept" | "resolve";
+type TechnicianWorkflow = "accept" | "resolve" | "reopen-accepted";
 
 export default function AdminSupportTicketsByStatus({
   config,
@@ -261,20 +261,36 @@ export default function AdminSupportTicketsByStatus({
                   </div>
                   <div className="flex w-full min-w-[200px] shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:items-end sm:pt-0.5">
                     {technicianWorkflow === "accept" ? (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
-                        disabled={actionLoadingId === ticket.id}
-                        onClick={() => void runTechnicianAction(ticket.id, { status: "Accepted" })}
-                      >
-                        {actionLoadingId === ticket.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                        )}
-                        Accept ticket
-                      </Button>
+                      <div className="flex w-full flex-col gap-2 sm:max-w-[280px] sm:self-end">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className="gap-1.5 self-end whitespace-nowrap bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700"
+                          disabled={actionLoadingId === ticket.id}
+                          onClick={() => void runTechnicianAction(ticket.id, { status: "Accepted" })}
+                        >
+                          {actionLoadingId === ticket.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          Accept ticket
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
+                          disabled={actionLoadingId === ticket.id}
+                          onClick={() => void runTechnicianAction(ticket.id, { status: "Open" })}
+                        >
+                          {actionLoadingId === ticket.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          Reject ticket
+                        </Button>
+                      </div>
                     ) : null}
                     {technicianWorkflow === "resolve" ? (
                       <div className="flex w-full flex-col gap-2 sm:max-w-[280px] sm:self-end">
@@ -296,14 +312,20 @@ export default function AdminSupportTicketsByStatus({
                         <Button
                           type="button"
                           variant="primary"
-                          className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
+                          className="gap-1.5 self-end whitespace-nowrap bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700"
                           disabled={actionLoadingId === ticket.id}
-                          onClick={() =>
+                          onClick={() => {
+                            const confirmed = window.confirm(
+                              "Are you sure this problem is resolved?"
+                            );
+                            if (!confirmed) {
+                              return;
+                            }
                             void runTechnicianAction(ticket.id, {
                               status: "Resolved",
                               technicianComments: (resolveDrafts[ticket.id] ?? "").trim() || undefined,
-                            })
-                          }
+                            });
+                          }}
                         >
                           {actionLoadingId === ticket.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -312,7 +334,37 @@ export default function AdminSupportTicketsByStatus({
                           )}
                           Mark resolved
                         </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          className="gap-1.5 self-end whitespace-nowrap px-3 py-1.5 text-xs"
+                          disabled={actionLoadingId === ticket.id}
+                          onClick={() => void runTechnicianAction(ticket.id, { status: "Open" })}
+                        >
+                          {actionLoadingId === ticket.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          Reject ticket
+                        </Button>
                       </div>
+                    ) : null}
+                    {technicianWorkflow === "reopen-accepted" ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="gap-1.5 self-end whitespace-nowrap bg-orange-500 px-3 py-1.5 text-xs text-white hover:bg-orange-600"
+                        disabled={actionLoadingId === ticket.id}
+                        onClick={() => void runTechnicianAction(ticket.id, { status: "Accepted" })}
+                      >
+                        {actionLoadingId === ticket.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        Back to accepted
+                      </Button>
                     ) : null}
                     {canAssignTechnician ? (
                       <Button
