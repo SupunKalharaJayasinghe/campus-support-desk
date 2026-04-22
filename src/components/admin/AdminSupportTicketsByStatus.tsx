@@ -1,13 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, FileText, Loader2, RefreshCw, UserPlus, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  FileText,
+  FilterX,
+  Loader2,
+  RefreshCw,
+  Search,
+  UserPlus,
+  XCircle,
+} from "lucide-react";
 import AssignTechnicianToTicketModal from "@/components/admin/AssignTechnicianToTicketModal";
 import PageHeader from "@/components/admin/PageHeader";
 import type { AdminTicketsStatusConfig } from "@/components/admin/admin-ticket-status-config";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import { authHeaders, readStoredRole } from "@/models/rbac";
 
 type StudentSummary = {
@@ -79,6 +90,7 @@ function isImageMime(mimeType: string) {
 }
 
 type TechnicianWorkflow = "accept" | "resolve" | "reopen-accepted";
+type AssignmentFilter = "all" | "assigned" | "unassigned";
 
 export default function AdminSupportTicketsByStatus({
   config,
@@ -98,6 +110,11 @@ export default function AdminSupportTicketsByStatus({
   const [canAssignTechnician, setCanAssignTechnician] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [resolveDrafts, setResolveDrafts] = useState<Record<string, string>>({});
+  const [expandedTicketIds, setExpandedTicketIds] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("all");
 
   const statusQuery = encodeURIComponent(config.apiStatus);
   const listQuery = mineOnly ? `${statusQuery}&mine=1` : statusQuery;
@@ -166,6 +183,77 @@ export default function AdminSupportTicketsByStatus({
     );
   }, [config.showAssignTechnician]);
 
+  const availableCategories = useMemo(() => {
+    return Array.from(
+      new Set(
+        items
+          .flatMap((ticket) => [ticket.category, ticket.subcategory])
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return items.filter((ticket) => {
+      if (priorityFilter !== "all" && ticket.priority !== priorityFilter) {
+        return false;
+      }
+      if (
+        categoryFilter !== "all" &&
+        ticket.category !== categoryFilter &&
+        ticket.subcategory !== categoryFilter
+      ) {
+        return false;
+      }
+      if (assignmentFilter === "assigned" && !ticket.assignedTechnician) {
+        return false;
+      }
+      if (assignmentFilter === "unassigned" && ticket.assignedTechnician) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      const searchable = [
+        ticket.subject,
+        ticket.description,
+        ticket.category,
+        ticket.subcategory,
+        ticket.priority,
+        ticket.student?.name ?? "",
+        ticket.student?.studentId ?? "",
+        ticket.student?.email ?? "",
+        ticket.assignedTechnician?.fullName ?? "",
+        ticket.assignedTechnician?.email ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [assignmentFilter, categoryFilter, items, priorityFilter, searchQuery]);
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    priorityFilter !== "all" ||
+    categoryFilter !== "all" ||
+    assignmentFilter !== "all";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setPriorityFilter("all");
+    setCategoryFilter("all");
+    setAssignmentFilter("all");
+  };
+
+  const toggleTicketDetails = (ticketId: string) => {
+    setExpandedTicketIds((prev) => ({
+      ...prev,
+      [ticketId]: !prev[ticketId],
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -189,7 +277,11 @@ export default function AdminSupportTicketsByStatus({
         }
       />
 
-      <Card accent title={config.cardTitle} description={config.cardDescription}>
+      <Card
+        accent
+        title={config.cardTitle}
+        description={`${config.cardDescription} · Showing ${filteredItems.length} of ${items.length}`}
+      >
         {loading ? (
           <div className="flex items-center justify-center gap-2 rounded-3xl border border-border bg-card px-4 py-12 text-sm text-text/68">
             <Loader2 className="h-5 w-5 animate-spin shrink-0" aria-hidden />
@@ -204,13 +296,89 @@ export default function AdminSupportTicketsByStatus({
             {config.emptyMessage}
           </p>
         ) : (
-          <ul className="space-y-3">
-            {items.map((ticket) => (
+          <div className="space-y-4">
+            <div className="grid gap-2 rounded-2xl border border-border bg-background/40 p-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="md:col-span-2 xl:col-span-2">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text/55">
+                  Search ticket details
+                </label>
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text/45"
+                    aria-hidden
+                  />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Subject, student, technician, category..."
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text/55">
+                  Priority
+                </label>
+                <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+                  <option value="all">All priorities</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text/55">
+                  Category
+                </label>
+                <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="all">All categories</option>
+                  {availableCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text/55">
+                  Assignment
+                </label>
+                <div className="flex gap-2">
+                  <Select
+                    value={assignmentFilter}
+                    onChange={(e) => setAssignmentFilter(e.target.value as AssignmentFilter)}
+                  >
+                    <option value="all">All tickets</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="unassigned">Unassigned</option>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="shrink-0 gap-1.5 px-3 py-2 text-xs"
+                    onClick={clearFilters}
+                    disabled={!hasActiveFilters}
+                  >
+                    <FilterX className="h-3.5 w-3.5" aria-hidden />
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {filteredItems.length === 0 ? (
+              <p className="admin-empty-state rounded-3xl border border-border bg-card p-5 text-sm text-text/68">
+                No tickets match the selected filters.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {filteredItems.map((ticket) => (
               <li
                 key={ticket.id}
                 className="admin-list-card rounded-3xl border border-border bg-card p-4"
               >
                 {(() => {
+                  const isExpanded = Boolean(expandedTicketIds[ticket.id]);
                   const hasStudentEvidence =
                     Boolean(ticket.studentEvidencePreview) && ticket.studentEvidencePreview.length > 0;
                   const hasTechnicianEvidence =
@@ -233,6 +401,17 @@ export default function AdminSupportTicketsByStatus({
                       {ticket.category}
                       {ticket.subcategory ? ` • ${ticket.subcategory}` : ""}
                     </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="px-3 py-1.5 text-xs"
+                        onClick={() => toggleTicketDetails(ticket.id)}
+                      >
+                        {isExpanded ? "Hide details" : "See details"}
+                      </Button>
+                    </div>
+                    {isExpanded ? (
                     <div className="grid gap-3 lg:grid-cols-2">
                       <section className="rounded-2xl border border-border bg-background/50 p-3 space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-text/55">
@@ -368,6 +547,7 @@ export default function AdminSupportTicketsByStatus({
                         ) : null}
                       </section>
                     </div>
+                    ) : null}
                   </div>
                   <div className="flex w-full shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:w-auto sm:min-w-[220px] sm:items-end sm:pt-0.5">
                     {technicianWorkflow === "accept" ? (
@@ -498,8 +678,10 @@ export default function AdminSupportTicketsByStatus({
                   );
                 })()}
               </li>
-            ))}
-          </ul>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </Card>
 
