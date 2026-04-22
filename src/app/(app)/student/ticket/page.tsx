@@ -75,6 +75,22 @@ function statusBadgeVariant(status: StudentTicket["status"]) {
   return "info" as const;
 }
 
+function statusBadgeClass(status: StudentTicket["status"]) {
+  if (status === "Open") {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+  if (status === "In progress") {
+    return "border-green-200 bg-green-50 text-green-700";
+  }
+  if (status === "Accepted") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  if (status === "Withdrawn") {
+    return "border-slate-300 bg-slate-100 text-slate-600";
+  }
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 function formatTicketDate(iso: string) {
   try {
     return new Intl.DateTimeFormat(undefined, {
@@ -553,8 +569,8 @@ export default function StudentTicketPage() {
                   <div className="absolute -bottom-6 right-3 h-20 w-20 rounded-full bg-[#f1efe8]/65" />
                   <div className="absolute -bottom-5 -right-3 h-16 w-16 rounded-full bg-[#d9e3f7]/75" />
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="relative z-10 mt-2 grid items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                  <div className="flex min-w-0 items-center gap-3">
                     {categoryPreviewImage(ticket.category) ? (
                       <img
                         alt={`${ticket.category} ticket`}
@@ -574,12 +590,16 @@ export default function StudentTicketPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={statusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
+                  <div className="flex justify-start md:justify-center">
+                    <Badge className={statusBadgeClass(ticket.status)} variant={statusBadgeVariant(ticket.status)}>
+                      {ticket.status}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-start md:justify-end">
                     <Button
                       type="button"
                       variant="secondary"
-                      className="h-8 rounded-2xl border-slate-300 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                      className="h-9 rounded-2xl border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
                       onClick={() =>
                         setExpandedTicketId((current) => (current === ticket.id ? null : ticket.id))
                       }
