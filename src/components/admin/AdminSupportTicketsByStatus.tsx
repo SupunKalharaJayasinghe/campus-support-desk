@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw, UserPlus, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, Loader2, RefreshCw, UserPlus, XCircle } from "lucide-react";
 import AssignTechnicianToTicketModal from "@/components/admin/AssignTechnicianToTicketModal";
 import PageHeader from "@/components/admin/PageHeader";
 import type { AdminTicketsStatusConfig } from "@/components/admin/admin-ticket-status-config";
@@ -39,9 +39,10 @@ type AdminSupportTicket = {
   createdAt: string;
   updatedAt: string;
   student: StudentSummary;
+  studentEvidencePreview?: { fileName: string; mimeType: string; data: string }[];
   assignedTechnician?: TechnicianSummary;
   technicianComments?: string;
-  technicianEvidencePreview?: { fileName: string; mimeType: string }[];
+  technicianEvidencePreview?: { fileName: string; mimeType: string; data: string }[];
 };
 
 function formatDateTime(value: string) {
@@ -63,6 +64,18 @@ function readErrorMessage(payload: unknown) {
     }
   }
   return "Request failed";
+}
+
+function evidenceDataUrl(data: string, mimeType: string) {
+  const raw = data.trim();
+  if (raw.toLowerCase().startsWith("data:")) {
+    return raw;
+  }
+  return `data:${mimeType};base64,${raw}`;
+}
+
+function isImageMime(mimeType: string) {
+  return mimeType.trim().toLowerCase().startsWith("image/");
 }
 
 type TechnicianWorkflow = "accept" | "resolve" | "reopen-accepted";
@@ -197,6 +210,14 @@ export default function AdminSupportTicketsByStatus({
                 key={ticket.id}
                 className="admin-list-card rounded-3xl border border-border bg-card p-4"
               >
+                {(() => {
+                  const hasStudentEvidence =
+                    Boolean(ticket.studentEvidencePreview) && ticket.studentEvidencePreview.length > 0;
+                  const hasTechnicianEvidence =
+                    Boolean(ticket.technicianEvidencePreview) &&
+                    ticket.technicianEvidencePreview.length > 0;
+                  const hasTechnicianInfo = Boolean(ticket.assignedTechnician || ticket.technicianComments);
+                  return (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -212,54 +233,143 @@ export default function AdminSupportTicketsByStatus({
                       {ticket.category}
                       {ticket.subcategory ? ` • ${ticket.subcategory}` : ""}
                     </p>
-                    {ticket.student ? (
-                      <p className="text-sm text-text/80">
-                        <span className="font-medium text-heading">Student: </span>
-                        {ticket.student.name}
-                        {ticket.student.studentId ? ` (${ticket.student.studentId})` : ""}
-                        {ticket.student.email ? ` — ${ticket.student.email}` : ""}
-                      </p>
-                    ) : null}
-                    {ticket.description ? (
-                      <p className="line-clamp-3 text-sm text-text/70">{ticket.description}</p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text/55">
-                      {ticket.contactEmail ? (
-                        <span>Contact email: {ticket.contactEmail}</span>
-                      ) : null}
-                      {ticket.contactPhone ? (
-                        <span>Phone: {ticket.contactPhone}</span>
-                      ) : null}
-                      {ticket.contactWhatsapp ? (
-                        <span>WhatsApp: {ticket.contactWhatsapp}</span>
-                      ) : null}
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <section className="rounded-2xl border border-border bg-background/50 p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text/55">
+                          Student ticket details
+                        </p>
+                        {ticket.student ? (
+                          <p className="text-sm text-text/80">
+                            <span className="font-medium text-heading">Student: </span>
+                            {ticket.student.name}
+                            {ticket.student.studentId ? ` (${ticket.student.studentId})` : ""}
+                            {ticket.student.email ? ` — ${ticket.student.email}` : ""}
+                          </p>
+                        ) : null}
+                        {ticket.description ? (
+                          <p className="line-clamp-3 text-sm text-text/70">{ticket.description}</p>
+                        ) : null}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text/55">
+                          {ticket.contactEmail ? (
+                            <span>Contact email: {ticket.contactEmail}</span>
+                          ) : null}
+                          {ticket.contactPhone ? (
+                            <span>Phone: {ticket.contactPhone}</span>
+                          ) : null}
+                          {ticket.contactWhatsapp ? (
+                            <span>WhatsApp: {ticket.contactWhatsapp}</span>
+                          ) : null}
+                        </div>
+                        {hasStudentEvidence ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-text/65">Student uploaded evidence</p>
+                            <div className="flex flex-wrap gap-2">
+                              {ticket.studentEvidencePreview?.map((e, index) =>
+                                isImageMime(e.mimeType) ? (
+                                  <a
+                                    key={`${ticket.id}-student-img-${index}`}
+                                    href={evidenceDataUrl(e.data, e.mimeType)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block"
+                                    title={e.fileName}
+                                  >
+                                    <img
+                                      className="h-16 w-20 rounded-lg border border-border object-cover"
+                                      src={evidenceDataUrl(e.data, e.mimeType)}
+                                      alt={e.fileName}
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    key={`${ticket.id}-student-file-${index}`}
+                                    href={evidenceDataUrl(e.data, e.mimeType)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-text/75 hover:bg-tint"
+                                    title={e.fileName}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" aria-hidden />
+                                    <span className="max-w-[180px] truncate">{e.fileName}</span>
+                                  </a>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-text/55">No student evidence attached.</p>
+                        )}
+                      </section>
+                      <section className="rounded-2xl border border-border bg-background/50 p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text/55">
+                          Technician details
+                        </p>
+                        {ticket.assignedTechnician && !mineOnly ? (
+                          <p className="text-sm text-text/80">
+                            <span className="font-medium text-heading">Technician: </span>
+                            {ticket.assignedTechnician.fullName}
+                            {ticket.assignedTechnician.specialization
+                              ? ` (${ticket.assignedTechnician.specialization})`
+                              : ""}
+                            {ticket.assignedTechnician.email
+                              ? ` — ${ticket.assignedTechnician.email}`
+                              : ""}
+                          </p>
+                        ) : null}
+                        {ticket.technicianComments ? (
+                          <p className="text-sm text-text/75">
+                            <span className="font-medium text-heading">Technician notes: </span>
+                            {ticket.technicianComments}
+                          </p>
+                        ) : null}
+                        {hasTechnicianEvidence ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-text/65">
+                              Technician uploaded evidence
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {ticket.technicianEvidencePreview?.map((e, index) =>
+                                isImageMime(e.mimeType) ? (
+                                  <a
+                                    key={`${ticket.id}-tech-img-${index}`}
+                                    href={evidenceDataUrl(e.data, e.mimeType)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block"
+                                    title={e.fileName}
+                                  >
+                                    <img
+                                      className="h-16 w-20 rounded-lg border border-border object-cover"
+                                      src={evidenceDataUrl(e.data, e.mimeType)}
+                                      alt={e.fileName}
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    key={`${ticket.id}-tech-file-${index}`}
+                                    href={evidenceDataUrl(e.data, e.mimeType)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-text/75 hover:bg-tint"
+                                    title={e.fileName}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" aria-hidden />
+                                    <span className="max-w-[180px] truncate">{e.fileName}</span>
+                                  </a>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        {!hasTechnicianInfo && !hasTechnicianEvidence ? (
+                          <p className="text-xs text-text/55">
+                            Technician details are not available yet.
+                          </p>
+                        ) : null}
+                      </section>
                     </div>
-                    {ticket.assignedTechnician && !mineOnly ? (
-                      <p className="text-sm text-text/80">
-                        <span className="font-medium text-heading">Technician: </span>
-                        {ticket.assignedTechnician.fullName}
-                        {ticket.assignedTechnician.specialization
-                          ? ` (${ticket.assignedTechnician.specialization})`
-                          : ""}
-                        {ticket.assignedTechnician.email
-                          ? ` — ${ticket.assignedTechnician.email}`
-                          : ""}
-                      </p>
-                    ) : null}
-                    {ticket.technicianComments ? (
-                      <p className="text-sm text-text/75">
-                        <span className="font-medium text-heading">Technician notes: </span>
-                        {ticket.technicianComments}
-                      </p>
-                    ) : null}
-                    {ticket.technicianEvidencePreview && ticket.technicianEvidencePreview.length > 0 ? (
-                      <p className="text-xs text-text/60">
-                        Technician evidence:{" "}
-                        {ticket.technicianEvidencePreview.map((e) => e.fileName).join(", ")}
-                      </p>
-                    ) : null}
                   </div>
-                  <div className="flex w-full min-w-[200px] shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:items-end sm:pt-0.5">
+                  <div className="flex w-full shrink-0 flex-col items-stretch gap-2 text-right text-xs text-text/55 sm:w-auto sm:min-w-[220px] sm:items-end sm:pt-0.5">
                     {technicianWorkflow === "accept" ? (
                       <div className="flex w-full flex-col gap-2 sm:max-w-[280px] sm:self-end">
                         <Button
@@ -385,6 +495,8 @@ export default function AdminSupportTicketsByStatus({
                     ) : null}
                   </div>
                 </div>
+                  );
+                })()}
               </li>
             ))}
           </ul>

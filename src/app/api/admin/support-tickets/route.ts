@@ -127,11 +127,9 @@ export async function GET(request: Request) {
         }
       : statusMatch;
 
-  /** Omit student `evidence` (large base64 blobs); list UI does not need file bytes. */
   let rows: unknown[];
   try {
     rows = (await SupportTicketModel.find(listFilter)
-      .select({ evidence: 0 })
       .populate({
         path: "studentId",
         select: "studentId firstName lastName email",
@@ -193,18 +191,39 @@ export async function GET(request: Request) {
       };
     }
 
+    const studentEvidencePreview: { fileName: string; mimeType: string; data: string }[] = [];
+    const studentEv = row.evidence;
+    if (Array.isArray(studentEv)) {
+      for (const item of studentEv) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          continue;
+        }
+        const e = item as Record<string, unknown>;
+        const fileName = collapseSpaces(e.fileName).slice(0, 255);
+        const mimeType = collapseSpaces(e.mimeType).slice(0, 120);
+        const data = typeof e.data === "string" ? e.data.trim().replace(/\s+/g, "") : "";
+        if (!fileName || !mimeType || !data) {
+          continue;
+        }
+        studentEvidencePreview.push({ fileName, mimeType, data });
+      }
+    }
+
     const techEv = row.technicianEvidence;
-    const technicianEvidencePreview: { fileName: string; mimeType: string }[] = [];
+    const technicianEvidencePreview: { fileName: string; mimeType: string; data: string }[] = [];
     if (Array.isArray(techEv)) {
       for (const item of techEv) {
         if (!item || typeof item !== "object" || Array.isArray(item)) {
           continue;
         }
         const e = item as Record<string, unknown>;
-        technicianEvidencePreview.push({
-          fileName: collapseSpaces(e.fileName).slice(0, 255),
-          mimeType: collapseSpaces(e.mimeType).slice(0, 120),
-        });
+        const fileName = collapseSpaces(e.fileName).slice(0, 255);
+        const mimeType = collapseSpaces(e.mimeType).slice(0, 120);
+        const data = typeof e.data === "string" ? e.data.trim().replace(/\s+/g, "") : "";
+        if (!fileName || !mimeType || !data) {
+          continue;
+        }
+        technicianEvidencePreview.push({ fileName, mimeType, data });
       }
     }
 
@@ -222,6 +241,7 @@ export async function GET(request: Request) {
       createdAt: toIso(row.createdAt),
       updatedAt: toIso(row.updatedAt),
       student,
+      studentEvidencePreview,
       assignedTechnician,
       technicianComments: collapseSpaces(row.technicianComments),
       technicianEvidencePreview,

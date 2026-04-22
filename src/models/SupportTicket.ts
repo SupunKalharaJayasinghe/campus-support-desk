@@ -93,6 +93,11 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       type: [EvidenceSchema],
       default: [],
     },
+    withdrawalReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
   },
   {
     timestamps: true,

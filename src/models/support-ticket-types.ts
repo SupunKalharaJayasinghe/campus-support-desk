@@ -63,6 +63,7 @@ export interface ISupportTicket {
   assignedTechnicianId?: Types.ObjectId;
   technicianComments?: string;
   technicianEvidence?: ISupportTicketEvidence[];
+  withdrawalReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -22,6 +22,7 @@ export interface StudentTicket {
   contactWhatsapp?: string;
   priority: StudentTicketPriority;
   status: StudentTicketStatus;
+  withdrawalReason?: string;
   createdAt: string;
   evidence?: TicketEvidence[];
 }

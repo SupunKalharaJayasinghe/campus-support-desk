@@ -44,6 +44,10 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
       ? row.contactWhatsapp.trim()
       : undefined;
   const createdAt = typeof row.createdAt === "string" ? row.createdAt : "";
+  const withdrawalReason =
+    typeof row.withdrawalReason === "string" && row.withdrawalReason.trim()
+      ? row.withdrawalReason.trim()
+      : undefined;
   const statusOk =
     typeof status === "string" &&
     (SUPPORT_TICKET_STATUSES as readonly string[]).includes(status);
@@ -71,6 +75,7 @@ function parseTicketPayload(value: unknown): StudentTicket | null {
     ...(contactEmail ? { contactEmail } : {}),
     ...(contactPhone ? { contactPhone } : {}),
     ...(contactWhatsapp ? { contactWhatsapp } : {}),
+    ...(withdrawalReason ? { withdrawalReason } : {}),
     ...(evidence?.length ? { evidence } : {}),
   };
 }
@@ -130,6 +135,18 @@ export async function loadStudentTickets(): Promise<StudentTicket[]> {
 
 type CreateInput = Omit<StudentTicket, "id" | "status" | "createdAt">;
 
+type UpdateInput = {
+  subject: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
+  priority: StudentTicketPriority;
+  evidence?: TicketEvidence[];
+};
+
 /**
  * Persists a ticket via API when the database is reachable; otherwise falls back to local storage (same as earlier behavior).
  */
@@ -166,4 +183,42 @@ export async function createStudentTicketRemote(input: CreateInput): Promise<Stu
   }
 
   return localFallback();
+}
+
+export async function updateStudentTicketRemote(ticketId: string, input: UpdateInput): Promise<void> {
+  const response = await fetch(`/api/support-tickets/${encodeURIComponent(ticketId)}`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new Error(readErrorMessage(payload));
+  }
+}
+
+export async function withdrawStudentTicketRemote(
+  ticketId: string,
+  withdrawalReason: string
+): Promise<void> {
+  const response = await fetch(`/api/support-tickets/${encodeURIComponent(ticketId)}`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "withdraw",
+      withdrawalReason,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new Error(readErrorMessage(payload));
+  }
 }

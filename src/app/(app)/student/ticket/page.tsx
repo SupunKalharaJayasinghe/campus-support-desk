@@ -1,25 +1,63 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Image as ImageIcon, Plus, Search, Ticket } from "lucide-react";
+import { FileText, Paperclip, Plus, Search, Ticket, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Skeleton from "@/components/ui/Skeleton";
+import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
   loadStudentTickets,
   type StudentTicket,
   type TicketEvidence,
+  updateStudentTicketRemote,
+  withdrawStudentTicketRemote,
 } from "@/lib/support-ticket-client";
 import CreateTicketModal from "./CreateTicketModal";
 import { TICKET_CATEGORY_OPTIONS } from "@/lib/ticket-category-options";
+import academicTicketImage from "@/app/images/tickets/9.jpg";
+import technicalTicketImage from "@/app/images/tickets/7.jpg";
+import financeTicketImage from "@/app/images/tickets/6.jpg";
+import facilityTicketImage from "@/app/images/tickets/3.jpg";
+import transportTicketImage from "@/app/images/tickets/8.jpg";
+import otherTicketImage from "@/app/images/tickets/10.jpg";
 
 const CATEGORY_FILTER_OPTIONS = TICKET_CATEGORY_OPTIONS;
 
 const PRIORITY_FILTER_OPTIONS = ["Low", "Medium", "High"] as const;
+const EDIT_SUBCATEGORY_OPTIONS: Record<string, string[]> = {
+  Academic: ["Exams", "Assignments", "Lectures", "Attendance", "Other"],
+  Technical: ["Portal login", "LMS issue", "Wi-Fi", "Lab system", "Other"],
+  Facility: ["Classroom", "Library", "Laboratory", "Campus maintenance", "Other"],
+  Finance: ["Fees", "Scholarship", "Refund", "Payment issue", "Other"],
+  Transport: ["Bus pass", "Route issue", "Timing issue", "Driver complaint", "Other"],
+  Other: ["General inquiry", "Complaint", "Suggestion"],
+};
+const WITHDRAW_REASONS = [
+  "Issue solved by myself",
+  "Created by mistake",
+  "No longer needed",
+  "Duplicate ticket",
+  "Other",
+] as const;
+const MAX_EVIDENCE_FILES = 5;
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const ACCEPT_EVIDENCE = "image/*,.pdf,application/pdf";
+
+type PendingFile = {
+  key: string;
+  file: File;
+};
+
+function generateKey() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `f_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
 
 function statusBadgeVariant(status: StudentTicket["status"]) {
   if (status === "Resolved") {
@@ -52,6 +90,53 @@ function evidenceDataUrl(ev: TicketEvidence) {
   return `data:${ev.mimeType};base64,${ev.data}`;
 }
 
+function readFileAsEvidence(file: File): Promise<TicketEvidence> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read file"));
+        return;
+      }
+      const comma = result.indexOf(",");
+      const base64 = comma >= 0 ? result.slice(comma + 1) : result;
+      const mimeType =
+        file.type.trim() ||
+        (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+      resolve({
+        fileName: file.name.slice(0, 255),
+        mimeType: mimeType.slice(0, 120),
+        data: base64.replace(/\s+/g, ""),
+      });
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Read failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function categoryPreviewImage(category: string) {
+  if (category === "Academic") {
+    return academicTicketImage.src;
+  }
+  if (category === "Technical") {
+    return technicalTicketImage.src;
+  }
+  if (category === "Finance") {
+    return financeTicketImage.src;
+  }
+  if (category === "Facility") {
+    return facilityTicketImage.src;
+  }
+  if (category === "Transport") {
+    return transportTicketImage.src;
+  }
+  if (category === "Other") {
+    return otherTicketImage.src;
+  }
+  return null;
+}
+
 function ticketMatchesQuery(ticket: StudentTicket, query: string) {
   if (!query) {
     return true;
@@ -75,6 +160,23 @@ export default function StudentTicketPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
+  const [editSubject, setEditSubject] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editSubcategory, setEditSubcategory] = useState("");
+  const [editPriority, setEditPriority] = useState<StudentTicket["priority"]>("Medium");
+  const [editContactEmail, setEditContactEmail] = useState("");
+  const [editContactPhone, setEditContactPhone] = useState("");
+  const [editContactWhatsapp, setEditContactWhatsapp] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editExistingEvidence, setEditExistingEvidence] = useState<TicketEvidence[]>([]);
+  const [editPendingFiles, setEditPendingFiles] = useState<PendingFile[]>([]);
+  const [editEvidenceError, setEditEvidenceError] = useState("");
+  const [withdrawingTicketId, setWithdrawingTicketId] = useState<string | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawOtherReason, setWithdrawOtherReason] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const refreshTickets = useCallback(async () => {
     try {
@@ -89,6 +191,181 @@ export default function StudentTicketPage() {
       });
     }
   }, [toast]);
+
+  function ticketCanBeChanged(status: StudentTicket["status"]) {
+    return status === "Open" || status === "In progress";
+  }
+
+  function openEditForm(ticket: StudentTicket) {
+    setEditingTicketId(ticket.id);
+    setEditSubject(ticket.subject);
+    setEditDescription(ticket.description);
+    setEditCategory(ticket.category);
+    setEditSubcategory(ticket.subcategory ?? "");
+    setEditPriority(ticket.priority);
+    setEditContactEmail(ticket.contactEmail ?? "");
+    setEditContactPhone(ticket.contactPhone ?? "");
+    setEditContactWhatsapp(ticket.contactWhatsapp ?? "");
+    setEditExistingEvidence(ticket.evidence ?? []);
+    setEditPendingFiles([]);
+    setEditEvidenceError("");
+    setWithdrawingTicketId(null);
+  }
+
+  function cancelEditForm() {
+    setEditingTicketId(null);
+    setEditExistingEvidence([]);
+    setEditPendingFiles([]);
+    setEditEvidenceError("");
+  }
+
+  function removeExistingEvidence(index: number) {
+    setEditExistingEvidence((current) => current.filter((_, idx) => idx !== index));
+  }
+
+  function removePendingEvidence(key: string) {
+    setEditPendingFiles((current) => current.filter((item) => item.key !== key));
+    setEditEvidenceError("");
+  }
+
+  async function onEditEvidenceSelected(files: FileList | null) {
+    if (!files?.length) {
+      return;
+    }
+    setEditEvidenceError("");
+    const next = [...editPendingFiles];
+    const maxNewFilesAllowed = Math.max(
+      0,
+      MAX_EVIDENCE_FILES - (editExistingEvidence.length + editPendingFiles.length)
+    );
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files.item(i);
+      if (!file) {
+        continue;
+      }
+      if (next.length - editPendingFiles.length >= maxNewFilesAllowed) {
+        setEditEvidenceError(`You can attach at most ${MAX_EVIDENCE_FILES} files.`);
+        break;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        setEditEvidenceError(
+          `"${file.name}" is too large (max ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB per file).`
+        );
+        continue;
+      }
+      const isImg = file.type.startsWith("image/");
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isImg && !isPdf) {
+        setEditEvidenceError("Only images and PDF files can be attached.");
+        continue;
+      }
+      next.push({ key: generateKey(), file });
+    }
+    setEditPendingFiles(next);
+  }
+
+  async function saveTicketChanges(ticketId: string) {
+    const subject = editSubject.trim();
+    const description = editDescription.trim();
+    const category = editCategory.trim();
+    const subcategory = editSubcategory.trim();
+    const contactEmail = editContactEmail.trim();
+    const contactPhone = editContactPhone.trim();
+    const contactWhatsapp = editContactWhatsapp.trim();
+    const hasAnyContact = Boolean(contactEmail || contactPhone || contactWhatsapp);
+    if (!subject || !description || !category || !subcategory) {
+      toast({
+        title: "Missing details",
+        message: "Subject, description, category and subcategory are required.",
+        variant: "error",
+      });
+      return;
+    }
+    if (!hasAnyContact) {
+      toast({
+        title: "Contact required",
+        message: "Please provide at least one contact method.",
+        variant: "error",
+      });
+      return;
+    }
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      toast({ title: "Invalid email", message: "Please enter a valid email.", variant: "error" });
+      return;
+    }
+    if (contactPhone && !/^\d{10}$/.test(contactPhone)) {
+      toast({ title: "Invalid phone", message: "Phone must have 10 digits.", variant: "error" });
+      return;
+    }
+    if (contactWhatsapp && !/^\d{10}$/.test(contactWhatsapp)) {
+      toast({
+        title: "Invalid WhatsApp",
+        message: "WhatsApp number must have 10 digits.",
+        variant: "error",
+      });
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const newEvidence =
+        editPendingFiles.length > 0
+          ? await Promise.all(editPendingFiles.map((item) => readFileAsEvidence(item.file)))
+          : [];
+      await updateStudentTicketRemote(ticketId, {
+        subject,
+        description,
+        category,
+        subcategory,
+        priority: editPriority,
+        ...(contactEmail ? { contactEmail } : {}),
+        ...(contactPhone ? { contactPhone } : {}),
+        ...(contactWhatsapp ? { contactWhatsapp } : {}),
+        evidence: [...editExistingEvidence, ...newEvidence],
+      });
+      await refreshTickets();
+      setEditingTicketId(null);
+      toast({ title: "Ticket updated", message: "Your ticket details were saved." });
+    } catch (error) {
+      toast({
+        title: "Could not update ticket",
+        message: error instanceof Error ? error.message : "Please try again.",
+        variant: "error",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function confirmWithdraw(ticketId: string) {
+    const selected = withdrawReason.trim();
+    const reason =
+      selected === "Other" ? withdrawOtherReason.trim() : selected;
+    if (!reason) {
+      toast({
+        title: "Reason required",
+        message: "Please select a withdrawal reason. If Other, type your reason.",
+        variant: "error",
+      });
+      return;
+    }
+    setWithdrawing(true);
+    try {
+      await withdrawStudentTicketRemote(ticketId, reason);
+      await refreshTickets();
+      setWithdrawingTicketId(null);
+      setWithdrawReason("");
+      setWithdrawOtherReason("");
+      toast({ title: "Ticket withdrawn", message: "Your ticket has been withdrawn." });
+    } catch (error) {
+      toast({
+        title: "Could not withdraw ticket",
+        message: error instanceof Error ? error.message : "Please try again.",
+        variant: "error",
+      });
+    } finally {
+      setWithdrawing(false);
+    }
+  }
 
   const filteredTickets = useMemo(
     () =>
@@ -278,13 +555,11 @@ export default function StudentTicketPage() {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    {ticket.evidence?.find((ev) => ev.mimeType.startsWith("image/")) ? (
+                    {categoryPreviewImage(ticket.category) ? (
                       <img
-                        alt={`${ticket.subject} evidence`}
+                        alt={`${ticket.category} ticket`}
                         className="h-14 w-16 shrink-0 rounded-lg border border-border object-cover"
-                        src={evidenceDataUrl(
-                          ticket.evidence.find((ev) => ev.mimeType.startsWith("image/")) as TicketEvidence
-                        )}
+                        src={categoryPreviewImage(ticket.category) ?? ""}
                       />
                     ) : (
                       <div className="flex h-14 w-16 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
@@ -331,24 +606,261 @@ export default function StudentTicketPage() {
                     ) : null}
                     <p className="mt-2 text-xs text-slate-500">{formatTicketDate(ticket.createdAt)}</p>
                     <p className="mt-1 font-mono text-[11px] text-slate-500">ID {ticket.id}</p>
+                    {ticket.withdrawalReason ? (
+                      <p className="mt-2 text-xs text-slate-600">
+                        Withdrawal reason: {ticket.withdrawalReason}
+                      </p>
+                    ) : null}
                     {ticket.evidence && ticket.evidence.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {ticket.evidence.map((ev, index) => (
-                          <a
-                            className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:border-slate-300"
-                            href={evidenceDataUrl(ev)}
-                            key={`${ticket.id}-ev-${index}`}
-                            rel="noreferrer"
-                            target="_blank"
+                      <div className="mt-3 space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          {ticket.evidence
+                            .filter((ev) => ev.mimeType.startsWith("image/"))
+                            .map((ev, index) => (
+                              <a
+                                className="block overflow-hidden rounded-xl border border-slate-200 bg-white hover:border-slate-300"
+                                href={evidenceDataUrl(ev)}
+                                key={`${ticket.id}-img-${index}`}
+                                rel="noreferrer"
+                                target="_blank"
+                                title={ev.fileName}
+                              >
+                                <img
+                                  alt={ev.fileName}
+                                  className="h-28 w-36 object-cover"
+                                  src={evidenceDataUrl(ev)}
+                                />
+                              </a>
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {ticket.evidence
+                            .filter((ev) => !ev.mimeType.startsWith("image/"))
+                            .map((ev, index) => (
+                              <a
+                                className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:border-slate-300"
+                                href={evidenceDataUrl(ev)}
+                                key={`${ticket.id}-file-${index}`}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <FileText className="h-4 w-4 shrink-0 text-text/70" aria-hidden />
+                                <span className="min-w-0 truncate">{ev.fileName}</span>
+                              </a>
+                            ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {ticketCanBeChanged(ticket.status) ? (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-8 rounded-xl border-slate-300 px-3 text-xs text-slate-700"
+                            onClick={() =>
+                              editingTicketId === ticket.id ? cancelEditForm() : openEditForm(ticket)
+                            }
                           >
-                            {ev.mimeType.startsWith("image/") ? (
-                              <ImageIcon className="h-4 w-4 shrink-0 text-text/70" aria-hidden />
-                            ) : (
-                              <FileText className="h-4 w-4 shrink-0 text-text/70" aria-hidden />
-                            )}
-                            <span className="min-w-0 truncate">{ev.fileName}</span>
-                          </a>
-                        ))}
+                            {editingTicketId === ticket.id ? "Close Edit" : "Update Ticket"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-8 rounded-xl border-red-300 px-3 text-xs text-red-700 hover:bg-red-50"
+                            onClick={() =>
+                              setWithdrawingTicketId((current) =>
+                                current === ticket.id ? null : ticket.id
+                              )
+                            }
+                          >
+                            {withdrawingTicketId === ticket.id ? "Cancel Withdraw" : "Withdraw Ticket"}
+                          </Button>
+                        </div>
+
+                        {editingTicketId === ticket.id ? (
+                          <div className="mt-3 space-y-2">
+                            <Input
+                              value={editSubject}
+                              onChange={(e) => setEditSubject(e.target.value)}
+                              placeholder="Subject"
+                            />
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <Select
+                                value={editCategory}
+                                onChange={(e) => {
+                                  const nextCategory = e.target.value;
+                                  setEditCategory(nextCategory);
+                                  const defaults = EDIT_SUBCATEGORY_OPTIONS[nextCategory] ?? [];
+                                  setEditSubcategory(defaults[0] ?? "");
+                                }}
+                              >
+                                {CATEGORY_FILTER_OPTIONS.map((category) => (
+                                  <option key={category} value={category}>
+                                    {category}
+                                  </option>
+                                ))}
+                              </Select>
+                              <Select
+                                value={editSubcategory}
+                                onChange={(e) => setEditSubcategory(e.target.value)}
+                              >
+                                {(EDIT_SUBCATEGORY_OPTIONS[editCategory] ?? []).map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </Select>
+                              <Select
+                                value={editPriority}
+                                onChange={(e) => setEditPriority(e.target.value as StudentTicket["priority"])}
+                              >
+                                {PRIORITY_FILTER_OPTIONS.map((priority) => (
+                                  <option key={priority} value={priority}>
+                                    {priority}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <Textarea
+                              rows={4}
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              placeholder="Description"
+                            />
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <Input
+                                type="email"
+                                value={editContactEmail}
+                                onChange={(e) => setEditContactEmail(e.target.value)}
+                                placeholder="Email"
+                              />
+                              <Input
+                                inputMode="numeric"
+                                value={editContactPhone}
+                                onChange={(e) =>
+                                  setEditContactPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                                }
+                                placeholder="Phone (10 digits)"
+                              />
+                              <Input
+                                inputMode="numeric"
+                                value={editContactWhatsapp}
+                                onChange={(e) =>
+                                  setEditContactWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 10))
+                                }
+                                placeholder="WhatsApp (10 digits)"
+                              />
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Evidence (optional)
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Add or remove evidence. Maximum {MAX_EVIDENCE_FILES} files total.
+                              </p>
+                              <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-700 hover:border-slate-400">
+                                <Paperclip className="h-4 w-4" aria-hidden />
+                                Add evidence files
+                                <input
+                                  className="sr-only"
+                                  accept={ACCEPT_EVIDENCE}
+                                  type="file"
+                                  multiple
+                                  disabled={
+                                    editExistingEvidence.length + editPendingFiles.length >=
+                                    MAX_EVIDENCE_FILES
+                                  }
+                                  onChange={(e) => void onEditEvidenceSelected(e.target.files)}
+                                />
+                              </label>
+                              {editEvidenceError ? (
+                                <p className="mt-2 text-xs text-red-600">{editEvidenceError}</p>
+                              ) : null}
+                              {editExistingEvidence.length > 0 ? (
+                                <div className="mt-2 space-y-1">
+                                  {editExistingEvidence.map((ev, index) => (
+                                    <div
+                                      key={`existing-${index}-${ev.fileName}`}
+                                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                                    >
+                                      <span className="min-w-0 truncate">{ev.fileName}</span>
+                                      <button
+                                        type="button"
+                                        className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                        onClick={() => removeExistingEvidence(index)}
+                                        aria-label={`Remove ${ev.fileName}`}
+                                      >
+                                        <X className="h-3.5 w-3.5" aria-hidden />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {editPendingFiles.length > 0 ? (
+                                <div className="mt-2 space-y-1">
+                                  {editPendingFiles.map((item) => (
+                                    <div
+                                      key={item.key}
+                                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                                    >
+                                      <span className="min-w-0 truncate text-slate-700">
+                                        {item.file.name}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                        onClick={() => removePendingEvidence(item.key)}
+                                        aria-label={`Remove ${item.file.name}`}
+                                      >
+                                        <X className="h-3.5 w-3.5" aria-hidden />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            <Button
+                              type="button"
+                              className="h-8 rounded-xl bg-[#034aa6] px-3 text-xs text-white hover:bg-[#033d8a]"
+                              onClick={() => void saveTicketChanges(ticket.id)}
+                              disabled={savingEdit}
+                            >
+                              {savingEdit ? "Saving..." : "Save Changes"}
+                            </Button>
+                          </div>
+                        ) : null}
+
+                        {withdrawingTicketId === ticket.id ? (
+                          <div className="mt-3 space-y-2">
+                            <Select
+                              value={withdrawReason}
+                              onChange={(e) => setWithdrawReason(e.target.value)}
+                            >
+                              <option value="">Select withdrawal reason</option>
+                              {WITHDRAW_REASONS.map((reason) => (
+                                <option key={reason} value={reason}>
+                                  {reason}
+                                </option>
+                              ))}
+                            </Select>
+                            {withdrawReason === "Other" ? (
+                              <Input
+                                value={withdrawOtherReason}
+                                onChange={(e) => setWithdrawOtherReason(e.target.value)}
+                                placeholder="Type your reason"
+                              />
+                            ) : null}
+                            <Button
+                              type="button"
+                              className="h-8 rounded-xl bg-red-600 px-3 text-xs text-white hover:bg-red-700"
+                              onClick={() => void confirmWithdraw(ticket.id)}
+                              disabled={withdrawing}
+                            >
+                              {withdrawing ? "Withdrawing..." : "Confirm Withdraw"}
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

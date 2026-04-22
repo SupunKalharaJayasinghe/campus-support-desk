@@ -139,6 +139,7 @@ function toApiTicket(row: {
   contactWhatsapp?: string;
   priority?: string;
   status?: string;
+  withdrawalReason?: string;
   createdAt?: Date | string;
   evidence?: unknown;
 }) {
@@ -155,6 +156,7 @@ function toApiTicket(row: {
     contactWhatsapp: collapseSpaces(row.contactWhatsapp),
     priority: row.priority as SupportTicketPriority,
     status: row.status as SupportTicketStatus,
+    withdrawalReason: collapseSpaces(row.withdrawalReason),
     ...(evidence?.length ? { evidence } : {}),
     createdAt,
   };
@@ -209,6 +211,7 @@ export async function GET(request: Request) {
           contactWhatsapp: typeof r.contactWhatsapp === "string" ? r.contactWhatsapp : "",
           priority: typeof r.priority === "string" ? r.priority : "",
           status: typeof r.status === "string" ? r.status : "",
+          withdrawalReason: typeof r.withdrawalReason === "string" ? r.withdrawalReason : "",
           createdAt,
           evidence: r.evidence,
         });
@@ -336,6 +339,7 @@ export async function POST(request: Request) {
         contactWhatsapp: plain.contactWhatsapp,
         priority: plain.priority,
         status: plain.status,
+        withdrawalReason: plain.withdrawalReason,
         evidence: plain.evidence,
         createdAt:
           plain.createdAt instanceof Date
