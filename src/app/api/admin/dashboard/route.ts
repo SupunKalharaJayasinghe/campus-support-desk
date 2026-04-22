@@ -8,6 +8,7 @@ import "@/models/Lecturer";
 import "@/models/Module";
 import "@/models/ModuleOffering";
 import "@/models/Student";
+import "@/models/SupportTicket";
 import { AnnouncementModel } from "@/models/Announcement";
 import { DegreeProgramModel } from "@/models/DegreeProgram";
 import { EnrollmentModel } from "@/models/Enrollment";
@@ -18,6 +19,10 @@ import { ModuleModel } from "@/models/Module";
 import { ModuleOfferingModel } from "@/models/ModuleOffering";
 import { connectMongoose } from "@/models/mongoose";
 import { StudentModel } from "@/models/Student";
+import {
+  SupportTicketModel,
+  matchSupportTicketStatusCaseInsensitive,
+} from "@/models/SupportTicket";
 
 type AlertLevel = "High" | "Medium";
 
@@ -89,6 +94,11 @@ export async function GET() {
     latestOfferings,
     latestIntakes,
     latestAnnouncements,
+    totalTickets,
+    openTickets,
+    inProgressTickets,
+    resolvedTickets,
+    latestTickets,
     activeIntake,
     faculties,
     degrees,
@@ -174,6 +184,23 @@ export async function GET() {
       .select({ title: 1, targetLabel: 1, createdAt: 1, updatedAt: 1 })
       .sort({ updatedAt: -1 })
       .limit(2)
+      .lean()
+      .exec()
+      .catch(() => []),
+    SupportTicketModel.countDocuments({}).catch(() => 0),
+    SupportTicketModel.countDocuments(matchSupportTicketStatusCaseInsensitive("Open")).catch(
+      () => 0
+    ),
+    SupportTicketModel.countDocuments(
+      matchSupportTicketStatusCaseInsensitive("In progress")
+    ).catch(() => 0),
+    SupportTicketModel.countDocuments(matchSupportTicketStatusCaseInsensitive("Resolved")).catch(
+      () => 0
+    ),
+    SupportTicketModel.find({})
+      .select({ subject: 1, status: 1, priority: 1, createdAt: 1, updatedAt: 1 })
+      .sort({ updatedAt: -1 })
+      .limit(3)
       .lean()
       .exec()
       .catch(() => []),
@@ -341,5 +368,18 @@ export async function GET() {
     studentsPerDegree,
     recentActivity,
     alerts,
+    ticketSummary: {
+      total: totalTickets,
+      open: openTickets,
+      inProgress: inProgressTickets,
+      resolved: resolvedTickets,
+    },
+    recentTickets: latestTickets.map((item) => ({
+      id: String(item._id ?? ""),
+      subject: collapseSpaces(item.subject),
+      status: collapseSpaces(item.status),
+      priority: collapseSpaces(item.priority),
+      occurredAt: toIsoDate(item.updatedAt || item.createdAt),
+    })).filter((item) => Boolean(item.id && item.subject && item.occurredAt)),
   });
 }

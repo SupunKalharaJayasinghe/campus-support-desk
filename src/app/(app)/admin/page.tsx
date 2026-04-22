@@ -11,6 +11,7 @@ import {
   Clock3,
   GraduationCap,
   Layers3,
+  LifeBuoy,
   Megaphone,
   UserCheck,
   Users,
@@ -73,6 +74,19 @@ interface DashboardPayload {
   studentsPerDegree: DistributionItem[];
   recentActivity: ActivityItem[];
   alerts: AlertItem[];
+  ticketSummary: {
+    total: number;
+    open: number;
+    inProgress: number;
+    resolved: number;
+  };
+  recentTickets: {
+    id: string;
+    subject: string;
+    status: string;
+    priority: string;
+    occurredAt: string;
+  }[];
 }
 
 interface StatDefinition {
@@ -231,6 +245,41 @@ function parseDashboardPayload(value: unknown): DashboardPayload | null {
     studentsPerDegree: parseDistributionItems(root.studentsPerDegree),
     recentActivity: parseActivityItems(root.recentActivity),
     alerts: parseAlerts(root.alerts),
+    ticketSummary: {
+      total: Math.max(0, Number(asObject(root.ticketSummary)?.total) || 0),
+      open: Math.max(0, Number(asObject(root.ticketSummary)?.open) || 0),
+      inProgress: Math.max(0, Number(asObject(root.ticketSummary)?.inProgress) || 0),
+      resolved: Math.max(0, Number(asObject(root.ticketSummary)?.resolved) || 0),
+    },
+    recentTickets: Array.isArray(root.recentTickets)
+      ? root.recentTickets
+          .map((item) => {
+            const row = asObject(item);
+            if (!row) {
+              return null;
+            }
+            const id = String(row.id ?? "").trim();
+            const subject = String(row.subject ?? "").trim();
+            const status = String(row.status ?? "").trim();
+            const priority = String(row.priority ?? "").trim();
+            const occurredAt = String(row.occurredAt ?? "").trim();
+            if (!id || !subject || !occurredAt) {
+              return null;
+            }
+            return { id, subject, status, priority, occurredAt };
+          })
+          .filter(
+            (
+              item
+            ): item is {
+              id: string;
+              subject: string;
+              status: string;
+              priority: string;
+              occurredAt: string;
+            } => Boolean(item)
+          )
+      : [],
   };
 }
 
@@ -613,6 +662,86 @@ export default function AdminDashboardPage() {
             </div>
           </Card>
         </div>
+      </section>
+
+      <section className="grid gap-6">
+        <Card
+          accent
+          description="Current support request workload and latest ticket updates from students."
+          title="Support Tickets"
+        >
+          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5 sm:col-span-2">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <LifeBuoy size={18} />
+                </span>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                  Total Tickets
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-heading">
+                  {(dashboard?.ticketSummary.total ?? 0).toLocaleString()}
+                </p>
+                <p className="mt-1 text-sm text-text/60">All support tickets submitted by students</p>
+              </div>
+              <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">Open</p>
+                <p className="mt-2 text-2xl font-semibold text-heading">
+                  {(dashboard?.ticketSummary.open ?? 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                  In progress
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-heading">
+                  {(dashboard?.ticketSummary.inProgress ?? 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="admin-inline-stat rounded-3xl border border-border bg-card p-5 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text/60">
+                  Resolved
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-heading">
+                  {(dashboard?.ticketSummary.resolved ?? 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="admin-surface rounded-3xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-heading">Latest Ticket Updates</p>
+                <Badge variant="neutral">Recent 3</Badge>
+              </div>
+              <div className="mt-4 space-y-3">
+                {dashboard?.recentTickets.length ? (
+                  dashboard.recentTickets.map((ticket) => (
+                    <div
+                      className="admin-list-card rounded-3xl border border-border bg-card p-4"
+                      key={ticket.id}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-heading">{ticket.subject}</p>
+                          <p className="mt-1 text-xs text-text/60">
+                            {ticket.status || "Open"} • Priority: {ticket.priority || "Medium"}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-xs font-medium text-text/55">
+                          {formatRelativeTime(ticket.occurredAt)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="admin-empty-state rounded-3xl px-4 py-5 text-sm text-text/68">
+                    No support ticket activity available yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">

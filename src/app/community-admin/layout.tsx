@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 import CommunityAdminShell from "./_components/CommunityAdminShell";
 
 export default function CommunityAdminLayout({ children }: { children: ReactNode }) {
-  return <CommunityAdminShell>{children}</CommunityAdminShell>;
+  return (
+    <ToastProvider>
+      <CommunityAdminShell>{children}</CommunityAdminShell>
+    </ToastProvider>
+  );
 }

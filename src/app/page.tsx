@@ -213,7 +213,7 @@ export default function LandingPage() {
 
             <Link
               className="mx-auto inline-flex items-center justify-center gap-5 text-5xl font-bold leading-tight tracking-tight text-[#D9D9D9] transition-all duration-300 hover:translate-x-1 hover:opacity-90 lg:mx-0 lg:gap-6 lg:text-6xl"
-              href="/report-problem"
+              href="/login"
             >
               <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/40 text-[#D9D9D9]">
                 <LifeBuoy size={24} />
@@ -308,7 +308,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
-                    href="/report-problem"
+                    href="/login"
                   >
                     Report a Problem
                   </Link>
@@ -316,7 +316,7 @@ export default function LandingPage() {
                 <li>
                   <Link
                     className="text-base text-[#D9D9D9] transition-colors duration-200 hover:text-[#034AA6]"
-                    href="/dashboard"
+                    href="/login"
                   >
                     Dashboard
                   </Link>

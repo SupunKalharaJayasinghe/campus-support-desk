@@ -26,7 +26,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/ToastProvider";
 
-type AdminRole = "ADMIN" | "LOST_ITEM_ADMIN";
+type AdminRole = "ADMIN" | "COMMUNITY_ADMIN";
 type AdminStatus = "ACTIVE" | "INACTIVE";
 type SortOption = "updated" | "created" | "az" | "za";
 type PageSize = 10 | 25 | 50 | 100;
@@ -67,9 +67,11 @@ function sanitizeUsername(value: unknown) {
 }
 
 function sanitizeRole(value: unknown): AdminRole {
-  return String(value ?? "").trim().toUpperCase() === "LOST_ITEM_ADMIN"
-    ? "LOST_ITEM_ADMIN"
-    : "ADMIN";
+  const v = String(value ?? "").trim().toUpperCase();
+  if (v === "COMMUNITY_ADMIN" || v === "LOST_ITEM_ADMIN") {
+    return "COMMUNITY_ADMIN";
+  }
+  return "ADMIN";
 }
 
 function sanitizeStatus(value: unknown): AdminStatus {
@@ -96,7 +98,7 @@ function formatShortDate(value: string | null | undefined) {
 }
 
 function roleLabel(role: AdminRole) {
-  return role === "LOST_ITEM_ADMIN" ? "LOST ITEM ADMIN" : "ADMIN";
+  return role === "COMMUNITY_ADMIN" ? "Community Admin" : "ADMIN";
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -241,8 +243,8 @@ export default function AdminsPage() {
     () => items.filter((item) => item.status === "ACTIVE").length,
     [items]
   );
-  const lostItemAdminsCount = useMemo(
-    () => items.filter((item) => item.role === "LOST_ITEM_ADMIN").length,
+  const communityAdminsCount = useMemo(
+    () => items.filter((item) => item.role === "COMMUNITY_ADMIN").length,
     [items]
   );
   const latestUpdatedAt = useMemo(
@@ -413,7 +415,7 @@ export default function AdminsPage() {
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
                   Register and manage admin accounts for main admin access and
-                  lost-item administration using the updated users section surface.
+                  community administration using the updated users section surface.
                 </p>
               </div>
 
@@ -517,7 +519,7 @@ export default function AdminsPage() {
                     >
                       <option value="">All admin types</option>
                       <option value="ADMIN">ADMIN</option>
-                      <option value="LOST_ITEM_ADMIN">LOST ITEM ADMIN</option>
+                      <option value="COMMUNITY_ADMIN">Community Admin</option>
                     </select>
                     <ChevronDown
                       className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text/45"
@@ -606,14 +608,14 @@ export default function AdminsPage() {
           />
           <AdminSummaryCard
             detail={
-              lostItemAdminsCount > 0
-                ? `${lostItemAdminsCount.toLocaleString()} lost-item admin accounts visible`
-                : "No lost-item admin accounts in the current view"
+              communityAdminsCount > 0
+                ? `${communityAdminsCount.toLocaleString()} community admin accounts visible`
+                : "No community admin accounts in the current view"
             }
             icon={KeyRound}
-            label="Lost-Item Admins"
+            label="Community Admins"
             tone="violet"
-            value={lostItemAdminsCount.toLocaleString()}
+            value={communityAdminsCount.toLocaleString()}
           />
           <AdminSummaryCard
             detail={
@@ -829,7 +831,7 @@ export default function AdminsPage() {
                     value={form.role}
                   >
                     <option value="ADMIN">ADMIN</option>
-                    <option value="LOST_ITEM_ADMIN">LOST ITEM ADMIN</option>
+                    <option value="COMMUNITY_ADMIN">Community Admin</option>
                   </Select>
                 </div>
                 <div>

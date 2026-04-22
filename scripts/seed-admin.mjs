@@ -8,7 +8,10 @@ const username = process.env.ADMIN_USERNAME?.trim() || "admin";
 const email = (process.env.ADMIN_EMAIL?.trim() || "admin@campus.local").toLowerCase();
 const password = process.env.ADMIN_PASSWORD?.trim() || "Admin@12345";
 const rawRole = String(process.env.ADMIN_ROLE ?? "ADMIN").trim().toUpperCase();
-const role = rawRole === "LOST_ITEM_ADMIN" ? "LOST_ITEM_ADMIN" : "ADMIN";
+const role =
+  rawRole === "COMMUNITY_ADMIN" || rawRole === "LOST_ITEM_ADMIN"
+    ? "COMMUNITY_ADMIN"
+    : "ADMIN";
 
 if (!uri) {
   console.error("MONGODB_URI is not set. Add it to your environment before seeding.");
@@ -28,7 +31,14 @@ const UserSchema = new mongoose.Schema(
     role: {
       type: String,
       required: true,
-      enum: ["ADMIN", "LOST_ITEM_ADMIN", "LECTURER", "LAB_ASSISTANT", "STUDENT"],
+      enum: [
+        "ADMIN",
+        "COMMUNITY_ADMIN",
+        "LECTURER",
+        "LAB_ASSISTANT",
+        "STUDENT",
+        "TECHNICIAN",
+      ],
       default: "STUDENT",
     },
     passwordHash: { type: String, required: true },

@@ -18,12 +18,19 @@ type BonusOutcome =
   | { ok: false; notFound: true }
   | { ok: false; conflict: true };
 
+type CommunityProfileLean = {
+  _id?: mongoose.Types.ObjectId;
+  points?: number;
+  level?: string;
+  adminBonus20Used?: boolean;
+};
+
 async function applyOneTimeBonus(userObjectId: mongoose.Types.ObjectId): Promise<BonusOutcome> {
-  const updated = await CommunityProfileModel.findOneAndUpdate(
+  const updated = (await CommunityProfileModel.findOneAndUpdate(
     { userRef: userObjectId, adminBonus20Used: { $ne: true } },
     { $inc: { points: BONUS_POINTS }, $set: { adminBonus20Used: true } },
     { new: true, lean: true }
-  );
+  )) as CommunityProfileLean | null;
 
   if (!updated) {
     const doc = await CommunityProfileModel.findOne({ userRef: userObjectId })
@@ -85,7 +92,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!outcome.ok) {
-      if (outcome.notFound) {
+      if ("notFound" in outcome && outcome.notFound) {
         return NextResponse.json(
           { message: "Community profile not found for this user." },
           { status: 404 }

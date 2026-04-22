@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
-  deleteAdminUserInMemory,
-  findAdminUserInMemoryById,
+  ADMIN_DIRECTORY_ROLE_FILTER,
   sanitizeAdminEmail,
   sanitizeAdminFullName,
   sanitizeAdminPassword,
@@ -12,14 +11,13 @@ import {
   sanitizeAdminStatus,
   sanitizeAdminUsername,
   toAdminUserPersistedRecordFromUnknown,
-  updateAdminUserInMemory,
   type AdminUserRole,
   type AdminUserStatus,
 } from "@/models/admin-user-store";
 import { getMongoDuplicateField } from "@/models/student-registration";
 import { UserModel } from "@/models/User";
 
-const ADMIN_ROLES: AdminUserRole[] = ["ADMIN", "LOST_ITEM_ADMIN"];
+const ADMIN_ROLES_QUERY = [...ADMIN_DIRECTORY_ROLE_FILTER];
 
 interface AdminUserWriteInput {
   fullName: string;
@@ -70,7 +68,7 @@ export async function GET(
     );
   }
 
-  const row = await UserModel.findOne({ _id: userId, role: { $in: ADMIN_ROLES } })
+  const row = await UserModel.findOne({ _id: userId, role: { $in: ADMIN_ROLES_QUERY } })
     .select({
       fullName: 1,
       username: 1,
@@ -135,7 +133,7 @@ export async function PUT(
 
     const row = await UserModel.findOne({
       _id: userId,
-      role: { $in: ADMIN_ROLES },
+      role: { $in: ADMIN_ROLES_QUERY },
     }).exec();
     if (!row) {
       return NextResponse.json({ message: "Admin user not found" }, { status: 404 });
@@ -202,7 +200,7 @@ export async function DELETE(
 
     const deletedRow = await UserModel.findOneAndDelete({
       _id: userId,
-      role: { $in: ADMIN_ROLES },
+      role: { $in: ADMIN_ROLES_QUERY },
     })
       .lean()
       .exec()

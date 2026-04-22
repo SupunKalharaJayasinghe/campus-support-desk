@@ -93,6 +93,12 @@ Guard logic lives in `src/components/auth/RoleGuard.tsx`.
 - `npm run start` start production server (after build)
 - `npm run lint` run ESLint
 
+## Scheduled archive job (Vercel)
+
+- `vercel.json` schedules `/api/community-posts/archive` daily at `02:00` UTC.
+- Set `CRON_SECRET` in Vercel project environment variables to protect the route.
+- The route also accepts `COMMUNITY_CRON_SECRET` for backward compatibility.
+
 ## Project structure (high level)
 
 - `src/app` Next.js routes (App Router)

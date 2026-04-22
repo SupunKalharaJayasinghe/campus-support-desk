@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   MessageSquareText,
   ShieldCheck,
   University,
@@ -75,6 +76,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { label: "Students", href: "/admin/users/students" },
       { label: "Lecturers", href: "/admin/users/lecturers" },
       { label: "Lab Assistants", href: "/admin/users/lab-assistants" },
+      { label: "Technicians", href: "/admin/users/technicians" },
       { label: "Admins", href: "/admin/users/admins" },
       { label: "Roles & Permissions", href: "/admin/users/roles-permissions" },
       { label: "Bulk Import", href: "/admin/users/bulk-import" },
@@ -132,6 +134,18 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     items: [
       { label: "Announcements", href: "/admin/communication/announcements" },
       { label: "Targeted Notifications", href: "/admin/communication/targeted-notifications" },
+    ],
+  },
+  {
+    key: "tickets",
+    label: "Tickets",
+    icon: LifeBuoy,
+    roles: ["SUPER_ADMIN", "TECHNICIAN"],
+    items: [
+      { label: "Open Tickets", href: "/admin/tickets/open" },
+      { label: "In Progress Tickets", href: "/admin/tickets/in-progress" },
+      { label: "Resolved Tickets", href: "/admin/tickets/resolved" },
+      { label: "Withdraw Tickets", href: "/admin/tickets/withdraw" },
     ],
   },
   {

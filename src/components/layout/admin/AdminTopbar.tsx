@@ -35,6 +35,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   students: "Students",
   lecturers: "Lecturers",
   "lab-assistants": "Lab Assistants",
+  technicians: "Technicians",
   admins: "Admins",
   "roles-permissions": "Roles & Permissions",
   "bulk-import": "Bulk Import",
@@ -56,6 +57,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   announcements: "Announcements",
   "targeted-notifications": "Targeted Notifications",
   messages: "Messages",
+  tickets: "Tickets",
   reports: "Reports",
   "student-analytics": "Student Analytics",
   "submission-reports": "Submission Reports",
@@ -74,6 +76,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 function roleLabel(role: AppRole) {
   if (role === "SUPER_ADMIN") return "SUPER_ADMIN";
   if (role === "LOST_ITEM_STAFF") return "LOST_ITEM_STAFF";
+  if (role === "TECHNICIAN") return "TECHNICIAN";
   return role;
 }
 

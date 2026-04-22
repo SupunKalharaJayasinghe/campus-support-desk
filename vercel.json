@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/community-posts/archive",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

@@ -4,8 +4,7 @@ import { NextResponse } from "next/server";
 import "@/models/User";
 import { connectMongoose } from "@/models/mongoose";
 import {
-  createAdminUserInMemory,
-  listAdminUsersInMemory,
+  ADMIN_DIRECTORY_ROLE_FILTER,
   sanitizeAdminEmail,
   sanitizeAdminFullName,
   sanitizeAdminPassword,
@@ -22,8 +21,6 @@ import {
   isMongoDuplicateKeyError,
 } from "@/models/student-registration";
 import { UserModel } from "@/models/User";
-
-const ADMIN_ROLES: AdminUserRole[] = ["ADMIN", "LOST_ITEM_ADMIN"];
 
 interface AdminUserWriteInput {
   fullName: string;
@@ -63,7 +60,7 @@ function sanitizeSort(value: string | null): AdminUserSort {
 }
 
 function sanitizeRoleFilter(value: string | null): "" | AdminUserRole {
-  if (value === "ADMIN" || value === "LOST_ITEM_ADMIN") {
+  if (value === "ADMIN" || value === "COMMUNITY_ADMIN") {
     return value;
   }
   return "";
@@ -120,10 +117,12 @@ export async function GET(request: Request) {
   }
 
   const query: Record<string, unknown> = {
-    role: { $in: ADMIN_ROLES },
+    role: { $in: [...ADMIN_DIRECTORY_ROLE_FILTER] },
   };
-  if (role) {
-    query.role = role;
+  if (role === "COMMUNITY_ADMIN") {
+    query.role = { $in: ["COMMUNITY_ADMIN", "LOST_ITEM_ADMIN"] };
+  } else if (role === "ADMIN") {
+    query.role = "ADMIN";
   }
   if (status) {
     query.status = status;

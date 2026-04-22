@@ -7,6 +7,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Textarea from "@/components/ui/Textarea";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   categoryLabel,
   isClosedToday,
@@ -40,6 +41,7 @@ function isLikelyMongoObjectId(value: string) {
 export default function CommunityAdminReportedPostsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
@@ -486,6 +488,18 @@ export default function CommunityAdminReportedPostsPage() {
         setModerationError(message);
         return;
       }
+      const ownerEmailNotified =
+        raw !== null &&
+        typeof raw === "object" &&
+        "ownerEmailNotified" in raw &&
+        (raw as { ownerEmailNotified: unknown }).ownerEmailNotified === true;
+      toast({
+        title: ownerEmailNotified ? "Post deleted and owner notified" : "Post deleted",
+        message: ownerEmailNotified
+          ? "The post owner was emailed successfully."
+          : "The post was deleted. Owner email could not be confirmed.",
+        variant: ownerEmailNotified ? "success" : "info",
+      });
       setReports((previous) => previous.filter((r) => r.postId.trim() !== postId));
       closeModal();
     } finally {

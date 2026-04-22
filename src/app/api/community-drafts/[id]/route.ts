@@ -146,14 +146,27 @@ export async function PATCH(
       return Response.json({ error: pictureNorm.error }, { status: 400 });
     }
 
-    const existingDraft = await CommunityDraft.findOne({
+    const existingDraftRaw = await CommunityDraft.findOne({
       _id: params.id,
       author: userId,
     }).lean();
 
-    if (!existingDraft) {
+    if (!existingDraftRaw) {
       return Response.json({ error: "Draft not found" }, { status: 404 });
     }
+
+    type DraftLean = {
+      isUrgent?: boolean;
+      urgentCardPaymentRecordId?: unknown;
+      urgentPrepayId?: unknown;
+      urgentLevel?: string | null;
+      urgentPaymentMethod?: string | null;
+      urgentFeePoints?: number | null;
+      urgentFeeRs?: number | null;
+      urgentCardLast4?: string | null;
+    };
+
+    const existingDraft = existingDraftRaw as DraftLean;
 
     const isUrgent = Boolean(body.isUrgent);
     const urgentLevelRaw = toTrimmedString(body.urgentLevel) as UrgentLevel;

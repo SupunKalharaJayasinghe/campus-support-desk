@@ -6,6 +6,7 @@ import {
   UserCog,
   UserSquare2,
   Users,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
@@ -78,6 +79,8 @@ async function loadDirectoryCounts() {
     activeLecturers,
     totalAssistants,
     activeAssistants,
+    totalTechnicians,
+    activeTechnicians,
     totalAdmins,
     activeAdmins,
   ] = await Promise.all([
@@ -87,11 +90,16 @@ async function loadDirectoryCounts() {
     LecturerModel.countDocuments({ status: "ACTIVE" }).catch(() => 0),
     LabAssistantModel.countDocuments({}).catch(() => 0),
     LabAssistantModel.countDocuments({ status: "ACTIVE" }).catch(() => 0),
-    UserModel.countDocuments({ role: { $in: ["ADMIN", "LOST_ITEM_ADMIN"] } }).catch(
-      () => 0
-    ),
+    UserModel.countDocuments({ role: { $in: ["TECHNICIAN", "TECHNISIAN"] } }).catch(() => 0),
     UserModel.countDocuments({
-      role: { $in: ["ADMIN", "LOST_ITEM_ADMIN"] },
+      role: { $in: ["TECHNICIAN", "TECHNISIAN"] },
+      status: "ACTIVE",
+    }).catch(() => 0),
+    UserModel.countDocuments({
+      role: { $in: ["ADMIN", "COMMUNITY_ADMIN", "LOST_ITEM_ADMIN"] },
+    }).catch(() => 0),
+    UserModel.countDocuments({
+      role: { $in: ["ADMIN", "COMMUNITY_ADMIN", "LOST_ITEM_ADMIN"] },
       status: "ACTIVE",
     }).catch(() => 0),
   ]);
@@ -126,16 +134,26 @@ async function loadDirectoryCounts() {
         icon: UserCog,
       },
       {
+        key: "technicians",
+        title: "Technicians",
+        description: "Manage technician login accounts for support tickets and related workflows.",
+        href: "/admin/users/technicians",
+        total: totalTechnicians,
+        activeLabel: `${activeTechnicians.toLocaleString()} active`,
+        icon: Wrench,
+      },
+      {
         key: "admins",
         title: "Admin Accounts",
-        description: "Control admin and lost-item admin access credentials.",
+        description: "Control admin and community admin access credentials.",
         href: "/admin/users/admins",
         total: totalAdmins,
         activeLabel: `${activeAdmins.toLocaleString()} active`,
         icon: ShieldCheck,
       },
     ] satisfies UserDirectoryCard[],
-    totalUsers: totalStudents + totalLecturers + totalAssistants + totalAdmins,
+    totalUsers:
+      totalStudents + totalLecturers + totalAssistants + totalTechnicians + totalAdmins,
   };
 }
 
@@ -170,7 +188,7 @@ export default async function AdminUsersPage() {
         {
           label: "Admin Access",
           value: directory.cards.find((item) => item.key === "admins")?.total.toLocaleString() ?? "0",
-          detail: "Main admin and lost-item admin accounts with dashboard access.",
+          detail: "Main admin and community admin accounts with dashboard access.",
           icon: ShieldCheck,
           tone: "amber" as const,
         },
@@ -189,7 +207,7 @@ export default async function AdminUsersPage() {
                   User directory hub
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-text/68">
-                  Access the dedicated student, lecturer, lab assistant, and admin
+                  Access the dedicated student, lecturer, lab assistant, technician, and admin
                   directories from one consistent control surface styled to match the
                   updated academic pages.
                 </p>
@@ -216,7 +234,7 @@ export default async function AdminUsersPage() {
               <Badge variant={directory ? "success" : "neutral"}>
                 {directory ? "Live Mongo data" : "Database unavailable"}
               </Badge>
-              <Badge variant="neutral">Students, Teaching Staff, Admin Accounts</Badge>
+              <Badge variant="neutral">Students, Teaching Staff, Technicians, Admins</Badge>
             </div>
           </div>
         </Card>
@@ -247,7 +265,7 @@ export default async function AdminUsersPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="primary">4 directories</Badge>
+              <Badge variant="primary">5 directories</Badge>
               <Badge variant="neutral">
                 {directory.totalUsers.toLocaleString()} total user records
               </Badge>

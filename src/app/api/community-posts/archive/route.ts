@@ -8,7 +8,8 @@ function getBearerToken(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const secret = process.env.COMMUNITY_CRON_SECRET ?? "";
+    const secret =
+      process.env.CRON_SECRET ?? process.env.COMMUNITY_CRON_SECRET ?? "";
     if (secret) {
       const token = getBearerToken(req);
       if (!token || token !== secret) {

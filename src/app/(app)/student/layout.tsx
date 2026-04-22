@@ -16,7 +16,7 @@ import {
   Medal,
   Megaphone,
   Menu,
-  Search,
+  Ticket,
   Sparkles,
   Trophy,
   type LucideIcon,
@@ -71,7 +71,7 @@ const CAMPUS_GROUP: StudentNavGroup = {
   items: [
     { label: "Book Lecturer", href: "/student/booking", icon: CalendarDays },
     { label: "Announcements", href: "/student/announcements", icon: Megaphone },
-    { label: "Help Requests", href: "/student/support", icon: HelpCircle },
+   
   ],
 };
 
@@ -80,7 +80,7 @@ const CAMPUS_GROUP: StudentNavGroup = {
   label: "Support",
   items: [
     
-    { label: "Report ", href: "/report-problem", icon: Search },
+    { label: "Support tickets", href: "/student/ticket", icon: Ticket },
     { label: "Community Help", href: "/community", icon: HelpCircle },
   ],
 };
