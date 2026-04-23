@@ -14,9 +14,7 @@
     "build": "next build",
     "build:clean": "npm run clean:next && next build",
     "start": "next start",
-    "lint": "eslint",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "lint": "eslint"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

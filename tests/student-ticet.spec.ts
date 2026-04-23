@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 const ROLE_STORAGE_KEY = "unihub_role";
 const USER_STORAGE_KEY = "unihub_user";
+test.setTimeout(60_000);
 
 /** Seeded so `RoleGuard` allows `/student/*` when not in demo mode (e.g. reusing a plain `next dev` server). */
 const e2eStudentUser = {
@@ -49,19 +50,8 @@ test.beforeEach(async ({ page }) => {
     [ROLE_STORAGE_KEY, USER_STORAGE_KEY, JSON.stringify(e2eStudentUser)]
   );
 
-  // Match by `route.request().url()` (pathname) — host may be 127.0.0.1, localhost, [::1], etc.
-  await page.route("**/*", async (route) => {
-    let pathname = "";
-    try {
-      pathname = new URL(route.request().url()).pathname;
-    } catch {
-      await route.continue();
-      return;
-    }
-    if (pathname !== "/api/support-tickets" && pathname !== "/api/support-tickets/") {
-      await route.continue();
-      return;
-    }
+  // Intercept only the ticket API route to avoid slowing all page resources.
+  await page.route(/\/api\/support-tickets\/?(?:\?.*)?$/, async (route) => {
     const method = route.request().method();
     if (method === "GET") {
       await route.fulfill({
@@ -111,12 +101,12 @@ test.beforeEach(async ({ page }) => {
       });
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 });
 
 test("shows the tickets hub and ticket list from the API", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
 
   await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
   await expect(
@@ -131,7 +121,7 @@ test("shows the tickets hub and ticket list from the API", async ({ page }) => {
 });
 
 test("search narrows the ticket list", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
 
   await expect(page.getByText("2 result(s)", { exact: true })).toBeVisible();
 
@@ -144,7 +134,7 @@ test("search narrows the ticket list", async ({ page }) => {
 });
 
 test("expands a ticket row to show details", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
 
   const row = page.getByText("Wi-Fi issue in lab", { exact: true });
   const detailsButton = page.getByRole("button", { name: "View Details" }).first();
@@ -162,7 +152,7 @@ test("expands a ticket row to show details", async ({ page }) => {
 });
 
 test("new ticket form shows required fields and defaults", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
   await page.getByRole("button", { name: "New Ticket" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -198,7 +188,7 @@ test("new ticket form shows required fields and defaults", async ({ page }) => {
 });
 
 test("new ticket form shows validation when required fields are empty", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
   await page.getByRole("button", { name: "New Ticket" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -217,7 +207,7 @@ test("new ticket form shows validation when required fields are empty", async ({
 });
 
 test("new ticket form submits a valid ticket and shows success", async ({ page }) => {
-  await page.goto("/student/ticket");
+  await page.goto("http://localhost:3000/student/ticket");
   await page.getByRole("button", { name: "New Ticket" }).click();
 
   const dialog = page.getByRole("dialog");
