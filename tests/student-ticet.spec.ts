@@ -50,8 +50,19 @@ test.beforeEach(async ({ page }) => {
     [ROLE_STORAGE_KEY, USER_STORAGE_KEY, JSON.stringify(e2eStudentUser)]
   );
 
-  // Intercept only the ticket API route to avoid slowing all page resources.
-  await page.route(/\/api\/support-tickets\/?(?:\?.*)?$/, async (route) => {
+  // Match by `route.request().url()` (pathname) — host may be 127.0.0.1, localhost, [::1], etc.
+  await page.route("**/*", async (route) => {
+    let pathname = "";
+    try {
+      pathname = new URL(route.request().url()).pathname;
+    } catch {
+      await route.continue();
+      return;
+    }
+    if (pathname !== "/api/support-tickets" && pathname !== "/api/support-tickets/") {
+      await route.continue();
+      return;
+    }
     const method = route.request().method();
     if (method === "GET") {
       await route.fulfill({
