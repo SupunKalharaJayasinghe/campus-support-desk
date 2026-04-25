@@ -89,6 +89,10 @@ function isRetryableMongoNetworkError(error: unknown) {
   );
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function POST(req: Request) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -454,95 +458,105 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  try {
-    await connectDB();
-    const actor = await resolveActiveApiUser(req);
-    const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
-    const { searchParams } = new URL(req.url);
-    const viewerId = toTrimmedString(searchParams.get("viewerId"));
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await connectDB();
+      const actor = await resolveActiveApiUser(req);
+      const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
+      const { searchParams } = new URL(req.url);
+      const viewerId = toTrimmedString(searchParams.get("viewerId"));
 
-    const posts = await CommunityPost.find({
-      status: { $ne: "resolved" },
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+      const posts = await CommunityPost.find({
+        status: { $ne: "resolved" },
+      })
+        .sort({ createdAt: -1 })
+        .maxTimeMS(15000)
+        .lean();
 
-    const postIds = posts
-      .map((post) => post._id)
-      .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
+      const postIds = posts
+        .map((post) => post._id)
+        .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
 
-    const likeCountsRaw =
-      postIds.length === 0
-        ? []
-        : await CommunityPostLike.aggregate<{
-            _id: mongoose.Types.ObjectId;
-            count: number;
-          }>([
-            { $match: { postId: { $in: postIds } } },
-            { $group: { _id: "$postId", count: { $sum: 1 } } },
-          ]);
-    const likeCountByPostId = new Map(
-      likeCountsRaw.map((row) => [String(row._id), row.count])
-    );
+      const likeCountsRaw =
+        postIds.length === 0
+          ? []
+          : await CommunityPostLike.aggregate<{
+              _id: mongoose.Types.ObjectId;
+              count: number;
+            }>([
+              { $match: { postId: { $in: postIds } } },
+              { $group: { _id: "$postId", count: { $sum: 1 } } },
+            ]).option({ maxTimeMS: 15000 });
+      const likeCountByPostId = new Map(
+        likeCountsRaw.map((row) => [String(row._id), row.count])
+      );
 
-    const viewerObjectId = mongoose.Types.ObjectId.isValid(viewerId)
-      ? viewerId
-      : null;
+      const viewerObjectId = mongoose.Types.ObjectId.isValid(viewerId)
+        ? viewerId
+        : null;
 
-    const likedByViewerRaw =
-      viewerObjectId && postIds.length > 0
-        ? await CommunityPostLike.find({
-            userId: viewerObjectId,
-            postId: { $in: postIds },
-          })
-            .select({ postId: 1 })
-            .lean()
-        : [];
-    const likedByViewerSet = new Set(
-      likedByViewerRaw.map((row) => String(row.postId))
-    );
+      const likedByViewerRaw =
+        viewerObjectId && postIds.length > 0
+          ? await CommunityPostLike.find({
+              userId: viewerObjectId,
+              postId: { $in: postIds },
+            })
+              .select({ postId: 1 })
+              .maxTimeMS(15000)
+              .lean()
+          : [];
+      const likedByViewerSet = new Set(
+        likedByViewerRaw.map((row) => String(row.postId))
+      );
 
-    const reportedByViewerRaw =
-      viewerObjectId && postIds.length > 0
-        ? await CommunityPostReport.find({
-            userId: viewerObjectId,
-            postId: { $in: postIds },
-          })
-            .select({ postId: 1 })
-            .lean()
-        : [];
-    const reportedByViewerSet = new Set(
-      reportedByViewerRaw.map((row) => String(row.postId))
-    );
+      const reportedByViewerRaw =
+        viewerObjectId && postIds.length > 0
+          ? await CommunityPostReport.find({
+              userId: viewerObjectId,
+              postId: { $in: postIds },
+            })
+              .select({ postId: 1 })
+              .maxTimeMS(15000)
+              .lean()
+          : [];
+      const reportedByViewerSet = new Set(
+        reportedByViewerRaw.map((row) => String(row.postId))
+      );
 
-    const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
-      posts.map((p) => p.author)
-    );
+      const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
+        posts.map((p) => p.author)
+      );
 
-    const enrichedPosts = posts.map((post) => {
-      const postId = String(post._id);
-      const authorKey = String(post.author);
-      const member = memberByAuthor.get(authorKey);
-      const snapshotName = String(post.authorDisplayName ?? "").trim();
-      const liveName = (member?.displayName ?? "").trim();
-      return {
-        ...post,
-        likesCount: likeCountByPostId.get(postId) ?? 0,
-        likedByCurrentUser: likedByViewerSet.has(postId),
-        reportedByCurrentUser: reportedByViewerSet.has(postId),
-        authorMemberDisplayName: liveName || snapshotName || "Community User",
-        authorMemberPoints: authorMemberPointsForViewer({
-          member,
-          authorUserId: authorKey,
-          viewerUserId: viewerObjectId,
-          viewerIsCommunityAdmin,
-        }),
-      };
-    });
+      const enrichedPosts = posts.map((post) => {
+        const postId = String(post._id);
+        const authorKey = String(post.author);
+        const member = memberByAuthor.get(authorKey);
+        const snapshotName = String(post.authorDisplayName ?? "").trim();
+        const liveName = (member?.displayName ?? "").trim();
+        return {
+          ...post,
+          likesCount: likeCountByPostId.get(postId) ?? 0,
+          likedByCurrentUser: likedByViewerSet.has(postId),
+          reportedByCurrentUser: reportedByViewerSet.has(postId),
+          authorMemberDisplayName: liveName || snapshotName || "Community User",
+          authorMemberPoints: authorMemberPointsForViewer({
+            member,
+            authorUserId: authorKey,
+            viewerUserId: viewerObjectId,
+            viewerIsCommunityAdmin,
+          }),
+        };
+      });
 
-    return Response.json(enrichedPosts);
-  } catch (error) {
-    console.error("community-posts GET failed", error);
-    return Response.json({ error: "Failed to fetch posts" }, { status: 500 });
+      return Response.json(enrichedPosts);
+    } catch (error) {
+      if (attempt < 1 && isRetryableMongoNetworkError(error)) {
+        await mongoose.disconnect().catch(() => null);
+        await sleep(150);
+        continue;
+      }
+      console.error("community-posts GET failed", error);
+      return Response.json({ error: "Failed to fetch posts" }, { status: 500 });
+    }
   }
 }
