@@ -1,4 +1,4 @@
-import { connectDB } from "@/lib/mongodb";
+import { connectDB, resetDbConnectionCache } from "@/lib/mongodb";
 import { resolveCommunityActorId } from "@/lib/community-user";
 import { normalizeOptionalPictureUrl } from "@/lib/community-post-picture";
 import {
@@ -58,6 +58,8 @@ const ALLOWED_CATEGORIES = new Set([
   "study_material",
   "academic_question",
 ]);
+const COMMUNITY_QUERY_TIMEOUT_MS = 8000;
+const COMMUNITY_READ_RETRY_ATTEMPTS = 3;
 
 function toTrimmedString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -91,6 +93,26 @@ function isRetryableMongoNetworkError(error: unknown) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withMongoReadRetry<T>(work: () => Promise<T>) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < COMMUNITY_READ_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      if (attempt > 0) {
+        resetDbConnectionCache();
+        await connectDB();
+      }
+      return await work();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableMongoNetworkError(error) || attempt >= COMMUNITY_READ_RETRY_ATTEMPTS - 1) {
+        throw error;
+      }
+      await sleep(150 * (attempt + 1));
+    }
+  }
+  throw lastError ?? new Error("Mongo read retry exhausted");
 }
 
 export async function POST(req: Request) {
@@ -458,73 +480,79 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < COMMUNITY_READ_RETRY_ATTEMPTS; attempt += 1) {
     try {
       await connectDB();
-      const actor = await resolveActiveApiUser(req);
+      const actor = await withMongoReadRetry(() => resolveActiveApiUser(req)).catch(() => null);
       const viewerIsCommunityAdmin = Boolean(actor && isCommunityAdminRole(actor.role));
       const { searchParams } = new URL(req.url);
       const viewerId = toTrimmedString(searchParams.get("viewerId"));
 
-      const posts = await CommunityPost.find({
-        status: { $ne: "resolved" },
-      })
-        .sort({ createdAt: -1 })
-        .maxTimeMS(15000)
-        .lean();
+      const posts = await withMongoReadRetry(() =>
+        CommunityPost.find({
+          status: { $ne: "resolved" },
+        })
+          .sort({ createdAt: -1 })
+          .maxTimeMS(COMMUNITY_QUERY_TIMEOUT_MS)
+          .lean()
+      );
 
       const postIds = posts
         .map((post) => post._id)
         .filter((id): id is mongoose.Types.ObjectId => Boolean(id));
 
-      const likeCountsRaw =
-        postIds.length === 0
-          ? []
-          : await CommunityPostLike.aggregate<{
-              _id: mongoose.Types.ObjectId;
-              count: number;
-            }>([
-              { $match: { postId: { $in: postIds } } },
-              { $group: { _id: "$postId", count: { $sum: 1 } } },
-            ]).option({ maxTimeMS: 15000 });
-      const likeCountByPostId = new Map(
-        likeCountsRaw.map((row) => [String(row._id), row.count])
-      );
-
       const viewerObjectId = mongoose.Types.ObjectId.isValid(viewerId)
         ? viewerId
         : null;
 
-      const likedByViewerRaw =
-        viewerObjectId && postIds.length > 0
-          ? await CommunityPostLike.find({
-              userId: viewerObjectId,
-              postId: { $in: postIds },
-            })
-              .select({ postId: 1 })
-              .maxTimeMS(15000)
-              .lean()
-          : [];
+      const [likeCountsRaw, likedByViewerRaw, reportedByViewerRaw, memberByAuthor] =
+        await Promise.all([
+          withMongoReadRetry(() =>
+            postIds.length === 0
+              ? Promise.resolve([])
+              : CommunityPostLike.aggregate<{
+                  _id: mongoose.Types.ObjectId;
+                  count: number;
+                }>([
+                  { $match: { postId: { $in: postIds } } },
+                  { $group: { _id: "$postId", count: { $sum: 1 } } },
+                ]).option({ maxTimeMS: COMMUNITY_QUERY_TIMEOUT_MS })
+          ).catch(() => []),
+          withMongoReadRetry(() =>
+            viewerObjectId && postIds.length > 0
+              ? CommunityPostLike.find({
+                  userId: viewerObjectId,
+                  postId: { $in: postIds },
+                })
+                  .select({ postId: 1 })
+                  .maxTimeMS(COMMUNITY_QUERY_TIMEOUT_MS)
+                  .lean()
+              : Promise.resolve([])
+          ).catch(() => []),
+          withMongoReadRetry(() =>
+            viewerObjectId && postIds.length > 0
+              ? CommunityPostReport.find({
+                  userId: viewerObjectId,
+                  postId: { $in: postIds },
+                })
+                  .select({ postId: 1 })
+                  .maxTimeMS(COMMUNITY_QUERY_TIMEOUT_MS)
+                  .lean()
+              : Promise.resolve([])
+          ).catch(() => []),
+          withMongoReadRetry(() =>
+            getCommunityMemberFieldsByUserRefs(posts.map((p) => p.author))
+          ).catch(() => new Map()),
+        ]);
+
+      const likeCountByPostId = new Map(
+        likeCountsRaw.map((row) => [String(row._id), row.count])
+      );
       const likedByViewerSet = new Set(
         likedByViewerRaw.map((row) => String(row.postId))
       );
-
-      const reportedByViewerRaw =
-        viewerObjectId && postIds.length > 0
-          ? await CommunityPostReport.find({
-              userId: viewerObjectId,
-              postId: { $in: postIds },
-            })
-              .select({ postId: 1 })
-              .maxTimeMS(15000)
-              .lean()
-          : [];
       const reportedByViewerSet = new Set(
         reportedByViewerRaw.map((row) => String(row.postId))
-      );
-
-      const memberByAuthor = await getCommunityMemberFieldsByUserRefs(
-        posts.map((p) => p.author)
       );
 
       const enrichedPosts = posts.map((post) => {
@@ -550,9 +578,11 @@ export async function GET(req: Request) {
 
       return Response.json(enrichedPosts);
     } catch (error) {
-      if (attempt < 1 && isRetryableMongoNetworkError(error)) {
-        await mongoose.disconnect().catch(() => null);
-        await sleep(150);
+      if (attempt < COMMUNITY_READ_RETRY_ATTEMPTS - 1 && isRetryableMongoNetworkError(error)) {
+        // Reset cached DB handles so the next attempt reconnects cleanly
+        // without force-closing global pools used by concurrent requests.
+        resetDbConnectionCache();
+        await sleep(150 * (attempt + 1));
         continue;
       }
       console.error("community-posts GET failed", error);

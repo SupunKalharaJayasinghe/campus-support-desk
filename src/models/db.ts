@@ -15,6 +15,11 @@ if (!global.mongoose) {
   global.mongoose = cached;
 }
 
+export function resetDbConnectionCache() {
+  cached.conn = null;
+  cached.promise = null;
+}
+
 function splitSrvUri(input: string) {
   const trimmed = input.trim();
   const scheme = "mongodb+srv://";
@@ -182,6 +187,11 @@ export async function connectDB() {
   const dbName = process.env.MONGODB_DB?.trim() || "UniHub";
   if (!uri) {
     throw new Error("MONGODB_URI is missing in environment variables.");
+  }
+
+  // If the default connection was closed elsewhere, clear cache so we create a new pool.
+  if (mongoose.connection.readyState === 0) {
+    resetDbConnectionCache();
   }
 
   if (cached.conn && mongoose.connection.readyState === 1) {

@@ -1,1 +1,1 @@
-export { connectDB } from "@/models/db";
+export { connectDB, resetDbConnectionCache } from "@/models/db";
